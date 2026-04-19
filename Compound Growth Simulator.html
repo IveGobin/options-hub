@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compound Growth Simulator</title>
+<script src="hub_shared.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg:#0f0e0c;--surface:#1a1916;--surface2:#242220;--border:#333028;
+    --txt:#ede8e0;--txt2:#7a7268;--accent:#e8753a;
+    --green:#00c98d;--blue:#4a9eff;--orange:#f0a04b;
+    --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+  }
+  [data-theme="light"] {
+    --bg:#f4f3ef;--surface:#ffffff;--surface2:#f0ede8;--border:#e2ddd8;
+    --txt:#1a1814;--txt2:#7a7268;--accent:#c8521a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{font-family:var(--sans);background:var(--bg);color:var(--txt);min-height:100vh;transition:background 0.3s,color 0.3s;}
+  body{padding:28px 28px 48px;max-width:860px;margin:0 auto;}
+
+  .gs-section-title{font-family:var(--mono);font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt2);margin-bottom:20px;}
+  .gs-sub-title{font-family:var(--mono);font-size:0.65rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt2);margin:24px 0 14px;padding-top:20px;border-top:1px solid var(--border);}
+
+  /* Presets */
+  .gs-presets{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;}
+  .gs-preset-btn{font-family:var(--mono);font-size:0.65rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--txt2);cursor:pointer;transition:all .2s;}
+  .gs-preset-btn:hover,.gs-preset-btn.active{border-color:var(--green);color:var(--green);background:rgba(0,201,141,0.08);}
+
+  .gs-controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-bottom:16px;align-items:start;}
+  .gs-controls2{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:16px;align-items:start;}
+
+  .gs-ctrl-label{font-size:12px;color:var(--txt2);margin-bottom:6px;}
+  .gs-ctrl-value{font-size:13px;font-weight:500;color:var(--green);}
+  .gs-ctrl-sub{font-size:11px;color:var(--txt2);opacity:0.6;margin-top:6px;}
+  input[type=range]{width:100%;accent-color:var(--green);height:4px;}
+  .gs-range-labels{display:flex;justify-content:space-between;}
+  .gs-range-labels span{font-size:11px;color:var(--txt2);opacity:0.5;}
+
+  .gs-capital-input{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-top:6px;}
+  .gs-capital-input span{color:var(--txt2);font-size:14px;}
+  .gs-capital-input input{background:transparent;border:none;color:var(--txt);font-size:14px;outline:none;width:100%;}
+
+  .gs-toggle-wrap{display:flex;align-items:center;gap:8px;margin-top:4px;}
+  .gs-toggle{position:relative;width:40px;height:22px;flex-shrink:0;}
+  .gs-toggle input{opacity:0;width:0;height:0;}
+  .gs-slider-track{position:absolute;cursor:pointer;inset:0;background:var(--surface2);border-radius:22px;border:1.5px solid var(--border);transition:.3s;}
+  .gs-slider-track:before{content:"";position:absolute;height:16px;width:16px;left:3px;bottom:2px;background:var(--txt2);border-radius:50%;transition:.3s;}
+  .gs-toggle input:checked + .gs-slider-track{background:var(--green);border-color:var(--green);}
+  .gs-toggle input:checked + .gs-slider-track:before{transform:translateX(18px);background:#fff;}
+  .gs-toggle-label{font-size:13px;color:var(--txt2);}
+
+  .gs-collapsible{overflow:hidden;max-height:0;transition:max-height .3s ease;}
+  .gs-collapsible.open{max-height:200px;}
+
+  /* Stats panel */
+  .gs-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0;}
+  .gs-stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+  .gs-stat-label{font-size:11px;color:var(--txt2);margin-bottom:4px;}
+  .gs-stat-val{font-size:16px;font-weight:600;}
+  .gs-stat-val.green{color:var(--green);}
+  .gs-stat-val.blue{color:var(--blue);}
+  .gs-stat-val.orange{color:var(--orange);}
+
+  .gs-chart-area{position:relative;width:100%;height:400px;}
+
+  .gs-legend{display:flex;gap:18px;margin-bottom:10px;flex-wrap:wrap;}
+  .gs-legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--txt2);}
+  .gs-legend-swatch{width:24px;height:3px;border-radius:2px;}
+
+  @media(max-width:600px){
+    .gs-controls{grid-template-columns:1fr 1fr;}
+    .gs-controls2{grid-template-columns:1fr;}
+    .gs-stats{grid-template-columns:1fr 1fr;}
+  }
+</style>
+</head>
+<body>
+  <div class="gs-section-title">📐 Compound Growth Simulator</div>
+
+  <!-- Scenario Presets -->
+  <div class="gs-presets">
+    <button class="gs-preset-btn active" data-rate="8">📈 S&amp;P 500 avg</button>
+    <button class="gs-preset-btn" data-rate="4">🏦 Conservative bonds</button>
+    <button class="gs-preset-btn" data-rate="15">🚀 Aggressive growth</button>
+    <button class="gs-preset-btn" data-rate="1">🏠 Savings account</button>
+  </div>
+
+  <!-- Main controls -->
+  <div class="gs-controls">
+    <div>
+      <div class="gs-ctrl-label">Annual Growth Rate: <span class="gs-ctrl-value" id="gs-rate-val">8%</span></div>
+      <input type="range" id="gs-rate" min="1" max="50" value="8" step="1">
+      <div class="gs-range-labels"><span>1%</span><span>50%</span></div>
+      <div class="gs-ctrl-sub" id="gs-rate-sub">Average annual S&amp;P 500 return over 100 years.</div>
+    </div>
+    <div>
+      <div class="gs-ctrl-label">Number of Years: <span class="gs-ctrl-value" id="gs-years-val">30</span></div>
+      <input type="range" id="gs-years" min="1" max="100" value="30" step="1">
+      <div class="gs-range-labels"><span>1</span><span>100</span></div>
+    </div>
+    <div>
+      <div class="gs-ctrl-label">Starting Capital</div>
+      <div class="gs-capital-input"><span>$</span><input type="number" id="gs-capital" value="10000" min="0"></div>
+    </div>
+  </div>
+
+  <!-- Monthly contributions -->
+  <div class="gs-sub-title">Monthly Contributions</div>
+  <div class="gs-controls2">
+    <div>
+      <div class="gs-ctrl-label" style="margin-bottom:10px">Enable Monthly Contribution</div>
+      <div class="gs-toggle-wrap">
+        <label class="gs-toggle"><input type="checkbox" id="gs-monthly-on"><span class="gs-slider-track"></span></label>
+        <span class="gs-toggle-label" id="gs-monthly-label">Off</span>
+      </div>
+      <div class="gs-collapsible" id="gs-monthly-collapse">
+        <div class="gs-ctrl-label" style="margin-top:14px">Monthly Amount</div>
+        <div class="gs-capital-input"><span>$</span><input type="number" id="gs-monthly" value="500" min="0"></div>
+      </div>
+    </div>
+    <div>
+      <div class="gs-ctrl-label">Contribution Growth (inflation): <span class="gs-ctrl-value" id="gs-infl-val">0%</span></div>
+      <input type="range" id="gs-infl" min="0" max="10" value="0" step="1">
+      <div class="gs-range-labels"><span>0%</span><span>10%</span></div>
+      <div class="gs-ctrl-sub">Monthly contribution rises by this % each year.</div>
+    </div>
+  </div>
+
+  <!-- Retirement & scenarios -->
+  <div class="gs-sub-title">Retirement &amp; Scenarios</div>
+  <div class="gs-controls2">
+    <div>
+      <div class="gs-ctrl-label" style="margin-bottom:10px">Withdrawal Phase (retirement)</div>
+      <div class="gs-toggle-wrap">
+        <label class="gs-toggle"><input type="checkbox" id="gs-withdrawal-on"><span class="gs-slider-track"></span></label>
+        <span class="gs-toggle-label" id="gs-withdrawal-label">Off</span>
+      </div>
+      <div class="gs-collapsible" id="gs-withdrawal-collapse">
+        <div class="gs-ctrl-label" style="margin-top:14px">Start Withdrawing at Year: <span class="gs-ctrl-value" id="gs-wstart-val">20</span></div>
+        <input type="range" id="gs-wstart" min="1" max="99" value="20" step="1">
+        <div class="gs-ctrl-label" style="margin-top:10px">Monthly Withdrawal</div>
+        <div class="gs-capital-input"><span>$</span><input type="number" id="gs-wamount" value="3000" min="0"></div>
+      </div>
+    </div>
+    <div>
+      <div class="gs-ctrl-label" style="margin-bottom:10px">Simulate Market Crash</div>
+      <div class="gs-toggle-wrap">
+        <label class="gs-toggle"><input type="checkbox" id="gs-crash"><span class="gs-slider-track"></span></label>
+        <span class="gs-toggle-label" id="gs-crash-label">Off</span>
+      </div>
+      <div class="gs-collapsible" id="gs-crash-collapse">
+        <div class="gs-ctrl-label" style="margin-top:14px">Crash at Year: <span class="gs-ctrl-value" id="gs-cyear-val">30</span></div>
+        <input type="range" id="gs-cyear" min="1" max="99" value="30" step="1">
+        <div class="gs-ctrl-label" style="margin-top:10px">Crash Severity: <span class="gs-ctrl-value" id="gs-csev-val">70</span>% loss</div>
+        <input type="range" id="gs-csev" min="10" max="95" value="70" step="5">
+        <div class="gs-range-labels"><span>10%</span><span>95%</span></div>
+        <div class="gs-ctrl-sub" id="gs-crash-desc" style="margin-top:6px">70% drop at year 30.</div>
+      </div>
+      <div style="margin-top:20px">
+        <div class="gs-ctrl-label" style="margin-bottom:10px">Simulate Sideways Period</div>
+        <div class="gs-toggle-wrap">
+          <label class="gs-toggle"><input type="checkbox" id="gs-sideways"><span class="gs-slider-track"></span></label>
+          <span class="gs-toggle-label" id="gs-sideways-label">Off</span>
+        </div>
+        <div class="gs-collapsible" id="gs-sideways-collapse">
+          <div class="gs-ctrl-label" style="margin-top:14px">Start Year: <span class="gs-ctrl-value" id="gs-sstart-val">20</span></div>
+          <input type="range" id="gs-sstart" min="1" max="99" value="20" step="1">
+          <div class="gs-ctrl-label" style="margin-top:10px">Duration: <span class="gs-ctrl-value" id="gs-sdur-val">5</span> yrs</div>
+          <input type="range" id="gs-sdur" min="1" max="20" value="5" step="1">
+          <div class="gs-ctrl-sub" id="gs-sideways-desc" style="margin-top:6px">No growth years 20–25.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="gs-stats">
+    <div class="gs-stat">
+      <div class="gs-stat-label">Final Value</div>
+      <div class="gs-stat-val green" id="st-final">—</div>
+    </div>
+    <div class="gs-stat">
+      <div class="gs-stat-label">Total Contributed</div>
+      <div class="gs-stat-val blue" id="st-contributed">—</div>
+    </div>
+    <div class="gs-stat">
+      <div class="gs-stat-label">Total Gains</div>
+      <div class="gs-stat-val green" id="st-gains">—</div>
+    </div>
+    <div class="gs-stat">
+      <div class="gs-stat-label">Effective CAGR</div>
+      <div class="gs-stat-val orange" id="st-cagr">—</div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="gs-legend">
+    <div class="gs-legend-item">
+      <div class="gs-legend-swatch" style="background:#00c98d"></div>Total Portfolio
+    </div>
+    <div class="gs-legend-item">
+      <div class="gs-legend-swatch" style="background:#4a9eff;border-top:2px dashed #4a9eff;height:0"></div>Contributions
+    </div>
+    <div class="gs-legend-item">
+      <div class="gs-legend-swatch" style="background:#f0a04b"></div>Milestones
+    </div>
+  </div>
+  <div class="gs-chart-area">
+    <canvas id="gs-chart"></canvas>
+  </div>
+
+<script>
+  window._onHubTheme = function(t){ document.documentElement.setAttribute('data-theme',t); };
+
+  var MILESTONES=[1e4,5e4,1e5,5e5,1e6,5e6,1e7,5e7,1e8,1e9];
+
+  function fmt(v){
+    if(isNaN(v)||!isFinite(v)) return '—';
+    if(v>=1e9) return '$'+(v/1e9).toFixed(2)+'B';
+    if(v>=1e6) return '$'+(v/1e6).toFixed(2)+'M';
+    if(v>=1e3) return '$'+(v/1e3).toFixed(1)+'K';
+    return '$'+Math.round(v);
+  }
+
+  function buildData(){
+    var r       = parseInt(document.getElementById('gs-rate').value)/100;
+    var cap     = parseFloat(document.getElementById('gs-capital').value)||0;
+    var maxY    = parseInt(document.getElementById('gs-years').value);
+    var doCrash = document.getElementById('gs-crash').checked;
+    var cYear   = parseInt(document.getElementById('gs-cyear').value);
+    var cSev    = parseInt(document.getElementById('gs-csev').value)/100;
+    var doSide  = document.getElementById('gs-sideways').checked;
+    var sStart  = parseInt(document.getElementById('gs-sstart').value);
+    var sDur    = parseInt(document.getElementById('gs-sdur').value);
+    var sEnd    = sStart + sDur - 1;
+    var doMonth = document.getElementById('gs-monthly-on').checked;
+    var monthAmt= doMonth?(parseFloat(document.getElementById('gs-monthly').value)||0):0;
+    var infl    = parseInt(document.getElementById('gs-infl').value)/100;
+    var doWith  = document.getElementById('gs-withdrawal-on').checked;
+    var wStart  = parseInt(document.getElementById('gs-wstart').value);
+    var wAmt    = doWith?(parseFloat(document.getElementById('gs-wamount').value)||0)*12:0;
+
+    var totalData=[],contribData=[];
+    var v=cap, totalContrib=cap, curMonthly=monthAmt;
+
+    for(var y=0;y<=maxY;y++){
+      if(y>0){
+        if(y>1) curMonthly*=(1+infl);
+        var addContrib=(doMonth&&(!doWith||y<wStart))?curMonthly*12:0;
+        var drawdown=(doWith&&y>=wStart)?wAmt:0;
+
+        if(doCrash&&y===cYear){
+          v*=(1-cSev);
+        } else if(doSide&&y>=sStart&&y<=sEnd){
+          /* flat */
+        } else {
+          v*=(1+r);
+        }
+        v+=addContrib-drawdown;
+        totalContrib+=addContrib;
+        if(v<0) v=0;
+      }
+      totalData.push({x:y,y:Math.round(v)});
+      contribData.push({x:y,y:Math.round(Math.min(totalContrib,v))});
+    }
+    return {totalData,contribData,totalContrib};
+  }
+
+  function getMilestoneLines(data){
+    var lines=[];
+    var hit=new Set();
+    data.forEach(function(pt){
+      MILESTONES.forEach(function(m){
+        if(!hit.has(m)&&pt.y>=m){
+          hit.add(m);
+          lines.push({x:pt.x,label:fmt(m)});
+        }
+      });
+    });
+    return lines;
+  }
+
+  // Custom milestone plugin
+  var milestonePlugin={
+    id:'milestones',
+    afterDraw:function(chart){
+      var lines=chart._milestoneLines||[];
+      if(!lines.length) return;
+      var ctx=chart.ctx;
+      var xAxis=chart.scales.x, yAxis=chart.scales.y;
+      lines.forEach(function(ln){
+        var px=xAxis.getPixelForValue(ln.x);
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle='rgba(240,160,75,0.4)';
+        ctx.lineWidth=1;
+        ctx.setLineDash([3,4]);
+        ctx.moveTo(px,yAxis.top);
+        ctx.lineTo(px,yAxis.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle='rgba(240,160,75,0.85)';
+        ctx.font="700 9px 'Space Mono',monospace";
+        ctx.textAlign='center';
+        var textY=yAxis.top+10;
+        ctx.fillText(ln.label,px,textY);
+        ctx.restore();
+      });
+    }
+  };
+  Chart.register(milestonePlugin);
+
+  var ctx=document.getElementById('gs-chart').getContext('2d');
+  var chart=new Chart(ctx,{
+    type:'line',
+    data:{datasets:[
+      {label:'Total Portfolio',data:[],borderColor:'#00c98d',borderWidth:2,pointRadius:0,
+       fill:'origin',backgroundColor:'rgba(0,201,141,0.07)',tension:0.3,order:1},
+      {label:'Contributions',data:[],borderColor:'#4a9eff',borderWidth:1.5,pointRadius:0,
+       fill:'origin',backgroundColor:'rgba(74,158,255,0.07)',tension:0.3,order:2,borderDash:[5,3]}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:{duration:150},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#1a1916',titleColor:'#ede8e0',bodyColor:'#ede8e0',
+          borderColor:'#333028',borderWidth:1,
+          callbacks:{
+            title:function(i){return 'Year '+i[0].parsed.x;},
+            label:function(i){return ' '+i.dataset.label+': '+fmt(i.parsed.y);}
+          }
+        }
+      },
+      scales:{
+        x:{type:'linear',min:0,max:30,ticks:{color:'#7a7268'},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}},
+        y:{ticks:{color:'#7a7268',callback:function(v){return fmt(v);}},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}}
+      }
+    }
+  });
+
+  function update(){
+    var r   =parseInt(document.getElementById('gs-rate').value);
+    var y   =parseInt(document.getElementById('gs-years').value);
+    var infl=parseInt(document.getElementById('gs-infl').value);
+    document.getElementById('gs-rate-val').textContent=r+'%';
+    document.getElementById('gs-years-val').textContent=y;
+    document.getElementById('gs-infl-val').textContent=infl+'%';
+    document.getElementById('gs-wstart-val').textContent=document.getElementById('gs-wstart').value;
+    var ssv=parseInt(document.getElementById('gs-sstart').value);
+    var sdv=parseInt(document.getElementById('gs-sdur').value);
+    document.getElementById('gs-sstart-val').textContent=ssv;
+    document.getElementById('gs-sdur-val').textContent=sdv;
+    document.getElementById('gs-sideways-desc').textContent='No growth years '+ssv+'–'+(ssv+sdv-1)+'.';
+
+    document.getElementById('gs-rate-sub').textContent=r===8
+      ?'Average annual S&P 500 return over 100 years.'
+      :r+'% annual growth rate.';
+
+    document.getElementById('gs-crash-label').textContent=document.getElementById('gs-crash').checked?'On':'Off';
+    var cyv=parseInt(document.getElementById('gs-cyear').value);
+    var csv=parseInt(document.getElementById('gs-csev').value);
+    document.getElementById('gs-cyear-val').textContent=cyv;
+    document.getElementById('gs-csev-val').textContent=csv;
+    document.getElementById('gs-crash-desc').textContent=csv+'% drop at year '+cyv+'.';
+    document.getElementById('gs-crash-collapse').classList.toggle('open',document.getElementById('gs-crash').checked);
+    document.getElementById('gs-sideways-label').textContent=document.getElementById('gs-sideways').checked?'On':'Off';
+    document.getElementById('gs-monthly-label').textContent =document.getElementById('gs-monthly-on').checked?'On':'Off';
+    document.getElementById('gs-withdrawal-label').textContent=document.getElementById('gs-withdrawal-on').checked?'On':'Off';
+
+    document.getElementById('gs-monthly-collapse').classList.toggle('open',document.getElementById('gs-monthly-on').checked);
+    document.getElementById('gs-withdrawal-collapse').classList.toggle('open',document.getElementById('gs-withdrawal-on').checked);
+    document.getElementById('gs-sideways-collapse').classList.toggle('open',document.getElementById('gs-sideways').checked);
+
+    var res=buildData();
+    var last=res.totalData[res.totalData.length-1].y;
+    var cap =parseFloat(document.getElementById('gs-capital').value)||0;
+    var gains=Math.max(0,last-res.totalContrib);
+    var cagr=y>0&&cap>0?(Math.pow(last/Math.max(cap,1),1/y)-1)*100:0;
+
+    document.getElementById('st-final').textContent      =fmt(last);
+    document.getElementById('st-contributed').textContent=fmt(res.totalContrib);
+    document.getElementById('st-gains').textContent      =fmt(gains);
+    document.getElementById('st-cagr').textContent       =y>0?cagr.toFixed(1)+'%':'—';
+
+    chart.data.datasets[0].data=res.totalData;
+    chart.data.datasets[1].data=res.contribData;
+    chart.options.scales.x.max=y||1;
+    chart._milestoneLines=getMilestoneLines(res.totalData);
+    chart.update();
+  }
+
+  // Preset buttons
+  document.querySelectorAll('.gs-preset-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      document.querySelectorAll('.gs-preset-btn').forEach(function(b){b.classList.remove('active');});
+      btn.classList.add('active');
+      document.getElementById('gs-rate').value=btn.dataset.rate;
+      update();
+    });
+  });
+
+  // Sliders clear preset highlight
+  ['gs-rate','gs-years','gs-infl','gs-wstart','gs-sstart','gs-sdur','gs-cyear','gs-csev'].forEach(function(id){
+    document.getElementById(id).addEventListener('input',function(){
+      if(id==='gs-rate') document.querySelectorAll('.gs-preset-btn').forEach(function(b){b.classList.remove('active');});
+      update();
+    });
+  });
+  ['gs-capital','gs-monthly','gs-wamount'].forEach(function(id){
+    document.getElementById(id).addEventListener('input',update);
+  });
+  ['gs-crash','gs-sideways','gs-monthly-on','gs-withdrawal-on'].forEach(function(id){
+    document.getElementById(id).addEventListener('change',update);
+  });
+
+  update();
+</script>
+</body>
+</html>

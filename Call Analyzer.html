@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IBKR CALL Options Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111419;
+    --surface2: #181c23;
+    --border: #222831;
+    --text: #e8ecf0;
+    --muted: #5a6473;
+    --green: #00c853;
+    --red: #ff4757;
+    --yellow: #ffd32a;
+    --blue: #00b4d8;
+    --accent: #c8ff00;
+    --donut-hole: #111419;
+  }
+
+  body.light {
+    --bg: #f0f2f5;
+    --surface: #ffffff;
+    --surface2: #e8ecf0;
+    --border: #d0d5dd;
+    --text: #0f1117;
+    --muted: #7a8494;
+    --green: #00a040;
+    --red: #e02030;
+    --yellow: #c8900a;
+    --blue: #0088bb;
+    --accent: #5a8a00;
+    --donut-hole: #ffffff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* DROP ZONE */
+  #drop-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    gap: 24px;
+    padding: 40px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #drop-screen::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 30% 60%, rgba(200,255,0,0.04) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 50% at 70% 30%, rgba(0,180,216,0.04) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .drop-label {
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .drop-title {
+    font-size: clamp(32px, 6vw, 64px);
+    font-weight: 800;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .drop-title span { color: var(--accent); }
+
+  #drop-zone {
+    width: 100%;
+    max-width: 500px;
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 48px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface);
+    position: relative;
+    z-index: 1;
+  }
+
+  #drop-zone:hover, #drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(200,255,0,0.04);
+  }
+
+  #drop-zone svg { margin-bottom: 16px; opacity: 0.5; }
+
+  #drop-zone p { color: var(--muted); font-size: 14px; }
+  #drop-zone strong { color: var(--text); font-size: 16px; display: block; margin-bottom: 8px; }
+
+  #file-input { display: none; }
+
+  .btn-upload {
+    margin-top: 20px;
+    padding: 12px 32px;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  .btn-upload:hover { opacity: 0.85; }
+
+  /* DASHBOARD */
+  #dashboard { display: none; padding: 32px; max-width: 1400px; margin: 0 auto; }
+
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 40px;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .top-bar h1 {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .top-bar h1 span { color: var(--accent); }
+
+  .file-chip {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 100px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .reset-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .reset-btn:hover { border-color: var(--text); color: var(--text); }
+
+  /* THEME TOGGLE */
+  .icon-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .icon-btn:hover { border-color: var(--text); color: var(--text); }
+  .icon-btn svg { display: block; }
+
+  /* DOCS MODAL */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    max-width: 680px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 36px;
+    position: relative;
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 16px; right: 16px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .modal-close:hover { border-color: var(--text); color: var(--text); }
+
+  .modal h2 {
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 6px;
+    letter-spacing: -0.02em;
+  }
+  .modal h2 span { color: var(--accent); }
+
+  .modal-subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 28px;
+  }
+
+  .doc-section {
+    margin-bottom: 28px;
+  }
+
+  .doc-section h3 {
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .doc-section p {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+
+  .doc-section ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .doc-section ul li {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+    display: flex;
+    gap: 10px;
+  }
+
+  .doc-section ul li::before {
+    content: '→';
+    color: var(--accent);
+    flex-shrink: 0;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .col-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .col-table th {
+    text-align: left;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .col-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid rgba(128,128,128,0.12);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+
+  .col-table tr:last-child td { border-bottom: none; }
+
+  .col-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--blue);
+    white-space: nowrap;
+    font-weight: 700;
+  }
+
+  .col-req {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .col-req.req { background: rgba(0,180,216,0.12); color: var(--blue); }
+  .col-req.opt { background: rgba(90,100,115,0.15); color: var(--muted); }
+
+  .csv-example {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10.5px;
+    line-height: 1.7;
+    color: var(--muted);
+    overflow-x: auto;
+    white-space: pre;
+    margin-top: 10px;
+  }
+
+  .csv-example .csv-header { color: var(--accent); }
+  .csv-example .csv-row { color: var(--text); }
+
+  /* KPI CARDS */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .kpi-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .kpi-card.green::after { background: var(--green); }
+  .kpi-card.red::after { background: var(--red); }
+  .kpi-card.yellow::after { background: var(--yellow); }
+  .kpi-card.blue::after { background: var(--blue); }
+  .kpi-card.accent::after { background: var(--accent); }
+
+  .kpi-label {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .kpi-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .kpi-value.pos { color: var(--green); }
+  .kpi-value.neg { color: var(--red); }
+  .kpi-value.neutral { color: var(--text); }
+  .kpi-value.accent { color: var(--accent); }
+
+  /* SECTIONS */
+  .section-title {
+    font-size: 12px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .section { margin-bottom: 48px; }
+
+  /* TICKER CARDS */
+  .ticker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  .ticker-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    transition: border-color 0.2s;
+    cursor: default;
+  }
+
+  .ticker-card:hover { border-color: #333d4a; }
+
+  .ticker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .ticker-name {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .badge {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 100px;
+  }
+
+  .badge-open { background: rgba(0,180,216,0.15); color: var(--blue); }
+  .badge-closed { background: rgba(90,100,115,0.2); color: var(--muted); }
+  .badge-expired { background: rgba(255,211,42,0.15); color: var(--yellow); }
+
+  .ticker-pnl {
+    font-family: 'Space Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .ticker-pnl.pos { color: var(--green); }
+  .ticker-pnl.neg { color: var(--red); }
+
+  .ticker-meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  .ticker-trades {
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .trade-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .trade-row .trade-date { font-family: 'Space Mono', monospace; font-size: 11px; }
+  .trade-row .trade-amt {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+  }
+  .trade-row .trade-amt.pos { color: rgba(0,230,118,0.7); }
+  .trade-row .trade-amt.neg { color: rgba(255,71,87,0.7); }
+
+  /* OPEN POSITIONS table */
+  .open-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .open-table th {
+    text-align: left;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .open-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(34,40,49,0.5);
+    vertical-align: middle;
+  }
+
+  .open-table tr:last-child td { border-bottom: none; }
+  .open-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .open-table .mono { font-family: 'Space Mono', monospace; font-size: 12px; }
+
+  .premium-pill {
+    display: inline-block;
+    background: rgba(0,180,216,0.12);
+    color: var(--blue);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 100px;
+  }
+
+  .table-wrapper {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  /* ERROR */
+  .error-msg {
+    background: rgba(255,71,87,0.1);
+    border: 1px solid rgba(255,71,87,0.3);
+    color: var(--red);
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 40px 0;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  /* PIE CHARTS */
+  .pie-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 20px;
+  }
+
+  .pie-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .pie-card-title {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pie-card-title .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .pie-inner {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .pie-canvas-wrap {
+    flex-shrink: 0;
+    width: 160px;
+    height: 160px;
+    position: relative;
+  }
+
+  .pie-legend {
+    flex: 1;
+    min-width: 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .legend-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .legend-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .legend-ticker {
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 90px;
+  }
+
+  .legend-pct {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .legend-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .pie-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100px;
+    color: var(--muted);
+    font-size: 13px;
+    flex: 1;
+  }
+
+  /* MONTHLY PREMIUM TABLE */
+  .monthly-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-top: 4px;
+  }
+  .month-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .month-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--accent);
+    opacity: 0.3;
+  }
+  .month-card.has-data::after { opacity: 1; }
+  .month-label {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+    font-family: 'Space Mono', monospace;
+  }
+  .month-amount {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+  }
+  .month-amount.empty {
+    color: var(--muted);
+    font-size: 20px;
+    font-weight: 400;
+  }
+  .month-tickers {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  .month-ticker-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+  }
+  .month-ticker-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  .month-ticker-val {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .month-bar {
+    position: absolute;
+    bottom: 3px; left: 0;
+    height: 3px;
+    background: var(--accent);
+    transition: width 0.4s ease;
+  }
+
+</style>
+</head>
+<body>
+
+<!-- DOCS MODAL -->
+<div class="modal-overlay" id="docs-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="document.getElementById('docs-modal').classList.remove('open')">✕</button>
+    <h2>Kako koristiti <span>Analyzer</span></h2>
+    <p class="modal-subtitle">Upute za pripremu CSV datoteke i korištenje dashboarda</p>
+
+    <div class="doc-section">
+      <h3>Što je ovaj alat?</h3>
+      <p>IBKR CALL Options Analyzer je lokalni alat koji analizira tvoje CALL opcijske pozicije izvezene iz Interactive Brokersa. Sve se obrađuje u browseru — nijedan podatak ne napušta tvoje računalo.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Format CSV datoteke</h3>
+      <p>Datoteka mora biti <strong>.csv</strong> s točno definiranim stupcima u prvom redu (header). Stupci su case-sensitive.</p>
+
+      <table class="col-table">
+        <thead>
+          <tr>
+            <th>Stupac</th>
+            <th>Obavezno</th>
+            <th>Opis</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="col-name">Ticker</td><td><span class="col-req req">OBAVEZNO</span></td><td>Simbol dionice (npr. AAPL, TSLA)</td></tr>
+          <tr><td class="col-name">Status</td><td><span class="col-req req">OBAVEZNO</span></td><td>Open, Closed ili Expired</td></tr>
+          <tr><td class="col-name">Option</td><td><span class="col-req req">OBAVEZNO</span></td><td>SELL ili BUY (smjer transakcije)</td></tr>
+          <tr><td class="col-name">Date</td><td><span class="col-req req">OBAVEZNO</span></td><td>Datum otvaranja pozicije (YYYY-MM-DD)</td></tr>
+          <tr><td class="col-name">Exp. Date</td><td><span class="col-req req">OBAVEZNO</span></td><td>Datum isteka opcije (YYYY-MM-DD)</td></tr>
+          <tr><td class="col-name">Strike Price</td><td><span class="col-req req">OBAVEZNO</span></td><td>Strike cijena (broj, npr. 150.00)</td></tr>
+          <tr><td class="col-name">Quantity</td><td><span class="col-req req">OBAVEZNO</span></td><td>Broj ugovora (negativan za SELL)</td></tr>
+          <tr><td class="col-name">Total Premium</td><td><span class="col-req req">OBAVEZNO</span></td><td>Ukupna primljena/plaćena premija ($)</td></tr>
+          <tr><td class="col-name">Premium Exp</td><td><span class="col-req req">OBAVEZNO</span></td><td>Realizirani P&L po transakciji ($)</td></tr>
+          <tr><td class="col-name">Exposure</td><td><span class="col-req req">OBAVEZNO</span></td><td>Ukupna izloženost (Strike × Qty × 100)</td></tr>
+          <tr><td class="col-name">Link</td><td><span class="col-req opt">OPCIJSKO</span></td><td>Jedinstveni ID koji spaja SELL i BUY par iste pozicije</td></tr>
+          <tr><td class="col-name">Days Left</td><td><span class="col-req opt">OPCIJSKO</span></td><td>Broj dana do isteka (samo za otvorene)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="doc-section">
+      <h3>Primjer CSV sadržaja</h3>
+      <div class="csv-example"><span class="csv-header">Ticker,Status,Option,Date,Exp. Date,Strike Price,Quantity,Total Premium,Premium Exp,Exposure,Link,Days Left</span>
+<span class="csv-row">AAPL,Open,SELL,2025-01-10,2025-04-17,170.00,-2,340.00,0,34000,ABC123,14</span>
+<span class="csv-row">TSLA,Closed,SELL,2024-11-01,2024-12-20,200.00,-1,180.00,180.00,20000,DEF456,</span>
+<span class="csv-row">TSLA,Closed,BUY,2024-12-15,2024-12-20,200.00,1,0,-25.00,20000,DEF456,</span>
+<span class="csv-row">NVDA,Expired,SELL,2024-10-01,2024-11-15,450.00,-1,220.00,220.00,45000,GHI789,</span></div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Kako funkcionira P&L obračun</h3>
+      <ul>
+        <li><strong>Otvorene pozicije</strong> — prikazuje se premija u igri (Total Premium) i exposure za svaku poziciju.</li>
+        <li><strong>Zatvorene pozicije</strong> — SELL i BUY redovi se sparuju po <code>Link</code> kodu. Neto P&L = zbroj Premium Exp za taj par.</li>
+        <li><strong>Expired pozicije</strong> — tretiraju se kao zatvorene; cijela premija se broji kao profit.</li>
+        <li><strong>Pie chartovi</strong> — prikazuju relativni udio svakog tickera u ukupnom pozitivnom ili negativnom P&L-u.</li>
+      </ul>
+    </div>
+
+    <div class="doc-section">
+      <h3>Savjeti za export iz IBKR-a</h3>
+      <ul>
+        <li>Idi na <strong>Account Management → Reports → Activity → Custom</strong> i eksportiraj opcijske transakcije.</li>
+        <li>Dodaj vlastite stupce ako IBKR export nema sve potrebne kolone — alat čita samo ono što postoji.</li>
+        <li>Datoteka može imati i dodatne stupce — ignoriraju se automatski.</li>
+        <li>Provjeri da su decimale u formatu <strong>150.00</strong> (točka, ne zarez).</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- FLOATING BUTTONS (always visible) -->
+<div class="floating-toolbar" style="position:fixed;top:16px;right:16px;z-index:500;display:flex;gap:8px;">
+  <button class="icon-btn" id="docs-btn" title="Dokumentacija" onclick="document.getElementById('docs-modal').classList.add('open')">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+  </button>
+  <button class="icon-btn" id="theme-btn" title="Promijeni temu" onclick="toggleTheme()">
+    <svg id="theme-icon-dark" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+    <svg id="theme-icon-light" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+      <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  </button>
+</div>
+
+<!-- DROP SCREEN -->
+<div id="drop-screen">
+  <p class="drop-label">Interactive Tracker</p>
+  <h1 class="drop-title">IBKR <span>CALL</span><br>Options Analyzer</h1>
+
+  <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14,2 14,8 20,8"/>
+      <line x1="12" y1="18" x2="12" y2="12"/>
+      <polyline points="9,15 12,12 15,15"/>
+    </svg>
+    <strong>Drag CSV here or click</strong>
+    <p>Load IBKR CALL export (.csv)</p>
+    <button class="btn-upload" onclick="event.stopPropagation(); document.getElementById('file-input').click()">
+      Choose file
+    </button>
+  </div>
+  <input type="file" id="file-input" accept=".csv">
+  <div id="error-box"></div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="top-bar">
+    <h1>CALL Options <span>Dashboard</span></h1>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <div class="file-chip" id="file-name-chip">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        </svg>
+        <span id="file-name-text">file.csv</span>
+      </div>
+      <button class="reset-btn" onclick="resetApp()">↩ New file</button>
+    </div>
+  </div>
+
+  <div id="kpi-grid" class="kpi-grid"></div>
+  <div id="error-dash"></div>
+
+  <div class="section">
+    <div class="section-title">Open positions — premium in play</div>
+    <div class="table-wrapper">
+      <table class="open-table" id="open-table">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Open date</th>
+            <th>Exp. date</th>
+            <th>Strike</th>
+            <th>Qty</th>
+            <th>Premium in play</th>
+            <th>Exposure</th>
+            <th>Days left</th>
+          </tr>
+        </thead>
+        <tbody id="open-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-title">Premium in play — share by ticker</div>
+    <div class="pie-grid">
+      <div class="pie-card">
+        <div class="pie-card-title">
+          <span class="dot" style="background:var(--accent)"></span>
+          Open positions — premium by ticker
+        </div>
+        <div class="pie-inner" id="pie-open-inner">
+          <div class="pie-empty">No data</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Premium in play — next 4 months</div>
+    <div class="monthly-grid" id="monthly-grid"></div>
+  </div>
+
+<div class="section">
+    <div class="section-title">P&L distribution by ticker</div>
+    <div class="pie-grid">
+      <div class="pie-card">
+        <div class="pie-card-title">
+          <span class="dot" style="background:var(--green)"></span>
+          Positive profits — share by ticker
+        </div>
+        <div class="pie-inner" id="pie-positive-inner">
+          <div class="pie-empty">No data</div>
+        </div>
+      </div>
+      <div class="pie-card">
+        <div class="pie-card-title">
+          <span class="dot" style="background:var(--red)"></span>
+          Losses — share by ticker
+        </div>
+        <div class="pie-inner" id="pie-negative-inner">
+          <div class="pie-empty">No data</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Closed positions — P&L by ticker</div>
+    <div class="ticker-grid" id="closed-grid"></div>
+  </div>
+</div>
+
+<script>
+  // Standalone labels
+  const LABELS = {
+    'an_kpi_real':     'Realized P&L',
+    'an_kpi_prem':     'Premium in Play',
+    'an_kpi_exp':      'Total Exposure',
+    'an_kpi_open_n':   'Open Positions',
+    'an_kpi_closed_n': 'Closed / Expired',
+    'an_csv_empty':    'CSV file is empty.',
+    'an_pie_empty':    'No data',
+    'an_empty_open':   'No open positions.',
+    'an_empty_closed': 'No closed positions.',
+    'an_trades':       'trades',
+    'an_trade':        'trade',
+    'an_profit':       'Net profit',
+    'an_loss':         'Net loss',
+  };
+  function tr(k) { return LABELS[k] || k; }
+  window.addEventListener('message', function(ev) {
+    if (ev.data && ev.data.type === 'hub-lang') {
+      if (window._analyzerRows) renderDashboard(window._analyzerRows, window._analyzerFile || '');
+    }
+  });
+  // ---- THEME ----
+  let isLight = false;
+  function toggleTheme() {
+    isLight = !isLight;
+    document.body.classList.toggle('light', isLight);
+    document.getElementById('theme-icon-dark').style.display = isLight ? 'none' : 'block';
+    document.getElementById('theme-icon-light').style.display = isLight ? 'block' : 'none';
+    // redraw all pie charts with new bg color
+    document.querySelectorAll('.pie-canvas-wrap canvas').forEach(c => {
+      const redrawFn = c._redraw;
+      if (redrawFn) redrawFn();
+    });
+  }
+
+  // Close modal on overlay click
+  document.getElementById('docs-modal').addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('open');
+  });
+
+  // ---- FILE INPUT ----
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) processFile(f);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) processFile(fileInput.files[0]);
+  });
+
+  function resetApp() {
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('drop-screen').style.display = 'flex';
+    fileInput.value = '';
+  }
+
+  // ---- CSV PARSER ----
+  function parseCSV(text) {
+    text = String(text).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) throw new Error(tr('an_csv_empty'));
+
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    const rows = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const vals = splitCSVLine(lines[i]);
+      if (vals.length < 3) continue;
+      const row = {};
+      headers.forEach((h, idx) => { row[h] = (vals[idx] || '').trim().replace(/^"|"$/g, ''); });
+      // skip rows with no Ticker or Status
+      if (!row['Ticker'] || !row['Status']) continue;
+      const validStatuses = ['Open', 'Closed', 'Expired', 'Assigned'];
+      if (!validStatuses.includes(row['Status'])) continue;
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  function splitCSVLine(line) {
+    const result = [];
+    let cur = '', inQ = false;
+    for (let c of line) {
+      if (c === '"') { inQ = !inQ; }
+      else if (c === ',' && !inQ) { result.push(cur); cur = ''; }
+      else { cur += c; }
+    }
+    result.push(cur);
+    return result;
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function toNum(val) {
+    if (val === '' || val === undefined || val === null) return NaN;
+    const n = parseFloat(String(val).replace(/[^\d.\-]/g, ''));
+    return isNaN(n) ? NaN : n;
+  }
+
+  // Robust date parser — handles YYYY.MM.DD, YYYY.MM.DD. (trailing dot), YYYY-MM-DD
+  function parseDate(str) {
+    if (!str) return null;
+    // Remove trailing dot/whitespace
+    const s = String(str).trim().replace(/\\.$/, '');
+    // Try YYYY.MM.DD or YYYY-MM-DD or YYYY/MM/DD
+    const m1 = s.match(/^(\d{4})[.\-\\/](\d{1,2})[.\-\\/](\d{1,2})$/);
+    if (m1) return new Date(parseInt(m1[1]), parseInt(m1[2]) - 1, parseInt(m1[3]));
+    // Try DD.MM.YYYY or DD-MM-YYYY
+    const m2 = s.match(/^(\d{1,2})[.\-\\/](\d{1,2})[.\-\\/](\d{4})$/);
+    if (m2) return new Date(parseInt(m2[3]), parseInt(m2[2]) - 1, parseInt(m2[1]));
+    // Fallback
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  }
+
+
+  // Flexible exp date getter — handles 'Exp. Date', 'Exp- Date', 'Exp Date', 'ExpDate'
+  function getExpDate(r) {
+    return r['Exp. Date'] || r['Exp- Date'] || r['Exp Date'] || r['ExpDate'] || r['exp_date'] || '';
+  }
+
+  function calcDaysLeft(expStr) {
+    const exp = parseDate(expStr);
+    if (!exp) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    exp.setHours(0, 0, 0, 0);
+    const diff = Math.round((exp - today) / (1000 * 60 * 60 * 24));
+    return diff;
+  }
+
+
+
+  // ---- PROCESS ----
+  function processFile(file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const rows = parseCSV(e.target.result);
+        window._analyzerRows = rows;
+        window._analyzerFile = file.name;
+        renderDashboard(rows, file.name);
+      } catch (err) {
+        document.getElementById('error-box').innerHTML = '<div class="error-msg">' + escapeHtml(err.message) + '</div>';
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function renderDashboard(rows, fileName) {
+    document.getElementById('drop-screen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('file-name-text').textContent = fileName;
+
+    const openRows   = rows.filter(r => r['Status'] === 'Open');
+    const closedRows = rows.filter(r => ['Closed','Expired','Assigned'].includes(r['Status']));
+
+    // --- KPI ---
+    const totalOpenPremium = openRows.reduce((s, r) => {
+      const v = toNum(r['Total Premium']);
+      return s + (isNaN(v) ? 0 : v);
+    }, 0);
+
+    const totalOpenExposure = openRows.reduce((s, r) => {
+      const v = toNum(r['Exposure']);
+      return s + (isNaN(v) ? 0 : Math.abs(v));
+    }, 0);
+
+    const totalRealized = closedRows.reduce((s, r) => {
+      const v = toNum(r['Premium Exp']);
+      return s + (isNaN(v) ? 0 : v);
+    }, 0);
+
+    const kpiGrid = document.getElementById('kpi-grid');
+    kpiGrid.innerHTML = '';
+    const kpis = [
+      { label: tr('an_kpi_real'),     value: fmt(totalRealized),      cls: totalRealized >= 0 ? 'pos' : 'neg', bar: totalRealized >= 0 ? 'green' : 'red' },
+      { label: tr('an_kpi_prem'),     value: fmt(totalOpenPremium),   cls: 'accent',  bar: 'accent' },
+      { label: tr('an_kpi_exp'),      value: fmtK(totalOpenExposure), cls: 'neutral', bar: 'blue' },
+      { label: tr('an_kpi_open_n'),   value: openRows.length,         cls: 'neutral', bar: 'blue' },
+      { label: tr('an_kpi_closed_n'), value: closedRows.length,       cls: 'neutral', bar: 'yellow' },
+    ];
+    kpis.forEach(k => {
+      const card = document.createElement('div');
+      card.className = `kpi-card ${k.bar}`;
+      card.innerHTML = `<div class="kpi-label">${k.label}</div><div class="kpi-value ${k.cls}">${k.value}</div>`;
+      kpiGrid.appendChild(card);
+    });
+
+    // --- OPEN TABLE ---
+    const tbody = document.getElementById('open-tbody');
+    tbody.innerHTML = '';
+    if (openRows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${tr('an_empty_open')}</td></tr>`;
+    } else {
+      openRows.sort((a, b) => {
+        const da = parseDate(getExpDate(a)), db = parseDate(getExpDate(b));
+        if (!da && !db) return 0; if (!da) return 1; if (!db) return -1;
+        return da - db;
+      });
+      openRows.forEach(r => {
+        const premium  = toNum(r['Total Premium']);
+        const exposure = toNum(r['Exposure']);
+        const strike   = toNum(r['Strike Price']);
+        const _dl      = calcDaysLeft(getExpDate(r));
+        const daysLeft = _dl !== null
+          ? (_dl < 0 ? `<span style="color:var(--red)">${_dl}d</span>` : `${_dl}d`)
+          : (r['Days Left'] || '—');
+        const rowEl = document.createElement('tr');
+        rowEl.innerHTML = `
+          <td><strong>${escapeHtml(r['Ticker'])}</strong></td>
+          <td class="mono">${escapeHtml(r['Date'] || '—')}</td>
+          <td class="mono">${escapeHtml(getExpDate(r) || '—')}</td>
+          <td class="mono">${isNaN(strike) ? '—' : '$' + strike.toFixed(2)}</td>
+          <td class="mono">${escapeHtml(r['Quantity'] || '—')}</td>
+          <td><span class="premium-pill">${isNaN(premium) ? '—' : fmt(premium)}</span></td>
+          <td class="mono">${isNaN(exposure) ? '—' : fmtK(exposure)}</td>
+          <td class="mono">${daysLeft}</td>
+        `;
+        tbody.appendChild(rowEl);
+      });
+      const totalPrem = openRows.reduce((s, r) => { const v = toNum(r['Total Premium']); return s + (isNaN(v) ? 0 : v); }, 0);
+      const totalExp  = openRows.reduce((s, r) => { const v = toNum(r['Exposure']); return s + (isNaN(v) ? 0 : Math.abs(v)); }, 0);
+      const tfoot = document.createElement('tr');
+      tfoot.style.borderTop = '1px solid var(--border)';
+      tfoot.innerHTML = `
+        <td colspan="5" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">UKUPNO</td>
+        <td><span class="premium-pill" style="background:rgba(200,255,0,0.12);color:var(--accent)">${fmt(totalPrem)}</span></td>
+        <td class="mono" style="color:var(--text)">${fmtK(totalExp)}</td>
+        <td></td>
+      `;
+      tbody.appendChild(tfoot);
+    }
+
+    // --- CLOSED GRID ---
+    const tickerMap = {};
+    closedRows.forEach(r => {
+      const ticker = r['Ticker'];
+      const pe     = toNum(r['Premium Exp']);
+      const net    = isNaN(pe) ? 0 : pe;
+      const status = r['Status'];
+      const date   = r['Date'] || '—';
+      if (!tickerMap[ticker]) tickerMap[ticker] = { trades: [], net: 0 };
+      tickerMap[ticker].net += net;
+      tickerMap[ticker].trades.push({ date, net, status });
+    });
+
+    // --- PIE CHARTS ---
+    const positiveTickers = Object.entries(tickerMap).filter(([,d]) => d.net > 0).sort((a,b) => b[1].net - a[1].net);
+    const negativeTickers = Object.entries(tickerMap).filter(([,d]) => d.net < 0).sort((a,b) => a[1].net - b[1].net);
+
+    renderPieChart('pie-positive-inner', positiveTickers.map(([t,d]) => [t, d.net]), GREEN_PALETTE, true);
+    renderOpenPremiumPie(openRows);
+    renderMonthlyPremium(openRows);
+    renderPieChart('pie-negative-inner', negativeTickers.map(([t,d]) => [t, d.net]), RED_PALETTE, false);
+
+    const closedGrid = document.getElementById('closed-grid');
+    closedGrid.innerHTML = '';
+    const sortedTickers = Object.entries(tickerMap).sort((a,b) => b[1].net - a[1].net);
+
+    if (sortedTickers.length === 0) {
+      closedGrid.innerHTML = `<div class="empty-state">${tr('an_empty_closed')}</div>`;
+    } else {
+      sortedTickers.forEach(([ticker, data]) => {
+        const card = document.createElement('div');
+        card.className = 'ticker-card';
+        const pos = data.net >= 0;
+        const tradesHTML = data.trades.map(t => `
+          <div class="trade-row">
+            <span class="trade-date">${escapeHtml(t.date)}</span>
+            <span>
+              <span class="badge badge-${escapeHtml(t.status.toLowerCase())}">${escapeHtml(t.status)}</span>
+              <span class="trade-amt ${t.net >= 0 ? 'pos' : 'neg'}">${fmt(t.net)}</span>
+            </span>
+          </div>
+        `).join('');
+        card.innerHTML = `
+          <div class="ticker-header">
+            <div class="ticker-name">${escapeHtml(ticker)}</div>
+            <div class="badge badge-closed">${data.trades.length} ${data.trades.length !== 1 ? tr('an_trades') : tr('an_trade')}</div>
+          </div>
+          <div class="ticker-pnl ${pos ? 'pos' : 'neg'}">${fmt(data.net)}</div>
+          <div class="ticker-meta">${pos ? tr('an_profit') : tr('an_loss')}</div>
+          <div class="ticker-trades">${tradesHTML}</div>
+        `;
+        closedGrid.appendChild(card);
+      });
+    }
+  }
+
+
+  // ---- OPEN PREMIUM PIE ----
+  const OPEN_PALETTE = [
+    '#c8ff00','#00b4d8','#ff4757','#a78bfa','#ffd32a',
+    '#ff6b9d','#38bdf8','#fb923c','#34d399','#f472b6'
+  ];
+
+  function renderOpenPremiumPie(openRows) {
+    // Group by ticker, sum Total Premium
+    const map = {};
+    openRows.forEach(r => {
+      const ticker = r['Ticker'];
+      const prem = toNum(r['Total Premium']);
+      if (!ticker || isNaN(prem) || prem <= 0) return;
+      map[ticker] = (map[ticker] || 0) + prem;
+    });
+    const sorted = Object.entries(map).sort((a,b) => b[1]-a[1]);
+    renderPieChart('pie-open-inner', sorted, OPEN_PALETTE, true);
+  }
+
+  // ---- MONTHLY PREMIUM TABLE ----
+  function renderMonthlyPremium(openRows) {
+    const grid = document.getElementById('monthly-grid');
+    grid.innerHTML = '';
+    const ml = (function(){ 'en-US' })();
+
+    // Build next 4 months from today
+    const now = new Date();
+    const months = [];
+    for (let i = 0; i < 4; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      months.push({
+        year: d.getFullYear(),
+        month: d.getMonth(), // 0-indexed
+        label: d.toLocaleString(ml, { month: 'long', year: 'numeric' }),
+        short: d.toLocaleString(ml, { month: 'short' }),
+        total: 0,
+        tickers: {}
+      });
+    }
+
+    // Match open rows to months by Exp. Date
+    openRows.forEach(r => {
+      const expStr = getExpDate(r);
+      const prem = toNum(r['Total Premium']);
+      const ticker = r['Ticker'];
+      if (!expStr || isNaN(prem) || prem <= 0) return;
+      const exp = parseDate(expStr);
+      if (!exp || isNaN(exp)) return;
+      months.forEach(m => {
+        if (exp.getFullYear() === m.year && exp.getMonth() === m.month) {
+          m.total += prem;
+          m.tickers[ticker] = (m.tickers[ticker] || 0) + prem;
+        }
+      });
+    });
+
+    const maxTotal = Math.max(...months.map(m => m.total), 1);
+
+    months.forEach(m => {
+      const card = document.createElement('div');
+      card.className = 'month-card' + (m.total > 0 ? ' has-data' : '');
+
+      const tickerLines = Object.entries(m.tickers)
+        .sort((a,b) => b[1]-a[1])
+        .map(([t, v]) => `<div class="month-ticker-row"><span class="month-ticker-name">${escapeHtml(t)}</span><span class="month-ticker-val">+$${v.toFixed(0)}</span></div>`)
+        .join('');
+
+      const barW = m.total > 0 ? Math.round((m.total / maxTotal) * 100) : 0;
+
+      card.innerHTML = `
+        <div class="month-label">${m.label}</div>
+        <div class="month-amount ${m.total === 0 ? 'empty' : ''}">
+          ${m.total > 0 ? '+$' + m.total.toFixed(0) : '—'}
+        </div>
+        <div class="month-tickers">${tickerLines || '<div class="month-ticker-row"><span class="month-ticker-name" style="opacity:0.4">—</span></div>'}</div>
+        <div class="month-bar" style="width:${barW}%"></div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  // ---- PIE CHARTS ----
+  const GREEN_PALETTE = [
+    '#00e676','#00b4d8','#c8ff00','#a78bfa','#ffd32a',
+    '#ff6b9d','#38bdf8','#fb923c','#34d399','#f472b6'
+  ];
+  const RED_PALETTE = [
+    '#ff4757','#00b4d8','#ffd32a','#a78bfa','#c8ff00',
+    '#34d399','#fb923c','#f472b6','#38bdf8','#ff6b9d'
+  ];
+
+  function fmtAbs(val) {
+    if (Math.abs(val) >= 1000) return '$' + (val / 1000).toFixed(1) + 'k';
+    return '$' + Math.abs(val).toFixed(0);
+  }
+
+  function buildSliceAngles(slices) {
+    const total = slices.reduce((s, sl) => s + sl.value, 0);
+    const gap = 0.025;
+    let angle = -Math.PI / 2;
+    return slices.map(sl => {
+      const sweep = (sl.value / total) * Math.PI * 2 - gap;
+      const startAngle = angle + gap / 2;
+      const endAngle = startAngle + sweep;
+      angle += sweep + gap;
+      return { ...sl, startAngle, endAngle, pct: (sl.value / total * 100).toFixed(1) };
+    });
+  }
+
+  function drawDonut(ctx, size, slicesWithAngles, hoveredIdx) {
+    const cx = size / 2, cy = size / 2;
+    const outerR = 72, innerR = 40;
+    const dpr = window.devicePixelRatio || 1;
+
+    ctx.clearRect(0, 0, size * dpr, size * dpr);
+
+    slicesWithAngles.forEach((sl, i) => {
+      const isHov = i === hoveredIdx;
+      const r = isHov ? outerR + 6 : outerR;
+
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, sl.startAngle, sl.endAngle);
+      ctx.closePath();
+      ctx.fillStyle = isHov ? sl.color : sl.color + 'cc';
+      ctx.fill();
+
+      if (isHov) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, sl.startAngle, sl.endAngle);
+        ctx.strokeStyle = sl.color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    });
+
+    // donut hole
+    ctx.beginPath();
+    ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--donut-hole').trim() || '#111419';
+    ctx.fill();
+
+    // center text
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    if (hoveredIdx !== null && hoveredIdx !== undefined && slicesWithAngles[hoveredIdx]) {
+      const sl = slicesWithAngles[hoveredIdx];
+      ctx.fillStyle = sl.color;
+      ctx.font = `bold 13px 'Space Mono', monospace`;
+      ctx.fillText(sl.ticker, cx, cy - 9);
+      ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text').trim() || '#e8ecf0';
+      ctx.font = `bold 11px 'Space Mono', monospace`;
+      ctx.fillText(sl.pct + '%', cx, cy + 8);
+    } else {
+      const totalAbs = slicesWithAngles.reduce((s, sl) => s + sl.rawVal, 0);
+      ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text').trim() || '#e8ecf0';
+      ctx.font = `bold 12px 'Space Mono', monospace`;
+      ctx.fillText(fmtAbs(totalAbs), cx, cy);
+    }
+  }
+
+  function getHoveredSlice(canvas, mx, my, slicesWithAngles) {
+    const size = 160;
+    const cx = size / 2, cy = size / 2;
+    const outerR = 78, innerR = 40;
+    const dx = mx - cx, dy = my - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < innerR || dist > outerR) return null;
+    let angle = Math.atan2(dy, dx);
+    for (let i = 0; i < slicesWithAngles.length; i++) {
+      const { startAngle, endAngle } = slicesWithAngles[i];
+      let a = angle;
+      // normalize to same range
+      let s = startAngle, e = endAngle;
+      if (s < -Math.PI) s += Math.PI * 2;
+      if (e < -Math.PI) e += Math.PI * 2;
+      if (a < s - 0.01) a += Math.PI * 2;
+      if (a >= s && a <= e) return i;
+    }
+    return null;
+  }
+
+  function renderPieChart(containerId, tickerData, palette, isPositive) {
+    const container = document.getElementById(containerId);
+    const slices = tickerData.map((d, i) => ({
+      ticker: d[0],
+      rawVal: Math.abs(d[1]),
+      value: Math.abs(d[1]),
+      color: palette[i % palette.length]
+    }));
+
+    if (slices.length === 0) {
+      container.innerHTML = '<div class="pie-empty">' + tr('an_pie_empty') + '</div>';
+      return;
+    }
+
+    const slicesWithAngles = buildSliceAngles(slices);
+    const total = slices.reduce((s, sl) => s + sl.value, 0);
+
+    const size = 160;
+    const dpr = window.devicePixelRatio || 1;
+    const canvas = document.createElement('canvas');
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    canvas.style.cursor = 'crosshair';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'pie-canvas-wrap';
+    wrap.appendChild(canvas);
+
+    const legend = document.createElement('div');
+    legend.className = 'pie-legend';
+
+    slicesWithAngles.forEach((sl, i) => {
+      const row = document.createElement('div');
+      row.className = 'legend-row';
+      row.dataset.idx = i;
+      row.innerHTML = `
+        <div class="legend-left">
+          <span class="legend-dot" style="background:${sl.color}"></span>
+          <span class="legend-ticker">${escapeHtml(sl.ticker)}</span>
+        </div>
+        <span class="legend-pct">${sl.pct}%</span>
+        <span class="legend-val" style="color:${isPositive ? 'var(--green)' : 'var(--red)'}">${isPositive ? '+' : '-'}$${sl.rawVal.toFixed(2)}</span>
+      `;
+      legend.appendChild(row);
+    });
+
+    container.innerHTML = '';
+    container.appendChild(wrap);
+    container.appendChild(legend);
+
+    let hoveredIdx = null;
+
+    function redraw(idx) {
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawDonut(ctx, size, slicesWithAngles, idx);
+      ctx.restore();
+
+      // highlight legend row
+      legend.querySelectorAll('.legend-row').forEach((r, i) => {
+        r.style.opacity = (idx === null || i === idx) ? '1' : '0.35';
+        r.style.fontWeight = i === idx ? '700' : '';
+      });
+    }
+
+    canvas.addEventListener('mousemove', e => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const idx = getHoveredSlice(canvas, mx, my, slicesWithAngles);
+      if (idx !== hoveredIdx) { hoveredIdx = idx; redraw(idx); }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      hoveredIdx = null;
+      redraw(null);
+    });
+    legend.querySelectorAll('.legend-row').forEach((row, i) => {
+      row.style.cursor = 'default';
+      row.addEventListener('mouseenter', () => { hoveredIdx = i; redraw(i); });
+      row.addEventListener('mouseleave', () => { hoveredIdx = null; redraw(null); });
+    });
+
+    requestAnimationFrame(() => redraw(null));
+    canvas._redraw = () => redraw(hoveredIdx);
+  }
+
+  // ---- UTILS ----
+  function fmt(val) {
+    if (isNaN(val)) return '—';
+    const prefix = val >= 0 ? '+$' : '-$';
+    return prefix + Math.abs(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function fmtK(val) {
+    if (isNaN(val)) return '—';
+    if (Math.abs(val) >= 1000) return '$' + (val / 1000).toFixed(1) + 'k';
+    return '$' + val.toFixed(0);
+  }
+</script>
+</body>
+</html>

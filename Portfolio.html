@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Optimizer</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f3ef;
+    --surface: #ffffff;
+    --surface2: #f0ede8;
+    --border: #e2ddd8;
+    --txt: #1a1814;
+    --txt2: #7a7268;
+    --accent: #c8521a;
+    --accent2: #e8753a;
+    --green: #1a7a4a;
+    --red: #c8521a;
+    --blue: #1a4a8a;
+    --mono: 'Space Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+    --shadow: 0 2px 20px rgba(0,0,0,0.06);
+    --radius: 12px;
+  }
+  [data-theme="dark"] {
+    --bg: #0f0e0c;
+    --surface: #1a1916;
+    --surface2: #242220;
+    --border: #333028;
+    --txt: #ede8e0;
+    --txt2: #7a7268;
+    --accent: #e8753a;
+    --accent2: #f5a06a;
+    --green: #3aad72;
+    --red: #e86060;
+    --blue: #6aabf5;
+    --shadow: 0 2px 30px rgba(0,0,0,0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--txt);
+    min-height: 100vh;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  /* GRID LAYOUT */
+  .app {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 32px 24px;
+    display: grid;
+    grid-template-rows: auto auto auto 1fr;
+    gap: 24px;
+  }
+
+  /* HEADER */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .logo {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .logo-mark {
+    font-family: var(--mono);
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -1px;
+  }
+  .logo-sub {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--txt2);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  .header-right { display: flex; align-items: center; gap: 12px; }
+
+  .theme-btn {
+    width: 44px; height: 24px;
+    border-radius: 12px;
+    border: 2px solid var(--border);
+    background: var(--surface2);
+    cursor: pointer;
+    position: relative;
+    transition: 0.3s;
+  }
+  .theme-btn::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    transition: 0.3s;
+  }
+  [data-theme="light"] .theme-btn::after { transform: translateX(20px); }
+  .theme-label { font-size: 0.75rem; color: var(--txt2); font-weight: 500; text-transform: uppercase; letter-spacing: 1px; }
+
+  /* UPLOAD */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: 0.2s;
+    background: var(--surface);
+    position: relative;
+  }
+  .upload-zone:hover { border-color: var(--accent); background: var(--surface2); }
+  .upload-zone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .upload-inner { pointer-events: none; }
+  .upload-icon { font-size: 1.8rem; margin-bottom: 6px; }
+  .upload-text { font-size: 0.85rem; color: var(--txt2); }
+  .upload-text strong { color: var(--accent); }
+  #fileName { font-family: var(--mono); font-size: 0.75rem; color: var(--green); margin-top: 4px; }
+
+  /* STAT CARDS */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: var(--shadow);
+  }
+  .stat-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--txt2);
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+  .stat-value.total { color: var(--accent); }
+  .stat-value.cash { color: var(--green); }
+  .stat-value.pnl { color: var(--txt); }
+  .stat-value.pnl.pos { color: var(--green); }
+  .stat-value.pnl.neg { color: var(--red); }
+  .stat-sub { font-size: 0.7rem; color: var(--txt2); margin-top: 4px; }
+
+  /* MAIN CONTENT */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+
+  /* CHART PANEL */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--txt2);
+  }
+  .panel-body { padding: 20px; }
+
+  .chart-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+  }
+  .chart-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+  }
+  .chart-center-val {
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--txt);
+  }
+  .chart-center-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--txt2);
+  }
+
+  /* LEGEND */
+  .legend { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.82rem;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .legend-item:last-child { border-bottom: none; }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-ticker { font-family: var(--mono); font-weight: 700; flex: 1; }
+  .legend-pct { font-family: var(--mono); font-size: 0.75rem; color: var(--txt2); }
+  .legend-val { font-family: var(--mono); font-size: 0.75rem; text-align: right; min-width: 80px; }
+
+  /* TABLE */
+  .table-scroll { overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  thead th {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--txt2);
+    font-weight: 700;
+    padding: 12px 16px;
+    text-align: right;
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+  thead th:first-child { text-align: left; }
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  tbody tr:hover { background: var(--surface2); }
+  tbody tr:last-child { border-bottom: none; }
+  td {
+    padding: 14px 16px;
+    text-align: right;
+    vertical-align: middle;
+  }
+  td:first-child { text-align: left; }
+
+  .ticker-cell { display: flex; align-items: center; gap: 10px; }
+  .ticker-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .ticker-name { font-family: var(--mono); font-weight: 700; font-size: 0.9rem; }
+
+  .mono { font-family: var(--mono); }
+
+  /* PROGRESS BAR */
+  .pct-cell { min-width: 120px; }
+  .pct-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .pct-bar-track {
+    width: 60px;
+    height: 4px;
+    background: var(--surface2);
+    border-radius: 2px;
+    overflow: visible;
+    position: relative;
+  }
+  .pct-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    position: absolute;
+    top: 0; left: 0;
+    max-width: 100%;
+  }
+  .pct-bar-min { position: absolute; top: -3px; height: 10px; width: 2px; background: var(--txt2); border-radius: 1px; }
+  .pct-bar-max { position: absolute; top: -3px; height: 10px; width: 2px; background: var(--accent); border-radius: 1px; }
+  .pct-val { font-family: var(--mono); font-size: 0.8rem; min-width: 38px; text-align: right; }
+
+  /* STATUS BADGE */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    font-family: var(--mono);
+    white-space: nowrap;
+  }
+  .badge-ok { background: rgba(58,173,114,0.15); color: var(--green); }
+  .badge-over { background: rgba(232,96,96,0.15); color: var(--red); }
+  .badge-under { background: rgba(255,165,0,0.15); color: #e8a03a; }
+
+  /* ACTION */
+  .action-cell { font-family: var(--mono); font-size: 0.78rem; }
+  .action-buy { color: var(--green); }
+  .action-sell { color: var(--red); }
+  .action-ok { color: var(--blue); }
+
+  /* PnL */
+  .pl-pos { color: var(--green); font-family: var(--mono); }
+  .pl-neg { color: var(--red); font-family: var(--mono); }
+
+  /* Empty state */
+  .empty-state {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--txt2);
+  }
+  .empty-icon { font-size: 3rem; margin-bottom: 12px; opacity: 0.4; }
+  .empty-text { font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo">
+      <span class="logo-mark">PX/</span>
+      <span class="logo-sub" data-i18n="po_logo_sub">Portfolio Optimizer</span>
+    </div>
+    <div class="header-right">
+      <span class="theme-label" id="themeLabel">Dark</span>
+      <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme"></button>
+    </div>
+  </div>
+
+  <!-- UPLOAD -->
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="csvFile" accept=".csv">
+    <div class="upload-inner">
+      <div class="upload-icon">📂</div>
+      <div class="upload-text"><strong data-i18n="po_upload_strong">Choose CSV file</strong> <span data-i18n="po_upload_or">or drag & drop</span></div>
+      <div id="fileName" data-i18n="po_no_file">No file loaded</div>
+    </div>
+  </div>
+
+  <!-- STAT CARDS -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label" data-i18n="po_total_value">Total Value</div>
+      <div class="stat-value total mono" id="totalDisplay">—</div>
+      <div class="stat-sub" id="positionsCount">0 positions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label" data-i18n="po_cash">Cash</div>
+      <div class="stat-value cash mono" id="cashDisplay">—</div>
+      <div class="stat-sub" id="cashPct">— of portfolio</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label" data-i18n="po_unrealised">Unrealised P&L</div>
+      <div class="stat-value pnl mono" id="plDisplay">—</div>
+      <div class="stat-sub" id="plPctDisplay">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label" data-i18n="po_stocks">Stocks Value</div>
+      <div class="stat-value mono" id="stocksDisplay">—</div>
+      <div class="stat-sub" id="stocksPct">— of portfolio</div>
+    </div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+
+    <!-- CHART PANEL -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title" data-i18n="po_allocation">Allocation</span>
+        <span class="panel-title" id="chartSubtitle" style="color:var(--txt)">—</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap">
+          <canvas id="portfolioChart"></canvas>
+          <div class="chart-center">
+            <div class="chart-center-val" id="chartCenterVal">—</div>
+            <div class="chart-center-label" data-i18n="po_portfolio">Portfolio</div>
+          </div>
+        </div>
+        <div class="legend" id="legendList"></div>
+      </div>
+    </div>
+
+    <!-- TABLE PANEL -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title" data-i18n="po_holdings">Holdings & Limits</span>
+        <span class="panel-title" id="tableSubtitle"></span>
+      </div>
+      <div class="table-scroll">
+        <table id="resultsTable">
+          <thead>
+            <tr>
+              <th data-i18n="po_th_ticker">Ticker</th>
+              <th data-i18n="po_th_price">Price</th>
+              <th data-i18n="po_th_qty">Qty</th>
+              <th data-i18n="po_th_value">Value</th>
+              <th data-i18n="po_th_alloc">Allocation</th>
+              <th data-i18n="po_th_limits">Limits</th>
+              <th data-i18n="po_th_status">Status</th>
+              <th data-i18n="po_th_pl">P&L</th>
+              <th data-i18n="po_th_action">Action</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <div class="empty-icon">📊</div>
+                  <div class="empty-text" data-i18n="po_empty_pf">Load a CSV file to see your portfolio</div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let myChart = null;
+
+  const I18N = {
+    theme_light: 'Light',
+    theme_dark: 'Dark',
+    po_logo_sub: 'Portfolio Optimizer',
+    po_upload_strong: 'Choose CSV file',
+    po_upload_or: 'or drag & drop',
+    po_no_file: 'No file loaded',
+    po_total_value: 'Total Value',
+    po_cash: 'Cash',
+    po_unrealised: 'Unrealised P&L',
+    po_stocks: 'Stocks Value',
+    po_allocation: 'Allocation',
+    po_portfolio: 'Portfolio',
+    po_holdings: 'Holdings & Limits',
+    po_th_ticker: 'Ticker',
+    po_th_price: 'Price',
+    po_th_qty: 'Qty',
+    po_th_value: 'Value',
+    po_th_alloc: 'Allocation',
+    po_th_limits: 'Limits',
+    po_th_status: 'Status',
+    po_th_pl: 'P&L',
+    po_th_action: 'Action',
+    po_empty_pf: 'Load a CSV file to see your portfolio',
+  };
+
+  function tr(k, v) {
+    let s = I18N[k] || k;
+    if (v) {
+      Object.keys(v).forEach(function(key) {
+        s = s.replace('{' + key + '}', v[key]);
+      });
+    }
+    return s;
+  }
+
+  // Fallback for dynamic keys with templates
+  I18N['po_pct_of_pf'] = '{pct}% of portfolio';
+  I18N['po_pl_pct'] = '{sign}{n}% return';
+  I18N['po_positions'] = '{n} positions';
+  I18N['po_chart_assets'] = '{n} assets';
+
+  function syncPoThemeLabel() {
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var el = document.getElementById('themeLabel');
+    if (el) el.textContent = isDark ? 'Dark' : 'Light';
+  }
+  function applyPoI18n() {
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+      el.textContent = tr(el.getAttribute('data-i18n'));
+    });
+    syncPoThemeLabel();
+  }
+  document.addEventListener('DOMContentLoaded', applyPoI18n);
+
+  const COLORS = [
+    '#e8753a','#3aad72','#6aabf5','#e8e03a','#b06af5','#f56a9a',
+    '#3ae8d4','#f5a63a','#6af56a','#e83a6a','#3a6af5','#ada33a'
+  ];
+
+  function fmt(val, decimals = 2) {
+    return val.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    document.getElementById('themeLabel').textContent = isDark ? 'Light' : 'Dark';
+    if (window._lastData) renderAll(window._lastData);
+  }
+
+  document.getElementById('csvFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById('fileName').textContent = file.name;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: function(results) {
+        window._lastData = results.data;
+        renderAll(results.data);
+      }
+    });
+  });
+
+  function parseNum(val) {
+    if (val === undefined || val === null || val === '') return NaN;
+    return parseFloat(String(val).replace(/[^-0-9.]/g, ''));
+  }
+
+  function renderAll(data) {
+    // Parse rows
+    const rows = data.map(row => ({
+      ticker: (row['Ticker'] || '').trim(),
+      qty: parseNum(row['Quantity']),
+      avgPrice: parseNum(row['AveragePrice']),
+      price: parseNum(row['Price']),
+      value: parseNum(row['CurrentValue']),
+      pl: parseNum(row['ProfitLoss']),
+      plPct: parseNum(row['PL_Percent']),
+      min: parseNum(row['Min']),
+      max: parseNum(row['Max']),
+    })).filter(r => r.ticker && !isNaN(r.value) && r.value >= 0);
+
+    let totalValue = 0, cashValue = 0, totalPL = 0, stocksValue = 0;
+    rows.forEach(r => {
+      totalValue += r.value;
+      if (r.ticker === 'CASH') cashValue = r.value;
+      else {
+        stocksValue += r.value;
+        if (!isNaN(r.pl)) totalPL += r.pl;
+      }
+    });
+
+    // Sort by value descending
+    rows.sort((a, b) => b.value - a.value);
+
+    // Stats
+    document.getElementById('totalDisplay').textContent = '$' + fmt(totalValue);
+    document.getElementById('cashDisplay').textContent = '$' + fmt(cashValue);
+    document.getElementById('cashPct').textContent = tr('po_pct_of_pf', { pct: totalValue > 0 ? fmt((cashValue / totalValue) * 100, 1) : '0.0' });
+
+    const plEl = document.getElementById('plDisplay');
+    plEl.textContent = (totalPL >= 0 ? '+$' : '-$') + fmt(Math.abs(totalPL));
+    plEl.className = 'stat-value pnl mono ' + (totalPL >= 0 ? 'pos' : 'neg');
+
+    const stocksCost = rows.filter(r => r.ticker !== 'CASH').reduce((s, r) => s + (!isNaN(r.avgPrice) && !isNaN(r.qty) ? r.avgPrice * r.qty : 0), 0);
+    const plPct = stocksCost > 0 ? (totalPL / stocksCost) * 100 : 0;
+    document.getElementById('plPctDisplay').textContent = tr('po_pl_pct', { sign: plPct >= 0 ? '+' : '−', n: fmt(Math.abs(plPct), 1) });
+
+    document.getElementById('stocksDisplay').textContent = '$' + fmt(stocksValue);
+    document.getElementById('stocksPct').textContent = tr('po_pct_of_pf', { pct: totalValue > 0 ? fmt((stocksValue / totalValue) * 100, 1) : '0.0' });
+
+    const nonZero = rows.filter(r => r.value > 0 && r.ticker !== 'CASH');
+    document.getElementById('positionsCount').textContent = tr('po_positions', { n: nonZero.length });
+
+    document.getElementById('chartCenterVal').textContent = '$' + fmt(totalValue);
+    document.getElementById('chartSubtitle').textContent = tr('po_chart_assets', { n: rows.filter(r => r.value > 0).length });
+
+    renderChart(rows, totalValue);
+    renderTable(rows, totalValue);
+  }
+
+  function renderChart(rows, totalValue) {
+    const chartData = rows.filter(r => r.value > 0);
+    const denom = totalValue > 0 ? totalValue : 1;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const ctx = document.getElementById('portfolioChart').getContext('2d');
+    if (myChart) myChart.destroy();
+
+    myChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: chartData.map(r => r.ticker),
+        datasets: [{
+          data: chartData.map(r => r.value),
+          backgroundColor: COLORS.slice(0, chartData.length),
+          borderColor: isDark ? '#1a1916' : '#ffffff',
+          borderWidth: 3,
+          hoverBorderWidth: 3,
+        }]
+      },
+      options: {
+        cutout: '68%',
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.label}: $${fmt(ctx.parsed)} (${fmt((ctx.parsed / denom) * 100, 1)}%)`
+          },
+          backgroundColor: isDark ? '#242220' : '#fff',
+          titleColor: isDark ? '#ede8e0' : '#1a1814',
+          bodyColor: isDark ? '#ede8e0' : '#1a1814',
+          borderColor: isDark ? '#333028' : '#e2ddd8',
+          borderWidth: 1,
+          cornerRadius: 8,
+          padding: 10,
+        }}
+      }
+    });
+
+    // Legend
+    const legend = document.getElementById('legendList');
+    legend.innerHTML = '';
+    chartData.forEach((r, i) => {
+      const pct = (r.value / denom) * 100;
+      legend.innerHTML += `
+        <div class="legend-item">
+          <span class="legend-dot" style="background:${COLORS[i]}"></span>
+          <span class="legend-ticker">${escapeHtml(r.ticker)}</span>
+          <span class="legend-pct">${fmt(pct, 1)}%</span>
+          <span class="legend-val">$${fmt(r.value, 0)}</span>
+        </div>`;
+    });
+  }
+
+  function renderTable(rows, totalValue) {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+
+    rows.forEach((r, i) => {
+      const pct = (r.value / (totalValue > 0 ? totalValue : 1)) * 100;
+      const maxLimit = !isNaN(r.max) && r.max > 0 ? r.max : 25;
+      const minLimit = !isNaN(r.min) && r.min > 0 ? r.min : 0;
+      const valPerPct = totalValue > 0 ? totalValue / 100 : 0;
+
+      // Status & action
+      let badge = '', action = '', actionClass = 'action-ok';
+      if (r.ticker === 'CASH') {
+        const cashMin = !isNaN(r.min) && r.min > 0 ? r.min : 0;
+        const cashMax = !isNaN(r.max) && r.max > 0 ? r.max : 100;
+        if (pct < cashMin) {
+          badge = `<span class="badge badge-under">▲ Under</span>`;
+          const diff = (cashMin * valPerPct) - r.value;
+          action = `<span class="action-buy">Keep $${fmt(diff, 0)}</span>`;
+        } else if (pct > cashMax) {
+          badge = `<span class="badge badge-over">▼ Over</span>`;
+          action = `<span class="action-sell">Deploy excess</span>`;
+        } else {
+          badge = `<span class="badge badge-ok">✓ OK</span>`;
+          action = `<span class="action-ok">—</span>`;
+        }
+      } else {
+        if (r.value === 0) {
+          badge = `<span class="badge badge-under">— Zero</span>`;
+          action = `<span class="action-ok">—</span>`;
+        } else if (pct < minLimit) {
+          const diff = (minLimit * valPerPct) - r.value;
+          const shares = isNaN(r.price) || r.price === 0 ? '?' : Math.ceil(diff / r.price);
+          badge = `<span class="badge badge-under">▲ Under</span>`;
+          action = `<span class="action-buy">Buy ${shares} sh</span>`;
+        } else if (pct > maxLimit) {
+          const diff = r.value - (maxLimit * valPerPct);
+          const shares = isNaN(r.price) || r.price === 0 ? '?' : Math.floor(diff / r.price);
+          badge = `<span class="badge badge-over">▼ Over</span>`;
+          action = `<span class="action-sell">Sell ${shares} sh</span>`;
+        } else {
+          const space = (maxLimit * valPerPct) - r.value;
+          const shares = isNaN(r.price) || r.price === 0 ? '?' : Math.floor(space / r.price);
+          badge = `<span class="badge badge-ok">✓ OK</span>`;
+          action = `<span class="action-ok">+${shares} avail</span>`;
+        }
+      }
+
+      // Progress bar pct positions
+      const fillW = Math.min(pct / maxLimit * 100, 100);
+      const minPos = maxLimit > 0 ? Math.min((minLimit / maxLimit) * 100, 100) : 0;
+      const fillColor = pct < minLimit ? '#e8a03a' : pct > maxLimit ? '#e86060' : '#3aad72';
+
+      // P&L
+      let plHTML = '—';
+      if (!isNaN(r.pl) && r.ticker !== 'CASH') {
+        const sign = r.pl >= 0 ? '+' : '';
+        plHTML = `<span class="${r.pl >= 0 ? 'pl-pos' : 'pl-neg'}">${sign}$${fmt(Math.abs(r.pl), 0)}</span>`;
+      }
+
+      const limitsStr = `${minLimit}% / ${maxLimit}%`;
+
+      const dot = COLORS[i % COLORS.length];
+
+      const trEl = document.createElement('tr');
+      trEl.innerHTML = `
+        <td>
+          <div class="ticker-cell">
+            <span class="ticker-dot" style="background:${dot}"></span>
+            <span class="ticker-name">${escapeHtml(r.ticker)}</span>
+          </div>
+        </td>
+        <td class="mono">${r.price > 0 ? '$' + fmt(r.price) : '—'}</td>
+        <td class="mono">${r.qty > 0 ? fmt(r.qty, 0) : '—'}</td>
+        <td class="mono">${r.value > 0 ? '$' + fmt(r.value, 0) : '—'}</td>
+        <td class="pct-cell">
+          <div class="pct-bar-wrap">
+            <div class="pct-bar-track">
+              <div class="pct-bar-fill" style="width:${fillW}%;background:${fillColor}"></div>
+              ${minLimit > 0 ? `<div class="pct-bar-min" style="left:${minPos}%"></div>` : ''}
+              <div class="pct-bar-max" style="left:100%"></div>
+            </div>
+            <span class="pct-val">${fmt(pct, 1)}%</span>
+          </div>
+        </td>
+        <td class="mono" style="font-size:0.75rem;color:var(--txt2)">${limitsStr}</td>
+        <td>${badge}</td>
+        <td>${plHTML}</td>
+        <td class="action-cell">${action}</td>
+      `;
+      tbody.appendChild(trEl);
+    });
+  }
+</script>
+</body>
+</html>
