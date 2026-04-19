@@ -1563,5 +1563,17 @@
     return '$' + val.toFixed(0);
   }
 </script>
+<script>
+  (function(){
+    function reportHeight(){
+      try{ parent.postMessage({type:"hub-height",height:document.body.scrollHeight},"*"); }catch(e){}
+    }
+    window.addEventListener("load", reportHeight);
+    window.addEventListener("resize", reportHeight);
+    if(window.MutationObserver){
+      new MutationObserver(reportHeight).observe(document.body,{childList:true,subtree:true,attributes:true});
+    }
+  })();
+</script>
 </body>
 </html>
