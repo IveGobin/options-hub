@@ -1159,7 +1159,7 @@
 <script>
     function tr(k, vars) {
         try {
-            var fn = parent.hubT;
+            var fn = (typeof hubT === 'function') ? hubT : (typeof parent.hubT === 'function' ? parent.hubT : null);
             if (typeof fn !== 'function') return k;
             return fn(k, vars);
         } catch (e) { return k; }
@@ -1195,7 +1195,7 @@
         var mc = document.querySelector('.modal-close');
         if (mc) mc.setAttribute('aria-label', tr('coach_modal_close'));
         var en = false;
-        try { en = (parent.hubLang === 'en'); } catch (e) {}
+        try { en = ((window._hubLang || parent.hubLang || 'en') === 'en'); } catch (e) { en = true; }
         document.querySelectorAll('.coach-docs-hr').forEach(function(el) { el.style.display = en ? 'none' : 'block'; });
         document.querySelectorAll('.coach-docs-en').forEach(function(el) { el.style.display = en ? 'block' : 'none'; });
         refreshRulesModal();
