@@ -100,6 +100,13 @@
   #frame-area { flex: 1; overflow: hidden; display: flex; }
   #frame-area iframe { width: 100%; height: 100%; border: none; display: block; }
 
+  @media (max-width: 768px) {
+    body { height: auto; min-height: 100vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .main { overflow: visible; height: auto; }
+    #frame-area { overflow: visible; height: auto; display: block; }
+    #frame-area iframe { height: 100vh; min-height: 700px; display: block; }
+  }
+
   #welcome {
     flex: 1; display: flex; flex-direction: column;
     align-items: center; justify-content: center;
@@ -323,6 +330,8 @@
             iframe.contentWindow.applyCoachI18n();
           }
         } catch(e) {}
+        // On mobile, resize iframe to full content height
+        resizeIframe(iframe);
       }, 50);
     });
 
@@ -344,6 +353,24 @@
   // ── Init ───────────────────────────────────────────────
   applyTheme('dark');
   setLang('en');
+
+  // ── Mobile iframe resize ────────────────────────────────
+  function resizeIframe(iframe) {
+    if (window.innerWidth > 768) return;
+    try {
+      var h = iframe.contentWindow.document.body.scrollHeight;
+      if (h && h > 300) iframe.style.height = h + 'px';
+    } catch(e) {}
+  }
+
+  // Listen for height reports from child pages
+  window.addEventListener('message', function(ev) {
+    if (ev.data && ev.data.type === 'hub-height' && _iframe) {
+      if (window.innerWidth <= 768) {
+        _iframe.style.height = ev.data.height + 'px';
+      }
+    }
+  });
 </script>
 </body>
 </html>
