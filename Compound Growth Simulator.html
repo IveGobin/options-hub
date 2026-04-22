@@ -544,18 +544,23 @@
     var r = parseInt(document.getElementById('gs-rate').value)/100;
     var wAmt = (parseFloat(document.getElementById('gs-wamount').value)||0)*12;
     var wStart = parseInt(document.getElementById('gs-wstart').value);
-    // Find portfolio value at withdrawal start
-    var vAtStart = res.totalData[Math.min(wStart, res.totalData.length-1)];
-    if(!vAtStart){ el.classList.remove('show','danger'); return; }
-    var annualGrowthAtStart = vAtStart.y * r;
+
+    // Find portfolio value just BEFORE withdrawals start (end of year wStart-1)
+    var idxBefore = Math.max(0, Math.min(wStart - 1, res.totalData.length - 1));
+    var vBefore = res.totalData[idxBefore] ? res.totalData[idxBefore].y : 0;
+    var annualGrowthAtStart = vBefore * r;
+    var needed = r > 0 ? Math.ceil(wAmt / r) : 0;
+
     el.classList.add('show');
-    if(annualGrowthAtStart >= wAmt){
+    if(vBefore <= 0){
+      el.classList.add('danger');
+      txt.innerHTML = '⚠️ Portfolio reaches $0 before year '+wStart+' — withdrawals are too large relative to contributions and growth.';
+    } else if(annualGrowthAtStart >= wAmt){
       el.classList.remove('danger');
-      txt.innerHTML = '✅ At year '+wStart+', portfolio generates ~'+fmt(annualGrowthAtStart)+'/yr — withdrawals are sustainable (growth > withdrawals).';
+      txt.innerHTML = '✅ At year '+wStart+', portfolio is '+fmt(vBefore)+' generating ~'+fmt(annualGrowthAtStart)+'/yr — withdrawals of '+fmt(wAmt)+'/yr are sustainable.';
     } else {
       el.classList.add('danger');
-      var needed = Math.ceil(wAmt / r);
-      txt.innerHTML = '⚠️ At year '+wStart+', portfolio generates ~'+fmt(annualGrowthAtStart)+'/yr but you withdraw '+fmt(wAmt)+'/yr. Need ~'+fmt(needed)+' for withdrawals to be self-sustaining.';
+      txt.innerHTML = '⚠️ At year '+wStart+', portfolio is '+fmt(vBefore)+' generating ~'+fmt(annualGrowthAtStart)+'/yr but you withdraw '+fmt(wAmt)+'/yr. Need ~'+fmt(needed)+' for withdrawals to be self-sustaining.';
     }
   }
 
