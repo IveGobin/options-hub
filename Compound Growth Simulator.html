@@ -11,7 +11,7 @@
   :root {
     --bg:#0f0e0c;--surface:#1a1916;--surface2:#242220;--border:#333028;
     --txt:#ede8e0;--txt2:#7a7268;--accent:#e8753a;
-    --green:#00c98d;--blue:#4a9eff;--orange:#f0a04b;
+    --green:#00c98d;--blue:#4a9eff;--orange:#f0a04b;--red:#ff5c5c;--purple:#b48eff;
     --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
   }
   [data-theme="light"] {
@@ -20,12 +20,11 @@
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{font-family:var(--sans);background:var(--bg);color:var(--txt);min-height:100vh;transition:background 0.3s,color 0.3s;}
-  body{padding:28px 28px 48px;max-width:860px;margin:0 auto;}
+  body{padding:28px 28px 48px;max-width:900px;margin:0 auto;}
 
   .gs-section-title{font-family:var(--mono);font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt2);margin-bottom:20px;}
   .gs-sub-title{font-family:var(--mono);font-size:0.65rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt2);margin:24px 0 14px;padding-top:20px;border-top:1px solid var(--border);}
 
-  /* Presets */
   .gs-presets{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;}
   .gs-preset-btn{font-family:var(--mono);font-size:0.65rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--txt2);cursor:pointer;transition:all .2s;}
   .gs-preset-btn:hover,.gs-preset-btn.active{border-color:var(--green);color:var(--green);background:rgba(0,201,141,0.08);}
@@ -54,7 +53,7 @@
   .gs-toggle-label{font-size:13px;color:var(--txt2);}
 
   .gs-collapsible{overflow:hidden;max-height:0;transition:max-height .3s ease;}
-  .gs-collapsible.open{max-height:200px;}
+  .gs-collapsible.open{max-height:300px;}
 
   /* Stats panel */
   .gs-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0;}
@@ -64,17 +63,47 @@
   .gs-stat-val.green{color:var(--green);}
   .gs-stat-val.blue{color:var(--blue);}
   .gs-stat-val.orange{color:var(--orange);}
+  .gs-stat-val.red{color:var(--red);}
+  .gs-stat-val.purple{color:var(--purple);}
 
-  .gs-chart-area{position:relative;width:100%;height:400px;}
+  /* Breakeven banner */
+  .gs-breakeven{display:none;align-items:center;gap:10px;background:rgba(0,201,141,0.08);border:1px solid rgba(0,201,141,0.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--green);}
+  .gs-breakeven.show{display:flex;}
+  .gs-breakeven-icon{font-size:16px;}
+  .gs-breakeven.danger{background:rgba(255,92,92,0.08);border-color:rgba(255,92,92,0.25);color:var(--red);}
+
+  /* Tabs for chart */
+  .gs-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+  .gs-tab{font-family:var(--mono);font-size:0.6rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:5px 12px;border-radius:16px;border:1.5px solid var(--border);background:var(--surface2);color:var(--txt2);cursor:pointer;transition:all .2s;}
+  .gs-tab:hover,.gs-tab.active{border-color:var(--accent);color:var(--accent);background:rgba(232,117,58,0.08);}
+
+  .gs-chart-area{position:relative;width:100%;height:380px;}
+  .gs-chart-area2{position:relative;width:100%;height:220px;}
 
   .gs-legend{display:flex;gap:18px;margin-bottom:10px;flex-wrap:wrap;}
   .gs-legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--txt2);}
   .gs-legend-swatch{width:24px;height:3px;border-radius:2px;}
 
+  /* Scenario compare */
+  .gs-compare-bar{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:16px;flex-wrap:wrap;}
+  .gs-compare-bar label{font-size:12px;color:var(--txt2);}
+  .gs-compare-bar select{background:var(--surface2);border:1px solid var(--border);color:var(--txt);font-size:12px;padding:4px 8px;border-radius:5px;outline:none;font-family:var(--sans);}
+
+  /* Real vs nominal toggle */
+  .gs-inflation-note{font-size:11px;color:var(--txt2);opacity:0.6;margin-left:auto;}
+
+  /* Breakdown donut area */
+  .gs-breakdown{display:grid;grid-template-columns:220px 1fr;gap:30px;align-items:center;margin-top:8px;}
+  .gs-breakdown-legend{display:flex;flex-direction:column;gap:8px;}
+  .gs-breakdown-row{display:flex;align-items:center;gap:8px;font-size:12px;}
+  .gs-breakdown-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+  .gs-breakdown-val{margin-left:auto;font-weight:600;font-family:var(--mono);font-size:11px;}
+
   @media(max-width:600px){
     .gs-controls{grid-template-columns:1fr 1fr;}
     .gs-controls2{grid-template-columns:1fr;}
     .gs-stats{grid-template-columns:1fr 1fr;}
+    .gs-breakdown{grid-template-columns:1fr;}
   }
 </style>
 </head>
@@ -155,6 +184,7 @@
       <div class="gs-collapsible" id="gs-crash-collapse">
         <div class="gs-ctrl-label" style="margin-top:14px">Crash at Year: <span class="gs-ctrl-value" id="gs-cyear-val">30</span></div>
         <input type="range" id="gs-cyear" min="1" max="99" value="30" step="1">
+        <div class="gs-range-labels"><span>1</span><span>99</span></div>
         <div class="gs-ctrl-label" style="margin-top:10px">Crash Severity: <span class="gs-ctrl-value" id="gs-csev-val">70</span>% loss</div>
         <input type="range" id="gs-csev" min="10" max="95" value="70" step="5">
         <div class="gs-range-labels"><span>10%</span><span>95%</span></div>
@@ -177,46 +207,121 @@
     </div>
   </div>
 
-  <!-- Stats -->
+  <!-- Breakeven banner -->
+  <div class="gs-breakeven" id="gs-breakeven">
+    <span class="gs-breakeven-icon">✅</span>
+    <span id="gs-breakeven-text"></span>
+  </div>
+
+  <!-- Stats panel -->
   <div class="gs-stats">
     <div class="gs-stat">
       <div class="gs-stat-label">Final Value</div>
       <div class="gs-stat-val green" id="st-final">—</div>
+      <div class="gs-stat-label" style="margin-top:4px;font-size:10px" id="st-final-real"></div>
     </div>
     <div class="gs-stat">
       <div class="gs-stat-label">Total Contributed</div>
       <div class="gs-stat-val blue" id="st-contributed">—</div>
+      <div class="gs-stat-label" style="margin-top:4px;font-size:10px" id="st-contrib-pct"></div>
     </div>
     <div class="gs-stat">
       <div class="gs-stat-label">Total Gains</div>
       <div class="gs-stat-val green" id="st-gains">—</div>
+      <div class="gs-stat-label" style="margin-top:4px;font-size:10px" id="st-gains-pct"></div>
     </div>
     <div class="gs-stat">
       <div class="gs-stat-label">Effective CAGR</div>
       <div class="gs-stat-val orange" id="st-cagr">—</div>
+      <div class="gs-stat-label" style="margin-top:4px;font-size:10px" id="st-cagr-real"></div>
     </div>
   </div>
 
-  <!-- Chart -->
-  <div class="gs-legend">
-    <div class="gs-legend-item">
-      <div class="gs-legend-swatch" style="background:#00c98d"></div>Total Portfolio
+  <!-- Compare bar -->
+  <div class="gs-compare-bar">
+    <label>Compare with:</label>
+    <select id="gs-compare-mode">
+      <option value="none">No comparison</option>
+      <option value="nowithdrawal">Without withdrawals</option>
+      <option value="nocontrib">Without contributions</option>
+      <option value="half">Half the growth rate</option>
+      <option value="double">Double the growth rate</option>
+    </select>
+    <span class="gs-inflation-note" id="gs-inflation-real-note" style="display:none">💡 Real value adjusted for 3% inflation</span>
+  </div>
+
+  <!-- Chart tabs -->
+  <div class="gs-tabs">
+    <button class="gs-tab active" data-tab="growth">📈 Growth</button>
+    <button class="gs-tab" data-tab="breakdown">🥧 Contribution vs Gains</button>
+    <button class="gs-tab" data-tab="realvsnominal">💸 Real vs Nominal</button>
+    <button class="gs-tab" data-tab="annual">📊 Annual Returns</button>
+  </div>
+
+  <!-- Growth chart -->
+  <div id="tab-growth">
+    <div class="gs-legend" id="gs-legend-main">
+      <div class="gs-legend-item">
+        <div class="gs-legend-swatch" style="background:#00c98d"></div>Total Portfolio
+      </div>
+      <div class="gs-legend-item">
+        <div class="gs-legend-swatch" style="background:#4a9eff"></div>Contributions
+      </div>
+      <div class="gs-legend-item" id="legend-compare" style="display:none">
+        <div class="gs-legend-swatch" style="background:#b48eff"></div><span id="legend-compare-label">Comparison</span>
+      </div>
+      <div class="gs-legend-item">
+        <div class="gs-legend-swatch" style="background:#f0a04b"></div>Milestones
+      </div>
     </div>
-    <div class="gs-legend-item">
-      <div class="gs-legend-swatch" style="background:#4a9eff;border-top:2px dashed #4a9eff;height:0"></div>Contributions
-    </div>
-    <div class="gs-legend-item">
-      <div class="gs-legend-swatch" style="background:#f0a04b"></div>Milestones
+    <div class="gs-chart-area">
+      <canvas id="gs-chart"></canvas>
     </div>
   </div>
-  <div class="gs-chart-area">
-    <canvas id="gs-chart"></canvas>
+
+  <!-- Breakdown chart -->
+  <div id="tab-breakdown" style="display:none">
+    <div class="gs-breakdown">
+      <div class="gs-chart-area" style="height:220px;width:220px">
+        <canvas id="gs-donut"></canvas>
+      </div>
+      <div class="gs-breakdown-legend" id="gs-donut-legend" style="padding-left:16px"></div>
+    </div>
+    <div style="margin-top:16px">
+      <div class="gs-ctrl-label" style="margin-bottom:8px">Portfolio composition over time</div>
+      <div class="gs-chart-area2">
+        <canvas id="gs-stacked"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Real vs Nominal chart -->
+  <div id="tab-realvsnominal" style="display:none">
+    <div class="gs-compare-bar" style="margin-bottom:12px">
+      <label>Assumed inflation rate:</label>
+      <input type="range" id="gs-real-infl" min="1" max="10" value="3" step="1" style="width:120px">
+      <span class="gs-ctrl-value" id="gs-real-infl-val">3%</span>
+    </div>
+    <div class="gs-legend">
+      <div class="gs-legend-item"><div class="gs-legend-swatch" style="background:#00c98d"></div>Nominal Value</div>
+      <div class="gs-legend-item"><div class="gs-legend-swatch" style="background:#ff5c5c"></div>Real Value (inflation-adjusted)</div>
+    </div>
+    <div class="gs-chart-area">
+      <canvas id="gs-real-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Annual returns bar chart -->
+  <div id="tab-annual" style="display:none">
+    <div class="gs-ctrl-sub" style="margin-bottom:10px;opacity:1;font-size:12px;color:var(--txt2)">Year-over-year portfolio growth ($)</div>
+    <div class="gs-chart-area">
+      <canvas id="gs-annual-chart"></canvas>
+    </div>
   </div>
 
 <script>
-  window._onHubTheme = function(t){ document.documentElement.setAttribute('data-theme',t); };
-
   var MILESTONES=[1e4,5e4,1e5,5e5,1e6,5e6,1e7,5e7,1e8,1e9];
+  var activeTab = 'growth';
 
   function fmt(v){
     if(isNaN(v)||!isFinite(v)) return '—';
@@ -226,8 +331,9 @@
     return '$'+Math.round(v);
   }
 
-  function buildData(){
-    var r       = parseInt(document.getElementById('gs-rate').value)/100;
+  function buildData(overrides){
+    var o = overrides || {};
+    var r       = o.rate !== undefined ? o.rate : parseInt(document.getElementById('gs-rate').value)/100;
     var cap     = parseFloat(document.getElementById('gs-capital').value)||0;
     var maxY    = parseInt(document.getElementById('gs-years').value);
     var doCrash = document.getElementById('gs-crash').checked;
@@ -240,12 +346,14 @@
     var doMonth = document.getElementById('gs-monthly-on').checked;
     var monthAmt= doMonth?(parseFloat(document.getElementById('gs-monthly').value)||0):0;
     var infl    = parseInt(document.getElementById('gs-infl').value)/100;
-    var doWith  = document.getElementById('gs-withdrawal-on').checked;
+    var doWith  = o.noWithdrawal ? false : document.getElementById('gs-withdrawal-on').checked;
     var wStart  = parseInt(document.getElementById('gs-wstart').value);
     var wAmt    = doWith?(parseFloat(document.getElementById('gs-wamount').value)||0)*12:0;
+    if(o.noContrib){ monthAmt=0; }
 
-    var totalData=[],contribData=[];
+    var totalData=[],contribData=[],annualGains=[];
     var v=cap, totalContrib=cap, curMonthly=monthAmt;
+    var prevV = cap;
 
     for(var y=0;y<=maxY;y++){
       if(y>0){
@@ -263,11 +371,24 @@
         v+=addContrib-drawdown;
         totalContrib+=addContrib;
         if(v<0) v=0;
+        annualGains.push({x:y, y: Math.round(v - prevV)});
       }
+      prevV = v;
       totalData.push({x:y,y:Math.round(v)});
       contribData.push({x:y,y:Math.round(Math.min(totalContrib,v))});
     }
-    return {totalData,contribData,totalContrib};
+    return {totalData,contribData,totalContrib,annualGains};
+  }
+
+  function buildCompareData(){
+    var mode = document.getElementById('gs-compare-mode').value;
+    if(mode === 'none') return null;
+    var r = parseInt(document.getElementById('gs-rate').value);
+    if(mode === 'nowithdrawal') return buildData({noWithdrawal:true});
+    if(mode === 'nocontrib') return buildData({noContrib:true});
+    if(mode === 'half') return buildData({rate:(r/2)/100});
+    if(mode === 'double') return buildData({rate:Math.min(r*2,99)/100});
+    return null;
   }
 
   function getMilestoneLines(data){
@@ -284,7 +405,7 @@
     return lines;
   }
 
-  // Custom milestone plugin
+  // Milestone plugin
   var milestonePlugin={
     id:'milestones',
     afterDraw:function(chart){
@@ -306,14 +427,14 @@
         ctx.fillStyle='rgba(240,160,75,0.85)';
         ctx.font="700 9px 'Space Mono',monospace";
         ctx.textAlign='center';
-        var textY=yAxis.top+10;
-        ctx.fillText(ln.label,px,textY);
+        ctx.fillText(ln.label,px,yAxis.top+10);
         ctx.restore();
       });
     }
   };
   Chart.register(milestonePlugin);
 
+  // --- Main growth chart ---
   var ctx=document.getElementById('gs-chart').getContext('2d');
   var chart=new Chart(ctx,{
     type:'line',
@@ -321,7 +442,9 @@
       {label:'Total Portfolio',data:[],borderColor:'#00c98d',borderWidth:2,pointRadius:0,
        fill:'origin',backgroundColor:'rgba(0,201,141,0.07)',tension:0.3,order:1},
       {label:'Contributions',data:[],borderColor:'#4a9eff',borderWidth:1.5,pointRadius:0,
-       fill:'origin',backgroundColor:'rgba(74,158,255,0.07)',tension:0.3,order:2,borderDash:[5,3]}
+       fill:'origin',backgroundColor:'rgba(74,158,255,0.07)',tension:0.3,order:2,borderDash:[5,3]},
+      {label:'Comparison',data:[],borderColor:'#b48eff',borderWidth:1.5,pointRadius:0,
+       fill:false,tension:0.3,order:0,borderDash:[4,4],hidden:true}
     ]},
     options:{
       responsive:true,maintainAspectRatio:false,animation:{duration:150},
@@ -344,24 +467,115 @@
     }
   });
 
+  // --- Donut chart ---
+  var donutCtx = document.getElementById('gs-donut').getContext('2d');
+  var donutChart = new Chart(donutCtx, {
+    type:'doughnut',
+    data:{
+      labels:['Contributions','Investment Gains'],
+      datasets:[{data:[0,0],backgroundColor:['#4a9eff','#00c98d'],borderWidth:0,hoverOffset:6}]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(i){var total=i.dataset.data.reduce(function(a,b){return a+b;},0);var pct=total>0?(i.parsed/total*100):0;return ' '+i.label+': '+fmt(i.parsed)+' ('+(isFinite(pct)?pct.toFixed(1):'0')+'%)';}}}},
+      cutout:'65%'
+    }
+  });
+
+  // --- Stacked area chart ---
+  var stackCtx = document.getElementById('gs-stacked').getContext('2d');
+  var stackChart = new Chart(stackCtx, {
+    type:'line',
+    data:{datasets:[
+      {label:'Investment Gains',data:[],borderColor:'#00c98d',borderWidth:0,fill:'origin',backgroundColor:'rgba(0,201,141,0.5)',tension:0.3,pointRadius:0},
+      {label:'Contributions',data:[],borderColor:'#4a9eff',borderWidth:0,fill:'origin',backgroundColor:'rgba(74,158,255,0.6)',tension:0.3,pointRadius:0}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:{duration:150},
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a1916',titleColor:'#ede8e0',bodyColor:'#ede8e0',borderColor:'#333028',borderWidth:1,callbacks:{title:function(i){return 'Year '+i[0].parsed.x;},label:function(i){return ' '+i.dataset.label+': '+fmt(i.parsed.y);}}}},
+      scales:{
+        x:{type:'linear',min:0,ticks:{color:'#7a7268'},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}},
+        y:{stacked:false,ticks:{color:'#7a7268',callback:function(v){return fmt(v);}},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}}
+      }
+    }
+  });
+
+  // --- Real vs Nominal chart ---
+  var realCtx = document.getElementById('gs-real-chart').getContext('2d');
+  var realChart = new Chart(realCtx, {
+    type:'line',
+    data:{datasets:[
+      {label:'Nominal Value',data:[],borderColor:'#00c98d',borderWidth:2,pointRadius:0,fill:'origin',backgroundColor:'rgba(0,201,141,0.07)',tension:0.3},
+      {label:'Real Value',data:[],borderColor:'#ff5c5c',borderWidth:2,pointRadius:0,fill:'origin',backgroundColor:'rgba(255,92,92,0.07)',tension:0.3,borderDash:[5,3]}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:{duration:150},
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a1916',titleColor:'#ede8e0',bodyColor:'#ede8e0',borderColor:'#333028',borderWidth:1,callbacks:{title:function(i){return 'Year '+i[0].parsed.x;},label:function(i){return ' '+i.dataset.label+': '+fmt(i.parsed.y);}}}},
+      scales:{
+        x:{type:'linear',min:0,ticks:{color:'#7a7268'},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}},
+        y:{ticks:{color:'#7a7268',callback:function(v){return fmt(v);}},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}}
+      }
+    }
+  });
+
+  // --- Annual bar chart ---
+  var annualCtx = document.getElementById('gs-annual-chart').getContext('2d');
+  var annualChart = new Chart(annualCtx, {
+    type:'bar',
+    data:{datasets:[{label:'Annual Change',data:[],backgroundColor:[],borderRadius:3}]},
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:{duration:150},
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a1916',titleColor:'#ede8e0',bodyColor:'#ede8e0',borderColor:'#333028',borderWidth:1,callbacks:{title:function(i){return 'Year '+i[0].parsed.x;},label:function(i){return ' Change: '+fmt(i.parsed.y);}}}},
+      scales:{
+        x:{type:'linear',min:1,ticks:{color:'#7a7268'},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}},
+        y:{ticks:{color:'#7a7268',callback:function(v){return fmt(v);}},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}}
+      }
+    }
+  });
+
+  function updateBreakeven(res){
+    var doWith = document.getElementById('gs-withdrawal-on').checked;
+    var el = document.getElementById('gs-breakeven');
+    var txt = document.getElementById('gs-breakeven-text');
+    if(!doWith){ el.classList.remove('show','danger'); return; }
+    var r = parseInt(document.getElementById('gs-rate').value)/100;
+    var wAmt = (parseFloat(document.getElementById('gs-wamount').value)||0)*12;
+    var wStart = parseInt(document.getElementById('gs-wstart').value);
+    // Find portfolio value at withdrawal start
+    var vAtStart = res.totalData[Math.min(wStart, res.totalData.length-1)];
+    if(!vAtStart){ el.classList.remove('show','danger'); return; }
+    var annualGrowthAtStart = vAtStart.y * r;
+    el.classList.add('show');
+    if(annualGrowthAtStart >= wAmt){
+      el.classList.remove('danger');
+      txt.innerHTML = '✅ At year '+wStart+', portfolio generates ~'+fmt(annualGrowthAtStart)+'/yr — withdrawals are sustainable (growth > withdrawals).';
+    } else {
+      el.classList.add('danger');
+      var needed = Math.ceil(wAmt / r);
+      txt.innerHTML = '⚠️ At year '+wStart+', portfolio generates ~'+fmt(annualGrowthAtStart)+'/yr but you withdraw '+fmt(wAmt)+'/yr. Need ~'+fmt(needed)+' for withdrawals to be self-sustaining.';
+    }
+  }
+
   function update(){
     var r   =parseInt(document.getElementById('gs-rate').value);
     var y   =parseInt(document.getElementById('gs-years').value);
     var infl=parseInt(document.getElementById('gs-infl').value);
+    var realInflRate = parseInt(document.getElementById('gs-real-infl').value)/100;
+
     document.getElementById('gs-rate-val').textContent=r+'%';
     document.getElementById('gs-years-val').textContent=y;
     document.getElementById('gs-infl-val').textContent=infl+'%';
     document.getElementById('gs-wstart-val').textContent=document.getElementById('gs-wstart').value;
+    document.getElementById('gs-real-infl-val').textContent=parseInt(document.getElementById('gs-real-infl').value)+'%';
     var ssv=parseInt(document.getElementById('gs-sstart').value);
     var sdv=parseInt(document.getElementById('gs-sdur').value);
     document.getElementById('gs-sstart-val').textContent=ssv;
     document.getElementById('gs-sdur-val').textContent=sdv;
     document.getElementById('gs-sideways-desc').textContent='No growth years '+ssv+'–'+(ssv+sdv-1)+'.';
-
-    document.getElementById('gs-rate-sub').textContent=r===8
-      ?'Average annual S&P 500 return over 100 years.'
-      :r+'% annual growth rate.';
-
+    document.getElementById('gs-rate-sub').textContent=r===8?'Average annual S&P 500 return over 100 years.':r+'% annual growth rate.';
     document.getElementById('gs-crash-label').textContent=document.getElementById('gs-crash').checked?'On':'Off';
     var cyv=parseInt(document.getElementById('gs-cyear').value);
     var csv=parseInt(document.getElementById('gs-csev').value);
@@ -372,7 +586,6 @@
     document.getElementById('gs-sideways-label').textContent=document.getElementById('gs-sideways').checked?'On':'Off';
     document.getElementById('gs-monthly-label').textContent =document.getElementById('gs-monthly-on').checked?'On':'Off';
     document.getElementById('gs-withdrawal-label').textContent=document.getElementById('gs-withdrawal-on').checked?'On':'Off';
-
     document.getElementById('gs-monthly-collapse').classList.toggle('open',document.getElementById('gs-monthly-on').checked);
     document.getElementById('gs-withdrawal-collapse').classList.toggle('open',document.getElementById('gs-withdrawal-on').checked);
     document.getElementById('gs-sideways-collapse').classList.toggle('open',document.getElementById('gs-sideways').checked);
@@ -381,19 +594,93 @@
     var last=res.totalData[res.totalData.length-1].y;
     var cap =parseFloat(document.getElementById('gs-capital').value)||0;
     var gains=Math.max(0,last-res.totalContrib);
-    var cagr=y>0&&cap>0?(Math.pow(last/Math.max(cap,1),1/y)-1)*100:0;
+    var cagrRaw = y>0&&cap>0?(Math.pow(last/Math.max(cap,1),1/y)-1)*100:0;
+    var cagr = isFinite(cagrRaw) ? cagrRaw : 0;
+    var realFinal = last / Math.pow(1+realInflRate, y);
+    var realCagr = cagr - realInflRate*100;
 
-    document.getElementById('st-final').textContent      =fmt(last);
+    document.getElementById('st-final').textContent=fmt(last);
+    document.getElementById('st-final-real').textContent='Real: '+fmt(isFinite(realFinal)?realFinal:0);
     document.getElementById('st-contributed').textContent=fmt(res.totalContrib);
-    document.getElementById('st-gains').textContent      =fmt(gains);
-    document.getElementById('st-cagr').textContent       =y>0?cagr.toFixed(1)+'%':'—';
+    var contribPct = (last>0&&isFinite(res.totalContrib/last))?(res.totalContrib/last*100).toFixed(1):'0';
+    document.getElementById('st-contrib-pct').textContent=contribPct+'% of final value';
+    document.getElementById('st-gains').textContent=fmt(gains);
+    var gainsPct = (last>0&&isFinite(gains/last))?(gains/last*100).toFixed(1):'0';
+    document.getElementById('st-gains-pct').textContent=gainsPct+'% of final value';
+    document.getElementById('st-cagr').textContent=(y>0&&isFinite(cagr))?cagr.toFixed(1)+'%':'—';
+    document.getElementById('st-cagr-real').textContent='Real: '+((y>0&&isFinite(realCagr))?realCagr.toFixed(1)+'%':'—');
 
+    // Breakeven
+    updateBreakeven(res);
+
+    // Main chart
+    var compareData = buildCompareData();
+    var compareMode = document.getElementById('gs-compare-mode').value;
     chart.data.datasets[0].data=res.totalData;
     chart.data.datasets[1].data=res.contribData;
+    if(compareData && compareMode !== 'none'){
+      chart.data.datasets[2].data=compareData.totalData;
+      chart.data.datasets[2].hidden=false;
+      chart.getDatasetMeta(2).hidden=false;
+      document.getElementById('legend-compare').style.display='flex';
+      var labels={nowithdrawal:'No Withdrawals',nocontrib:'No Contributions',half:'Half Growth Rate',double:'Double Growth Rate'};
+      document.getElementById('legend-compare-label').textContent=labels[compareMode]||'Comparison';
+    } else {
+      chart.data.datasets[2].data=[];
+      chart.data.datasets[2].hidden=true;
+      chart.getDatasetMeta(2).hidden=true;
+      document.getElementById('legend-compare').style.display='none';
+    }
     chart.options.scales.x.max=y||1;
     chart._milestoneLines=getMilestoneLines(res.totalData);
     chart.update();
+
+    // Donut
+    donutChart.data.datasets[0].data=[Math.round(res.totalContrib), Math.round(gains)];
+    donutChart.update();
+    var donutLegend = document.getElementById('gs-donut-legend');
+    donutLegend.innerHTML='<div class="gs-breakdown-row"><div class="gs-breakdown-dot" style="background:#4a9eff"></div><span>Contributions</span><span class="gs-breakdown-val">'+fmt(res.totalContrib)+' ('+contribPct+'%)</span></div>'
+      +'<div class="gs-breakdown-row"><div class="gs-breakdown-dot" style="background:#00c98d"></div><span>Investment Gains</span><span class="gs-breakdown-val">'+fmt(gains)+' ('+gainsPct+'%)</span></div>'
+      +'<div class="gs-breakdown-row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px"><div class="gs-breakdown-dot" style="background:var(--txt2)"></div><span>Total</span><span class="gs-breakdown-val">'+fmt(last)+'</span></div>';
+
+    // Stacked
+    var gainsData = res.totalData.map(function(pt,i){
+      var contrib = res.contribData[i]?res.contribData[i].y:0;
+      return {x:pt.x, y: Math.max(0, pt.y - contrib)};
+    });
+    stackChart.data.datasets[0].data=gainsData;
+    stackChart.data.datasets[1].data=res.contribData;
+    stackChart.options.scales.x.max=y||1;
+    stackChart.update();
+
+    // Real vs nominal
+    var realData = res.totalData.map(function(pt){
+      return {x:pt.x, y:Math.round(pt.y / Math.pow(1+realInflRate, pt.x))};
+    });
+    realChart.data.datasets[0].data=res.totalData;
+    realChart.data.datasets[1].data=realData;
+    realChart.options.scales.x.max=y||1;
+    realChart.update();
+
+    // Annual bar
+    var colors = res.annualGains.map(function(pt){ return pt.y >= 0 ? 'rgba(0,201,141,0.7)' : 'rgba(255,92,92,0.7)'; });
+    annualChart.data.datasets[0].data=res.annualGains;
+    annualChart.data.datasets[0].backgroundColor=colors;
+    annualChart.options.scales.x.max=y||1;
+    annualChart.update();
   }
+
+  // Tabs
+  document.querySelectorAll('.gs-tab').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      document.querySelectorAll('.gs-tab').forEach(function(b){b.classList.remove('active');});
+      btn.classList.add('active');
+      activeTab = btn.dataset.tab;
+      ['growth','breakdown','realvsnominal','annual'].forEach(function(t){
+        document.getElementById('tab-'+t).style.display = t===activeTab ? '' : 'none';
+      });
+    });
+  });
 
   // Preset buttons
   document.querySelectorAll('.gs-preset-btn').forEach(function(btn){
@@ -405,8 +692,7 @@
     });
   });
 
-  // Sliders clear preset highlight
-  ['gs-rate','gs-years','gs-infl','gs-wstart','gs-sstart','gs-sdur','gs-cyear','gs-csev'].forEach(function(id){
+  ['gs-rate','gs-years','gs-infl','gs-wstart','gs-sstart','gs-sdur','gs-cyear','gs-csev','gs-real-infl'].forEach(function(id){
     document.getElementById(id).addEventListener('input',function(){
       if(id==='gs-rate') document.querySelectorAll('.gs-preset-btn').forEach(function(b){b.classList.remove('active');});
       update();
@@ -418,8 +704,12 @@
   ['gs-crash','gs-sideways','gs-monthly-on','gs-withdrawal-on'].forEach(function(id){
     document.getElementById(id).addEventListener('change',update);
   });
+  document.getElementById('gs-compare-mode').addEventListener('change',update);
 
   update();
+</script>
+<script>
+  window._onHubTheme = function(t){ document.documentElement.setAttribute('data-theme',t); };
 </script>
 <script>
   (function(){
