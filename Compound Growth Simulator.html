@@ -159,6 +159,33 @@
     </div>
   </div>
 
+  <!-- Two-Phase Growth -->
+  <div class="gs-sub-title">Two-Phase Growth</div>
+  <div class="gs-controls2">
+    <div>
+      <div class="gs-ctrl-label" style="margin-bottom:10px">Enable Two-Phase Growth</div>
+      <div class="gs-toggle-wrap">
+        <label class="gs-toggle"><input type="checkbox" id="gs-phase2-on"><span class="gs-slider-track"></span></label>
+        <span class="gs-toggle-label" id="gs-phase2-label">Off</span>
+      </div>
+      <div class="gs-collapsible" id="gs-phase2-collapse">
+        <div class="gs-ctrl-label" style="margin-top:14px">Phase 1 Rate: <span class="gs-ctrl-value" id="gs-phase1-rate-val">30%</span></div>
+        <input type="range" id="gs-phase1-rate" min="1" max="50" value="30" step="1">
+        <div class="gs-range-labels"><span>1%</span><span>50%</span></div>
+        <div class="gs-ctrl-label" style="margin-top:10px">Phase 1 Duration: <span class="gs-ctrl-value" id="gs-phase1-yrs-val">10</span> yrs</div>
+        <input type="range" id="gs-phase1-yrs" min="1" max="50" value="10" step="1">
+        <div class="gs-range-labels"><span>1</span><span>50</span></div>
+        <div class="gs-ctrl-sub" id="gs-phase2-desc" style="margin-top:8px">30% for first 10 yrs, then 8% after.</div>
+      </div>
+    </div>
+    <div style="padding-top:6px">
+      <div class="gs-ctrl-sub" style="opacity:1;font-size:12px;color:var(--txt2);line-height:1.6">
+        Phase 2 rate is controlled by the <strong style="color:var(--txt)">Annual Growth Rate</strong> slider above.<br><br>
+        Useful for modelling an early aggressive growth period (e.g. individual stocks, startup equity) transitioning to a steadier long-term rate.
+      </div>
+    </div>
+  </div>
+
   <!-- Retirement & scenarios -->
   <div class="gs-sub-title">Retirement &amp; Scenarios</div>
   <div class="gs-controls2">
@@ -351,6 +378,10 @@
     var wAmt    = doWith?(parseFloat(document.getElementById('gs-wamount').value)||0)*12:0;
     if(o.noContrib){ monthAmt=0; }
 
+    var doPhase2 = document.getElementById('gs-phase2-on').checked;
+    var phase1Rate = parseInt(document.getElementById('gs-phase1-rate').value)/100;
+    var phase1Yrs  = parseInt(document.getElementById('gs-phase1-yrs').value);
+
     var totalData=[],contribData=[],annualGains=[];
     var v=cap, totalContrib=cap, curMonthly=monthAmt;
     var prevV = cap;
@@ -360,13 +391,14 @@
         if(y>1) curMonthly*=(1+infl);
         var addContrib=(doMonth&&(!doWith||y<wStart))?curMonthly*12:0;
         var drawdown=(doWith&&y>=wStart)?wAmt:0;
+        var yr = (doPhase2 && y <= phase1Yrs) ? phase1Rate : r;
 
         if(doCrash&&y===cYear){
           v*=(1-cSev);
         } else if(doSide&&y>=sStart&&y<=sEnd){
           /* flat */
         } else {
-          v*=(1+r);
+          v*=(1+yr);
         }
         v+=addContrib-drawdown;
         totalContrib+=addContrib;
@@ -581,6 +613,14 @@
     document.getElementById('gs-sdur-val').textContent=sdv;
     document.getElementById('gs-sideways-desc').textContent='No growth years '+ssv+'–'+(ssv+sdv-1)+'.';
     document.getElementById('gs-rate-sub').textContent=r===8?'Average annual S&P 500 return over 100 years.':r+'% annual growth rate.';
+    document.getElementById('gs-phase2-label').textContent = document.getElementById('gs-phase2-on').checked ? 'On' : 'Off';
+    document.getElementById('gs-phase2-collapse').classList.toggle('open', document.getElementById('gs-phase2-on').checked);
+    var p1r = parseInt(document.getElementById('gs-phase1-rate').value);
+    var p1y = parseInt(document.getElementById('gs-phase1-yrs').value);
+    document.getElementById('gs-phase1-rate-val').textContent = p1r + '%';
+    document.getElementById('gs-phase1-yrs-val').textContent = p1y;
+    document.getElementById('gs-phase2-desc').textContent = p1r + '% for first ' + p1y + ' yrs, then ' + r + '% after.';
+
     document.getElementById('gs-crash-label').textContent=document.getElementById('gs-crash').checked?'On':'Off';
     var cyv=parseInt(document.getElementById('gs-cyear').value);
     var csv=parseInt(document.getElementById('gs-csev').value);
@@ -697,7 +737,7 @@
     });
   });
 
-  ['gs-rate','gs-years','gs-infl','gs-wstart','gs-sstart','gs-sdur','gs-cyear','gs-csev','gs-real-infl'].forEach(function(id){
+  ['gs-rate','gs-years','gs-infl','gs-wstart','gs-sstart','gs-sdur','gs-cyear','gs-csev','gs-real-infl','gs-phase1-rate','gs-phase1-yrs'].forEach(function(id){
     document.getElementById(id).addEventListener('input',function(){
       if(id==='gs-rate') document.querySelectorAll('.gs-preset-btn').forEach(function(b){b.classList.remove('active');});
       update();
@@ -706,7 +746,7 @@
   ['gs-capital','gs-monthly','gs-wamount'].forEach(function(id){
     document.getElementById(id).addEventListener('input',update);
   });
-  ['gs-crash','gs-sideways','gs-monthly-on','gs-withdrawal-on'].forEach(function(id){
+  ['gs-crash','gs-sideways','gs-monthly-on','gs-withdrawal-on','gs-phase2-on'].forEach(function(id){
     document.getElementById(id).addEventListener('change',update);
   });
   document.getElementById('gs-compare-mode').addEventListener('change',update);
