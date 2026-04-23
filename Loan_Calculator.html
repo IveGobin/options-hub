@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loan Repayment Calculator</title>
+<script src="hub_shared.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg:#0f0e0c;--surface:#1a1916;--surface2:#242220;--border:#333028;
+    --txt:#ede8e0;--txt2:#7a7268;--accent:#e8753a;
+    --green:#00c98d;--blue:#4a9eff;--orange:#f0a04b;--red:#ff5c5c;--purple:#b48eff;
+    --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+  }
+  [data-theme="light"] {
+    --bg:#f4f3ef;--surface:#ffffff;--surface2:#f0ede8;--border:#e2ddd8;
+    --txt:#1a1814;--txt2:#7a7268;--accent:#c8521a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{font-family:var(--sans);background:var(--bg);color:var(--txt);min-height:100vh;transition:background .3s,color .3s;}
+  body{padding:28px 28px 48px;max-width:900px;margin:0 auto;}
+
+  .gs-section-title{font-family:var(--mono);font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt2);margin-bottom:20px;}
+  .gs-sub-title{font-family:var(--mono);font-size:0.65rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt2);margin:24px 0 14px;padding-top:20px;border-top:1px solid var(--border);}
+
+  .gs-controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-bottom:16px;align-items:start;}
+  .gs-controls2{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:16px;align-items:start;}
+
+  .gs-ctrl-label{font-size:12px;color:var(--txt2);margin-bottom:6px;}
+  .gs-ctrl-value{font-size:13px;font-weight:500;color:var(--green);}
+  .gs-ctrl-sub{font-size:11px;color:var(--txt2);opacity:0.6;margin-top:6px;}
+  input[type=range]{width:100%;accent-color:var(--green);height:4px;}
+  .gs-range-labels{display:flex;justify-content:space-between;}
+  .gs-range-labels span{font-size:11px;color:var(--txt2);opacity:0.5;}
+
+  .gs-capital-input{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-top:6px;}
+  .gs-capital-input span{color:var(--txt2);font-size:14px;}
+  .gs-capital-input input{background:transparent;border:none;color:var(--txt);font-size:14px;outline:none;width:100%;font-family:var(--sans);}
+
+  .gs-toggle-wrap{display:flex;align-items:center;gap:8px;margin-top:4px;}
+  .gs-toggle{position:relative;width:40px;height:22px;flex-shrink:0;}
+  .gs-toggle input{opacity:0;width:0;height:0;}
+  .gs-slider-track{position:absolute;cursor:pointer;inset:0;background:var(--surface2);border-radius:22px;border:1.5px solid var(--border);transition:.3s;}
+  .gs-slider-track:before{content:"";position:absolute;height:16px;width:16px;left:3px;bottom:2px;background:var(--txt2);border-radius:50%;transition:.3s;}
+  .gs-toggle input:checked + .gs-slider-track{background:var(--green);border-color:var(--green);}
+  .gs-toggle input:checked + .gs-slider-track:before{transform:translateX(18px);background:#fff;}
+  .gs-toggle-label{font-size:13px;color:var(--txt2);}
+
+  .gs-collapsible{overflow:hidden;max-height:0;transition:max-height .35s ease;}
+  .gs-collapsible.open{max-height:400px;}
+
+  /* Stats */
+  .gs-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0;}
+  .gs-stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+  .gs-stat-label{font-size:11px;color:var(--txt2);margin-bottom:4px;}
+  .gs-stat-val{font-size:16px;font-weight:600;}
+  .gs-stat-sub{font-size:10px;color:var(--txt2);margin-top:4px;}
+
+  /* Banners */
+  .gs-banner{display:none;align-items:flex-start;gap:10px;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12px;line-height:1.6;}
+  .gs-banner.show{display:flex;}
+  .gs-banner.green{background:rgba(0,201,141,0.08);border:1px solid rgba(0,201,141,0.25);color:var(--green);}
+  .gs-banner.red{background:rgba(255,92,92,0.08);border:1px solid rgba(255,92,92,0.25);color:var(--red);}
+  .gs-banner.orange{background:rgba(240,160,75,0.08);border:1px solid rgba(240,160,75,0.25);color:var(--orange);}
+
+  /* Tabs */
+  .gs-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+  .gs-tab{font-family:var(--mono);font-size:0.6rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:5px 12px;border-radius:16px;border:1.5px solid var(--border);background:var(--surface2);color:var(--txt2);cursor:pointer;transition:all .2s;}
+  .gs-tab:hover,.gs-tab.active{border-color:var(--accent);color:var(--accent);background:rgba(232,117,58,0.08);}
+
+  .gs-chart-area{position:relative;width:100%;height:360px;}
+
+  .gs-legend{display:flex;gap:18px;margin-bottom:10px;flex-wrap:wrap;}
+  .gs-legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--txt2);}
+  .gs-legend-swatch{width:24px;height:3px;border-radius:2px;}
+
+  /* Amortization table */
+  .gs-table-wrap{overflow-x:auto;margin-top:8px;}
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  thead tr{background:var(--surface2);}
+  th{font-family:var(--mono);font-size:0.6rem;letter-spacing:1px;text-transform:uppercase;color:var(--txt2);padding:8px 12px;text-align:right;border-bottom:1px solid var(--border);}
+  th:first-child{text-align:left;}
+  td{padding:7px 12px;text-align:right;border-bottom:1px solid rgba(51,48,40,0.5);color:var(--txt);}
+  td:first-child{text-align:left;color:var(--txt2);}
+  tr:hover td{background:var(--surface2);}
+  tr.highlight-row td{color:var(--orange);}
+  tr.prepay-row td{background:rgba(0,201,141,0.05);}
+  tr.prepay-row td:first-child{color:var(--green);}
+
+  .gs-table-note{font-size:11px;color:var(--txt2);opacity:0.6;margin-top:8px;}
+
+  @media(max-width:600px){
+    .gs-controls{grid-template-columns:1fr 1fr;}
+    .gs-controls2{grid-template-columns:1fr;}
+    .gs-stats{grid-template-columns:1fr 1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+  <div class="gs-section-title" style="margin-bottom:0">🏦 Loan Repayment Calculator</div>
+  <div style="display:flex;gap:8px">
+    <button id="btn-docs" onclick="toggleDocs()" style="font-family:var(--mono);font-size:0.6rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:5px 12px;border-radius:16px;border:1.5px solid var(--border);background:var(--surface2);color:var(--txt2);cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--txt2)'">📖 Docs</button>
+    <button id="btn-theme" onclick="toggleTheme()" style="font-family:var(--mono);font-size:0.6rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:5px 12px;border-radius:16px;border:1.5px solid var(--border);background:var(--surface2);color:var(--txt2);cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--txt2)'">☀️ Light</button>
+  </div>
+</div>
+
+<!-- Documentation panel -->
+<div id="docs-panel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px 24px;margin-bottom:24px;font-size:13px;line-height:1.8;color:var(--txt2)">
+  <div style="font-family:var(--mono);font-size:0.65rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt);margin-bottom:16px">📖 How to use this calculator</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+    <div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--txt);margin-bottom:8px">Basic Parameters</div>
+      <div><strong style="color:var(--txt)">Loan Amount</strong> — The original principal you borrowed (or remaining balance if mid-loan).</div>
+      <div style="margin-top:8px"><strong style="color:var(--txt)">Annual Interest Rate</strong> — Nominal annual rate. The calculator shows the effective annual rate (EAR) and monthly rate below the slider.</div>
+      <div style="margin-top:8px"><strong style="color:var(--txt)">Loan Duration</strong> — Enter years + months for exact remaining term. Example: 3 yrs + 7 mo = 43 months left.</div>
+
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--txt);margin-top:16px;margin-bottom:8px">Early Repayment</div>
+      <div><strong style="color:var(--txt)">Extra Amount</strong> — One-time lump sum paid directly to principal each time.</div>
+      <div style="margin-top:8px"><strong style="color:var(--txt)">Every X months</strong> — How often you make the extra payment. Set to 1 for monthly, 12 for annual, etc.</div>
+      <div style="margin-top:8px"><strong style="color:var(--txt)">Start at Month</strong> — Delay the first prepayment if needed (e.g. month 13 = start after first year).</div>
+      <div style="margin-top:8px">The savings banner shows total interest saved and how many months earlier you pay off the loan.</div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--txt);margin-bottom:8px">Refinancing</div>
+      <div><strong style="color:var(--txt)">Refinance at Year</strong> — When you switch to a new loan with a lower rate.</div>
+      <div style="margin-top:8px"><strong style="color:var(--txt)">New Rate</strong> — The rate of the refinanced loan. The remaining balance is recalculated at this rate.</div>
+      <div style="margin-top:8px"><strong style="color:var(--txt)">Refinancing Cost</strong> — One-time fee (bank charges, notary, etc.) added to the balance. The banner tells you if refinancing is net-positive after this cost.</div>
+      <div style="margin-top:8px">You can combine early repayment + refinancing to model the optimal payoff strategy.</div>
+
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--txt);margin-top:16px;margin-bottom:8px">Charts & Tabs</div>
+      <div><strong style="color:var(--txt)">Balance Over Time</strong> — Remaining debt each month. Compare original vs. your strategy.</div>
+      <div style="margin-top:8px"><strong style="color:var(--txt)">Interest vs Principal</strong> — Donut breakdown of total cost + cumulative interest curve.</div>
+      <div style="margin-top:8px"><strong style="color:var(--txt)">Annual Breakdown</strong> — Stacked bar: how much went to principal vs interest each year.</div>
+      <div style="margin-top:8px"><strong style="color:var(--txt)">Amortization Table</strong> — Year-by-year detail. 🟢 Green = prepayment year, 🟠 Orange = refinancing event.</div>
+    </div>
+  </div>
+
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:11px;opacity:0.6">
+    ⚠️ This calculator assumes a standard annuity loan (equal monthly payments). Results are estimates — consult your bank for exact figures. EAR = Effective Annual Rate.
+  </div>
+</div>
+
+<!-- Main loan params -->
+<div class="gs-controls">
+  <div>
+    <div class="gs-ctrl-label">Loan Amount</div>
+    <div class="gs-capital-input"><span>$</span><input type="number" id="lc-principal" value="100000" min="1000" step="1000"></div>
+  </div>
+  <div>
+    <div class="gs-ctrl-label">Annual Interest Rate: <span class="gs-ctrl-value" id="lc-rate-val">5.0%</span></div>
+    <input type="range" id="lc-rate" min="0.5" max="20" value="5" step="0.1">
+    <div class="gs-range-labels"><span>0.5%</span><span>20%</span></div>
+  </div>
+  <div>
+    <div class="gs-ctrl-label">Loan Duration: <span class="gs-ctrl-value" id="lc-duration-total"></span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
+      <div class="gs-capital-input"><input type="number" id="lc-years" value="20" min="0" max="40" step="1" style="width:100%"><span style="white-space:nowrap;font-size:12px">yrs</span></div>
+      <div class="gs-capital-input"><input type="number" id="lc-months-extra" value="0" min="0" max="11" step="1" style="width:100%"><span style="white-space:nowrap;font-size:12px">mo</span></div>
+    </div>
+    <div class="gs-ctrl-sub" style="margin-top:6px">e.g. 3 yrs + 7 mo = 43 months remaining</div>
+  </div>
+</div>
+
+<!-- Monthly rate display -->
+<div style="margin-bottom:4px">
+  <div class="gs-ctrl-sub" id="lc-rate-sub" style="opacity:1;font-size:12px;color:var(--txt2)"></div>
+</div>
+
+<!-- Prepayment -->
+<div class="gs-sub-title">Early Repayment</div>
+<div class="gs-controls2">
+  <div>
+    <div class="gs-ctrl-label" style="margin-bottom:10px">Enable Prepayment</div>
+    <div class="gs-toggle-wrap">
+      <label class="gs-toggle"><input type="checkbox" id="lc-prepay-on"><span class="gs-slider-track"></span></label>
+      <span class="gs-toggle-label" id="lc-prepay-label">Off</span>
+    </div>
+    <div class="gs-collapsible" id="lc-prepay-collapse">
+      <div class="gs-ctrl-label" style="margin-top:14px">Extra Amount per Prepayment</div>
+      <div class="gs-capital-input"><span>$</span><input type="number" id="lc-prepay-amt" value="5000" min="0" step="500"></div>
+      <div class="gs-ctrl-label" style="margin-top:12px">Every how many months: <span class="gs-ctrl-value" id="lc-prepay-freq-val">12</span> mo</div>
+      <input type="range" id="lc-prepay-freq" min="1" max="60" value="12" step="1">
+      <div class="gs-range-labels"><span>1</span><span>60</span></div>
+      <div class="gs-ctrl-label" style="margin-top:12px">Start Prepaying at Month: <span class="gs-ctrl-value" id="lc-prepay-start-val">1</span></div>
+      <input type="range" id="lc-prepay-start" min="1" max="120" value="1" step="1">
+      <div class="gs-range-labels"><span>1</span><span>120</span></div>
+    </div>
+  </div>
+  <div>
+    <!-- Refinance -->
+    <div class="gs-ctrl-label" style="margin-bottom:10px">Simulate Refinancing</div>
+    <div class="gs-toggle-wrap">
+      <label class="gs-toggle"><input type="checkbox" id="lc-refi-on"><span class="gs-slider-track"></span></label>
+      <span class="gs-toggle-label" id="lc-refi-label">Off</span>
+    </div>
+    <div class="gs-collapsible" id="lc-refi-collapse">
+      <div class="gs-ctrl-label" style="margin-top:14px">Refinance at Year: <span class="gs-ctrl-value" id="lc-refi-year-val">5</span></div>
+      <input type="range" id="lc-refi-year" min="1" max="39" value="5" step="1">
+      <div class="gs-range-labels"><span>1</span><span>39</span></div>
+      <div class="gs-ctrl-label" style="margin-top:10px">New Interest Rate: <span class="gs-ctrl-value" id="lc-refi-rate-val">3.5%</span></div>
+      <input type="range" id="lc-refi-rate" min="0.5" max="20" value="3.5" step="0.1">
+      <div class="gs-range-labels"><span>0.5%</span><span>20%</span></div>
+      <div class="gs-ctrl-label" style="margin-top:10px">Refinancing Cost (one-time)</div>
+      <div class="gs-capital-input"><span>$</span><input type="number" id="lc-refi-cost" value="2000" min="0" step="500"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Banners -->
+<div class="gs-banner green" id="lc-saving-banner">
+  <span>💰</span><span id="lc-saving-text"></span>
+</div>
+<div class="gs-banner orange" id="lc-refi-banner">
+  <span>🔄</span><span id="lc-refi-text"></span>
+</div>
+
+<!-- Stats -->
+<div class="gs-stats">
+  <div class="gs-stat">
+    <div class="gs-stat-label">Monthly Payment</div>
+    <div class="gs-stat-val" style="color:var(--green)" id="st-monthly">—</div>
+    <div class="gs-stat-sub" id="st-monthly-sub"></div>
+  </div>
+  <div class="gs-stat">
+    <div class="gs-stat-label">Total Interest</div>
+    <div class="gs-stat-val" style="color:var(--red)" id="st-interest">—</div>
+    <div class="gs-stat-sub" id="st-interest-saved"></div>
+  </div>
+  <div class="gs-stat">
+    <div class="gs-stat-label">Total Cost</div>
+    <div class="gs-stat-val" style="color:var(--orange)" id="st-total">—</div>
+    <div class="gs-stat-sub" id="st-total-sub"></div>
+  </div>
+  <div class="gs-stat">
+    <div class="gs-stat-label">Payoff Time</div>
+    <div class="gs-stat-val" style="color:var(--blue)" id="st-payoff">—</div>
+    <div class="gs-stat-sub" id="st-payoff-saved"></div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="gs-tabs">
+  <button class="gs-tab active" data-tab="balance">📉 Balance Over Time</button>
+  <button class="gs-tab" data-tab="breakdown">🥧 Interest vs Principal</button>
+  <button class="gs-tab" data-tab="annual">📊 Annual Breakdown</button>
+  <button class="gs-tab" data-tab="table">📋 Amortization Table</button>
+</div>
+
+<!-- Balance chart -->
+<div id="tab-balance">
+  <div class="gs-legend">
+    <div class="gs-legend-item"><div class="gs-legend-swatch" style="background:#ff5c5c"></div>Original Schedule</div>
+    <div class="gs-legend-item" id="leg-prepay" style="display:none"><div class="gs-legend-swatch" style="background:#00c98d"></div>With Prepayment</div>
+    <div class="gs-legend-item" id="leg-refi" style="display:none"><div class="gs-legend-swatch" style="background:#b48eff"></div>With Refinancing</div>
+  </div>
+  <div class="gs-chart-area"><canvas id="lc-balance-chart"></canvas></div>
+</div>
+
+<!-- Breakdown donut -->
+<div id="tab-breakdown" style="display:none">
+  <div style="display:grid;grid-template-columns:220px 1fr;gap:30px;align-items:center;margin-top:8px">
+    <div style="height:220px;position:relative"><canvas id="lc-donut"></canvas></div>
+    <div id="lc-donut-legend" style="padding-left:16px;display:flex;flex-direction:column;gap:10px;font-size:13px"></div>
+  </div>
+  <div style="margin-top:20px">
+    <div class="gs-ctrl-label" style="margin-bottom:8px">Cumulative interest paid over time</div>
+    <div class="gs-chart-area" style="height:200px"><canvas id="lc-interest-chart"></canvas></div>
+  </div>
+</div>
+
+<!-- Annual bar -->
+<div id="tab-annual" style="display:none">
+  <div class="gs-legend">
+    <div class="gs-legend-item"><div class="gs-legend-swatch" style="background:#4a9eff"></div>Principal Paid</div>
+    <div class="gs-legend-item"><div class="gs-legend-swatch" style="background:#ff5c5c"></div>Interest Paid</div>
+  </div>
+  <div class="gs-chart-area"><canvas id="lc-annual-chart"></canvas></div>
+</div>
+
+<!-- Table -->
+<div id="tab-table" style="display:none">
+  <div class="gs-table-note">Per year. Green rows = early repayment made. Orange row = refinancing event.</div>
+  <div class="gs-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Year</th>
+          <th>Monthly Payment</th>
+          <th>Interest Paid</th>
+          <th>Principal Paid</th>
+          <th>Remaining Balance</th>
+          <th>Cumulative Interest</th>
+        </tr>
+      </thead>
+      <tbody id="lc-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  function fmt(v,decimals){
+    if(isNaN(v)||!isFinite(v)) return '—';
+    decimals = decimals !== undefined ? decimals : 0;
+    if(v>=1e6) return '$'+(v/1e6).toFixed(2)+'M';
+    if(v>=1e3) return '$'+(v/1e3).toFixed(1)+'K';
+    return '$'+v.toFixed(decimals);
+  }
+  function fmtM(months){
+    var y=Math.floor(months/12), m=months%12;
+    if(y===0) return m+'mo';
+    if(m===0) return y+'y';
+    return y+'y '+m+'mo';
+  }
+
+  // Monthly payment formula
+  function calcMonthlyPayment(principal, annualRate, months){
+    var r = annualRate / 12;
+    if(r === 0) return principal / months;
+    return principal * r * Math.pow(1+r, months) / (Math.pow(1+r, months) - 1);
+  }
+
+  // Simulate loan month by month, returns array of monthly states
+  function simulate(opts){
+    var principal = opts.principal;
+    var rate      = opts.rate / 100 / 12; // monthly rate
+    var totalMonths = opts.totalMonthsOverride || opts.years * 12;
+    var prepayOn  = opts.prepayOn || false;
+    var prepayAmt = opts.prepayAmt || 0;
+    var prepayFreq= opts.prepayFreq || 12;
+    var prepayStart= opts.prepayStart || 1;
+    var refiOn    = opts.refiOn || false;
+    var refiMonth = (opts.refiYear || 5) * 12;
+    var refiRate  = (opts.refiRate || 5) / 100 / 12;
+    var refiCost  = opts.refiCost || 0;
+
+    var payment = calcMonthlyPayment(principal, opts.rate / 100, totalMonths);
+    var balance = principal;
+    var months = [];
+    var totalInterest = 0;
+    var totalPrincipalPaid = 0;
+    var totalPrepaid = 0;
+    var refiDone = false;
+    var currentPayment = payment;
+    var currentRate = rate;
+
+    for(var m = 1; m <= totalMonths; m++){
+      if(balance <= 0) break;
+
+      // Refinance
+      if(refiOn && !refiDone && m === refiMonth){
+        refiDone = true;
+        balance += refiCost;
+        currentRate = refiRate;
+        var remainingMonths = totalMonths - m;
+        currentPayment = calcMonthlyPayment(balance, refiRate*12, remainingMonths);
+      }
+
+      var interestThisMonth = balance * currentRate;
+      var principalThisMonth = Math.min(currentPayment - interestThisMonth, balance);
+      if(principalThisMonth < 0) principalThisMonth = 0;
+      balance -= principalThisMonth;
+      totalInterest += interestThisMonth;
+      totalPrincipalPaid += principalThisMonth;
+
+      var prepaidThisMonth = 0;
+      if(prepayOn && m >= prepayStart && (m - prepayStart) % prepayFreq === 0){
+        prepaidThisMonth = Math.min(prepayAmt, balance);
+        balance -= prepaidThisMonth;
+        totalPrepaid += prepaidThisMonth;
+      }
+
+      if(balance < 0.01) balance = 0;
+
+      months.push({
+        month: m,
+        balance: balance,
+        interest: interestThisMonth,
+        principal: principalThisMonth,
+        prepaid: prepaidThisMonth,
+        payment: currentPayment,
+        totalInterest: totalInterest,
+        isRefi: refiOn && m === refiMonth,
+        isPrep: prepaidThisMonth > 0
+      });
+
+      if(balance === 0) break;
+    }
+
+    return {months, totalInterest, totalMonths: months.length, payment, totalPrepaid};
+  }
+
+  // Charts
+  var balCtx = document.getElementById('lc-balance-chart').getContext('2d');
+  var balChart = new Chart(balCtx, {
+    type:'line',
+    data:{datasets:[
+      {label:'Original',data:[],borderColor:'#ff5c5c',borderWidth:2,pointRadius:0,fill:'origin',backgroundColor:'rgba(255,92,92,0.06)',tension:0.3},
+      {label:'Prepayment',data:[],borderColor:'#00c98d',borderWidth:2,pointRadius:0,fill:'origin',backgroundColor:'rgba(0,201,141,0.07)',tension:0.3,hidden:true},
+      {label:'Refinancing',data:[],borderColor:'#b48eff',borderWidth:2,pointRadius:0,fill:false,tension:0.3,borderDash:[5,3],hidden:true}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:{duration:150},
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a1916',titleColor:'#ede8e0',bodyColor:'#ede8e0',borderColor:'#333028',borderWidth:1,
+        callbacks:{title:function(i){return 'Month '+i[0].parsed.x;},label:function(i){return ' '+i.dataset.label+': '+fmt(i.parsed.y);}}}},
+      scales:{
+        x:{type:'linear',min:0,ticks:{color:'#7a7268',callback:function(v){return v+'mj';}},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}},
+        y:{ticks:{color:'#7a7268',callback:function(v){return fmt(v);}},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}}
+      }
+    }
+  });
+
+  var donutCtx = document.getElementById('lc-donut').getContext('2d');
+  var donutChart = new Chart(donutCtx, {
+    type:'doughnut',
+    data:{labels:['Principal','Interest','Prepayments'],datasets:[{data:[0,0,0],backgroundColor:['#4a9eff','#ff5c5c','#00c98d'],borderWidth:0,hoverOffset:6}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(i){
+      var total=i.dataset.data.reduce(function(a,b){return a+b;},0);
+      var pct=total>0?(i.parsed/total*100):0;
+      return ' '+i.label+': '+fmt(i.parsed)+' ('+(isFinite(pct)?pct.toFixed(1):'0')+'%)';
+    }}}},cutout:'65%'}
+  });
+
+  var intCtx = document.getElementById('lc-interest-chart').getContext('2d');
+  var intChart = new Chart(intCtx, {
+    type:'line',
+    data:{datasets:[
+      {label:'Original',data:[],borderColor:'#ff5c5c',borderWidth:2,pointRadius:0,fill:'origin',backgroundColor:'rgba(255,92,92,0.08)',tension:0.3},
+      {label:'With Prepayment',data:[],borderColor:'#00c98d',borderWidth:1.5,pointRadius:0,fill:false,tension:0.3,borderDash:[4,3],hidden:true}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:150},
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a1916',titleColor:'#ede8e0',bodyColor:'#ede8e0',borderColor:'#333028',borderWidth:1,
+        callbacks:{title:function(i){return 'Month '+i[0].parsed.x;},label:function(i){return ' '+i.dataset.label+': '+fmt(i.parsed);}}}},
+      scales:{x:{type:'linear',min:0,ticks:{color:'#7a7268'},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}},
+        y:{ticks:{color:'#7a7268',callback:function(v){return fmt(v);}},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}}}}
+  });
+
+  var annCtx = document.getElementById('lc-annual-chart').getContext('2d');
+  var annChart = new Chart(annCtx, {
+    type:'bar',
+    data:{datasets:[
+      {label:'Principal Paid',data:[],backgroundColor:'rgba(74,158,255,0.7)',borderRadius:3,stack:'a'},
+      {label:'Interest Paid',data:[],backgroundColor:'rgba(255,92,92,0.7)',borderRadius:3,stack:'a'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:150},
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a1916',titleColor:'#ede8e0',bodyColor:'#ede8e0',borderColor:'#333028',borderWidth:1,
+        callbacks:{title:function(i){return 'Year '+i[0].parsed.x;},label:function(i){return ' '+i.dataset.label+': '+fmt(i.parsed.y);}}}},
+      scales:{x:{type:'linear',min:1,ticks:{color:'#7a7268'},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}},
+        y:{stacked:true,ticks:{color:'#7a7268',callback:function(v){return fmt(v);}},grid:{color:'rgba(200,200,200,0.07)'},border:{color:'rgba(200,200,200,0.12)'}}}}
+  });
+
+  function update(){
+    var principal = parseFloat(document.getElementById('lc-principal').value)||100000;
+    var rate      = parseFloat(document.getElementById('lc-rate').value)||5;
+    var years     = parseInt(document.getElementById('lc-years').value)||0;
+    var monthsExtra = parseInt(document.getElementById('lc-months-extra').value)||0;
+    var totalMonthsInput = years * 12 + monthsExtra;
+    if(totalMonthsInput < 1) totalMonthsInput = 1;
+    var prepayOn  = document.getElementById('lc-prepay-on').checked;
+    var prepayAmt = parseFloat(document.getElementById('lc-prepay-amt').value)||0;
+    var prepayFreq= parseInt(document.getElementById('lc-prepay-freq').value)||12;
+    var prepayStart= parseInt(document.getElementById('lc-prepay-start').value)||1;
+    var refiOn    = document.getElementById('lc-refi-on').checked;
+    var refiYear  = parseInt(document.getElementById('lc-refi-year').value)||5;
+    var refiRate  = parseFloat(document.getElementById('lc-refi-rate').value)||3.5;
+    var refiCost  = parseFloat(document.getElementById('lc-refi-cost').value)||0;
+
+    // Update labels
+    document.getElementById('lc-rate-val').textContent = rate.toFixed(1)+'%';
+    var totalMo = years*12+monthsExtra; document.getElementById('lc-duration-total').textContent = (years>0?years+' yr ':'')+((monthsExtra>0||years===0)?monthsExtra+' mo ':'')+' = '+totalMonthsInput+' months';
+    document.getElementById('lc-prepay-label').textContent = prepayOn?'On':'Off';
+    document.getElementById('lc-prepay-collapse').classList.toggle('open', prepayOn);
+    document.getElementById('lc-prepay-freq-val').textContent = prepayFreq;
+    document.getElementById('lc-prepay-start-val').textContent = prepayStart;
+    document.getElementById('lc-refi-label').textContent = refiOn?'On':'Off';
+    document.getElementById('lc-refi-collapse').classList.toggle('open', refiOn);
+    document.getElementById('lc-refi-year-val').textContent = refiYear;
+    document.getElementById('lc-refi-rate-val').textContent = refiRate.toFixed(1)+'%';
+
+    var basePayment = calcMonthlyPayment(principal, rate/100, totalMonthsInput);
+    document.getElementById('lc-rate-sub').textContent =
+      'Monthly rate: '+(rate/12).toFixed(3)+'% · EKS (effective annual): '+((Math.pow(1+rate/100/12,12)-1)*100).toFixed(2)+'%';
+
+    // Simulate base
+    var base = simulate({principal, rate, years: 0, totalMonthsOverride: totalMonthsInput});
+
+    // Simulate with prepayment
+    var withPrepay = prepayOn ? simulate({principal, rate, years: 0, totalMonthsOverride: totalMonthsInput, prepayOn, prepayAmt, prepayFreq, prepayStart}) : null;
+
+    // Simulate with refi
+    var withRefi = refiOn ? simulate({principal, rate, years: 0, totalMonthsOverride: totalMonthsInput, refiOn, refiYear, refiRate, refiCost}) : null;
+
+    // Simulate with both
+    var withBoth = (prepayOn && refiOn) ? simulate({principal, rate, years: 0, totalMonthsOverride: totalMonthsInput, prepayOn, prepayAmt, prepayFreq, prepayStart, refiOn, refiYear, refiRate, refiCost}) : null;
+
+    // Stats — use withBoth if both, else whichever is active
+    var active = withBoth || withPrepay || withRefi || base;
+    document.getElementById('st-monthly').textContent = fmt(basePayment, 0);
+    document.getElementById('st-monthly-sub').textContent = active !== base ? 'Avg: '+fmt(active.payment, 0) : '';
+    document.getElementById('st-interest').textContent = fmt(base.totalInterest);
+    var interestSaved = base.totalInterest - active.totalInterest;
+    document.getElementById('st-interest-saved').textContent = active !== base && interestSaved > 0 ? '💚 Saved: '+fmt(interestSaved) : '';
+    document.getElementById('st-total').textContent = fmt(principal + base.totalInterest + (base.totalPrepaid||0));
+    document.getElementById('st-total-sub').textContent = active !== base ? 'With plan: '+fmt(principal + active.totalInterest + active.totalPrepaid) : '';
+    var payoffMonths = base.totalMonths;
+    var activePayoffMonths = active.totalMonths;
+    document.getElementById('st-payoff').textContent = fmtM(payoffMonths);
+    var monthsSaved = payoffMonths - activePayoffMonths;
+    document.getElementById('st-payoff-saved').textContent = monthsSaved > 0 ? '⚡ '+fmtM(monthsSaved)+' earlier' : '';
+
+    // Savings banner
+    var sb = document.getElementById('lc-saving-banner');
+    var st = document.getElementById('lc-saving-text');
+    if(active !== base && interestSaved > 0){
+      sb.classList.add('show');
+      st.textContent = 'By prepaying you save '+fmt(interestSaved)+' in interest and pay off '+fmtM(monthsSaved)+' earlier.';
+    } else {
+      sb.classList.remove('show');
+    }
+
+    // Refi banner
+    var rb = document.getElementById('lc-refi-banner');
+    var rt = document.getElementById('lc-refi-text');
+    if(refiOn && withRefi){
+      var refiSaved = base.totalInterest - withRefi.totalInterest - refiCost;
+      rb.classList.add('show');
+      if(refiSaved > 0){
+        rt.textContent = 'Refinancing in year '+refiYear+' at '+refiRate+'% saves a net '+fmt(refiSaved)+' (after refinancing cost of '+fmt(refiCost)+').';
+      } else {
+        rt.textContent = 'Refinancing in year '+refiYear+' at '+refiRate+'% is not worth it — costs ('+fmt(refiCost)+') exceed interest savings.';
+      }
+    } else {
+      rb.classList.remove('show');
+    }
+
+    // Balance chart data
+    var balBase = base.months.map(function(m){ return {x:m.month, y:m.balance}; });
+    balBase.unshift({x:0, y:principal});
+    balChart.data.datasets[0].data = balBase;
+
+    if(withPrepay || withBoth){
+      var src = withBoth || withPrepay;
+      var balPre = src.months.map(function(m){ return {x:m.month, y:m.balance}; });
+      balPre.unshift({x:0, y:principal});
+      balChart.data.datasets[1].data = balPre;
+      balChart.data.datasets[1].hidden = false;
+      balChart.getDatasetMeta(1).hidden = false;
+      document.getElementById('leg-prepay').style.display = 'flex';
+    } else {
+      balChart.data.datasets[1].data = [];
+      balChart.data.datasets[1].hidden = true;
+      balChart.getDatasetMeta(1).hidden = true;
+      document.getElementById('leg-prepay').style.display = 'none';
+    }
+
+    if(withRefi && !withBoth){
+      var balRef = withRefi.months.map(function(m){ return {x:m.month, y:m.balance}; });
+      balRef.unshift({x:0, y:principal});
+      balChart.data.datasets[2].data = balRef;
+      balChart.data.datasets[2].hidden = false;
+      balChart.getDatasetMeta(2).hidden = false;
+      document.getElementById('leg-refi').style.display = 'flex';
+    } else {
+      balChart.data.datasets[2].data = [];
+      balChart.data.datasets[2].hidden = true;
+      balChart.getDatasetMeta(2).hidden = true;
+      document.getElementById('leg-refi').style.display = 'none';
+    }
+
+    balChart.options.scales.x.max = base.totalMonths;
+    balChart.update();
+
+    // Donut
+    var totalPrepaid = active.totalPrepaid || 0;
+    donutChart.data.datasets[0].data = [
+      Math.round(principal),
+      Math.round(active.totalInterest),
+      Math.round(totalPrepaid)
+    ];
+    if(totalPrepaid === 0){
+      donutChart.data.labels = ['Principal','Interest'];
+      donutChart.data.datasets[0].data = [Math.round(principal), Math.round(active.totalInterest)];
+      donutChart.data.datasets[0].backgroundColor = ['#4a9eff','#ff5c5c'];
+    } else {
+      donutChart.data.labels = ['Principal','Interest','Prepayments'];
+      donutChart.data.datasets[0].data = [Math.round(principal), Math.round(active.totalInterest), Math.round(totalPrepaid)];
+      donutChart.data.datasets[0].backgroundColor = ['#4a9eff','#ff5c5c','#00c98d'];
+    }
+    donutChart.update();
+    var totalCost = principal + active.totalInterest + totalPrepaid;
+    var dleg = document.getElementById('lc-donut-legend');
+    var colors=['#4a9eff','#ff5c5c','#00c98d'];
+    dleg.innerHTML = donutChart.data.labels.map(function(l,i){
+      var v = donutChart.data.datasets[0].data[i];
+      var pct = totalCost>0?(v/totalCost*100).toFixed(1):0;
+      return '<div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:50%;background:'+colors[i]+';flex-shrink:0"></div><span style="color:var(--txt2)">'+l+'</span><span style="margin-left:auto;font-weight:600;font-family:var(--mono);font-size:11px">'+fmt(v)+' ('+pct+'%)</span></div>';
+    }).join('');
+
+    // Cumulative interest chart
+    var cumBase = base.months.map(function(m){ return {x:m.month, y:m.totalInterest}; });
+    intChart.data.datasets[0].data = cumBase;
+    intChart.options.scales.x.max = base.totalMonths;
+    if(withPrepay){
+      var cumPre = withPrepay.months.map(function(m){ return {x:m.month, y:m.totalInterest}; });
+      intChart.data.datasets[1].data = cumPre;
+      intChart.data.datasets[1].hidden = false;
+      intChart.getDatasetMeta(1).hidden = false;
+    } else {
+      intChart.data.datasets[1].data = [];
+      intChart.data.datasets[1].hidden = true;
+      intChart.getDatasetMeta(1).hidden = true;
+    }
+    intChart.update();
+
+    // Annual bar chart
+    var annualPrincipal=[], annualInterest=[];
+    var src2 = active;
+    for(var y2=1; y2<=Math.ceil(src2.totalMonths/12); y2++){
+      var monthsInYear = src2.months.filter(function(m){ return m.month > (y2-1)*12 && m.month <= y2*12; });
+      var p=0,int2=0;
+      monthsInYear.forEach(function(m){ p+=m.principal+m.prepaid; int2+=m.interest; });
+      annualPrincipal.push({x:y2, y:Math.round(p)});
+      annualInterest.push({x:y2, y:Math.round(int2)});
+    }
+    annChart.data.datasets[0].data = annualPrincipal;
+    annChart.data.datasets[1].data = annualInterest;
+    annChart.options.scales.x.max = Math.ceil(src2.totalMonths/12);
+    annChart.update();
+
+    // Amortization table
+    var tbody = document.getElementById('lc-table-body');
+    tbody.innerHTML='';
+    var src3 = active;
+    var totalYears3 = Math.ceil(src3.totalMonths/12);
+    var cumInt = 0;
+    for(var y3=1; y3<=totalYears3; y3++){
+      var monthsInYear3 = src3.months.filter(function(m){ return m.month > (y3-1)*12 && m.month <= y3*12; });
+      if(!monthsInYear3.length) break;
+      var p3=0,int3=0,prep3=0,avgPayment=0;
+      monthsInYear3.forEach(function(m){ p3+=m.principal; int3+=m.interest; prep3+=m.prepaid; avgPayment=m.payment; });
+      cumInt+=int3;
+      var lastMonth = monthsInYear3[monthsInYear3.length-1];
+      var hasPrep = prep3>0;
+      var hasRefi = monthsInYear3.some(function(m){return m.isRefi;});
+      var tr = document.createElement('tr');
+      if(hasRefi) tr.className='highlight-row';
+      else if(hasPrep) tr.className='prepay-row';
+      var yearLabel = 'Year '+y3 + (hasPrep?' 💚':'') + (hasRefi?' 🔄':'');
+      tr.innerHTML='<td>'+yearLabel+'</td>'
+        +'<td>'+fmt(avgPayment,0)+'</td>'
+        +'<td>'+fmt(int3)+'</td>'
+        +'<td>'+fmt(p3 + prep3)+(prep3>0?' <span style="color:var(--green);font-size:10px">(+'+fmt(prep3)+')</span>':'')+'</td>'
+        +'<td>'+fmt(lastMonth.balance)+'</td>'
+        +'<td>'+fmt(cumInt)+'</td>';
+      tbody.appendChild(tr);
+    }
+  }
+
+  // Tabs
+  document.querySelectorAll('.gs-tab').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      document.querySelectorAll('.gs-tab').forEach(function(b){b.classList.remove('active');});
+      btn.classList.add('active');
+      ['balance','breakdown','annual','table'].forEach(function(t){
+        document.getElementById('tab-'+t).style.display = t===btn.dataset.tab ? '' : 'none';
+      });
+    });
+  });
+
+  // Event listeners
+  ['lc-rate','lc-prepay-freq','lc-prepay-start','lc-refi-year','lc-refi-rate'].forEach(function(id){
+    document.getElementById(id).addEventListener('input', update);
+  });
+  ['lc-principal','lc-prepay-amt','lc-refi-cost','lc-years','lc-months-extra'].forEach(function(id){
+    document.getElementById(id).addEventListener('input', update);
+  });
+  ['lc-prepay-on','lc-refi-on'].forEach(function(id){
+    document.getElementById(id).addEventListener('change', update);
+  });
+
+  update();
+
+  function toggleTheme(){
+    var html = document.documentElement;
+    var isDark = html.getAttribute('data-theme') === 'dark';
+    html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    document.getElementById('btn-theme').textContent = isDark ? '🌙 Dark' : '☀️ Light';
+  }
+
+  function toggleDocs(){
+    var panel = document.getElementById('docs-panel');
+    var btn = document.getElementById('btn-docs');
+    var isOpen = panel.style.display !== 'none';
+    panel.style.display = isOpen ? 'none' : 'block';
+    btn.textContent = isOpen ? '📖 Docs' : '✕ Close';
+  }
+</script>
+
+<script>
+  window._onHubTheme = function(t){ document.documentElement.setAttribute('data-theme',t); };
+</script>
+<script>
+  (function(){
+    function reportHeight(){
+      try{ parent.postMessage({type:"hub-height",height:document.body.scrollHeight},"*"); }catch(e){}
+    }
+    window.addEventListener("load", reportHeight);
+    window.addEventListener("resize", reportHeight);
+    if(window.MutationObserver){
+      new MutationObserver(reportHeight).observe(document.body,{childList:true,subtree:true,attributes:true});
+    }
+  })();
+</script>
+
+</body>
+</html>
