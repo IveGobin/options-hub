@@ -574,6 +574,125 @@
     font-size: 14px;
   }
 
+  /* CLOSED P&L MATRIX */
+  .matrix-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .matrix-toolbar label {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .matrix-toolbar select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    outline: none;
+  }
+  .matrix-toolbar select:hover { border-color: var(--accent); }
+  .matrix-scroll { overflow-x: auto; }
+  .pnl-matrix {
+    border-collapse: collapse;
+    font-size: 13px;
+    width: max-content;
+    min-width: 100%;
+  }
+  .pnl-matrix th {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    text-align: right;
+    white-space: nowrap;
+    font-weight: 400;
+    background: var(--surface);
+  }
+  .pnl-matrix th.col-ticker {
+    text-align: left;
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--surface);
+    box-shadow: 2px 0 6px rgba(0,0,0,0.25);
+  }
+  .pnl-matrix td {
+    padding: 9px 14px;
+    border-bottom: 1px solid rgba(34,40,49,0.5);
+    text-align: right;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .pnl-matrix td.col-ticker {
+    text-align: left;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--surface);
+    box-shadow: 2px 0 6px rgba(0,0,0,0.25);
+  }
+  .pnl-matrix td.cell-empty {
+    color: var(--muted);
+    opacity: 0.35;
+    font-size: 11px;
+  }
+  .pnl-matrix td.cell-pos { color: var(--green); }
+  .pnl-matrix td.cell-neg { color: var(--red); }
+  .pnl-matrix td.col-total {
+    border-left: 1px solid var(--border);
+    font-weight: 700;
+    position: sticky;
+    right: 0;
+    background: var(--surface);
+    box-shadow: -2px 0 6px rgba(0,0,0,0.2);
+  }
+  .pnl-matrix td.col-total.cell-pos { color: var(--green); }
+  .pnl-matrix td.col-total.cell-neg { color: var(--red); }
+  .pnl-matrix th.col-total-h {
+    position: sticky;
+    right: 0;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    box-shadow: -2px 0 6px rgba(0,0,0,0.2);
+  }
+  .pnl-matrix tr.row-total td {
+    border-top: 1px solid var(--border);
+    background: var(--surface2);
+    font-weight: 700;
+  }
+  .pnl-matrix tr.row-total td.col-ticker {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 400;
+    background: var(--surface2);
+  }
+  .pnl-matrix tr.row-total td.col-total { background: var(--surface2); }
+  .pnl-matrix tr:not(.row-total):hover td { background: rgba(255,255,255,0.02); }
+  .pnl-matrix tr:not(.row-total):hover td.col-ticker,
+  .pnl-matrix tr:not(.row-total):hover td.col-total { background: var(--surface2); }
+  .pnl-matrix tr:last-child td { border-bottom: none; }
+
   /* PIE CHARTS */
   .pie-grid {
     display: grid;
@@ -966,7 +1085,20 @@
 
   <div class="section">
     <div class="section-title">Closed positions — P&L by ticker</div>
-    <div class="ticker-grid" id="closed-grid"></div>
+    <div class="table-wrapper">
+      <div class="matrix-toolbar">
+        <label>Year</label>
+        <select id="matrix-year-filter" onchange="applyMatrixFilter()">
+          <option value="all">All years</option>
+        </select>
+      </div>
+      <div class="matrix-scroll">
+        <table class="pnl-matrix" id="closed-matrix">
+          <thead id="closed-matrix-head"></thead>
+          <tbody id="closed-matrix-body"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1218,62 +1350,175 @@
       tbody.appendChild(tfoot);
     }
 
-    // --- CLOSED GRID ---
-    // Each row is one transaction. Group by Ticker to get net P&L and list of trades.
-    const tickerMap = {}; // ticker -> { trades: [], net: 0 }
+    // --- CLOSED MATRIX ---
+    // Build: ticker -> { monthKey -> pnl }, and collect all months
+    const tickerMap = {};
+    const monthSet  = {};
+
     closedRows.forEach(r => {
-      const ticker = r['Ticker'];
-      const pe     = toNum(r['Premium Exp']);
-      const net    = isNaN(pe) ? 0 : pe;
-      const status = r['Status'];
-      const date   = r['Date'] || '—';
-      const expDate = getExpDate(r) || '—';
-      if (!tickerMap[ticker]) tickerMap[ticker] = { trades: [], net: 0 };
-      tickerMap[ticker].net += net;
-      tickerMap[ticker].trades.push({ date, expDate, net, status, option: r['Option'] || '' });
+      const ticker  = r['Ticker'];
+      const pe      = toNum(r['Premium Exp']);
+      const net     = isNaN(pe) ? 0 : pe;
+      const mc = (r['MonthClosed'] || '').trim();
+      let monthKey  = '0000-00';
+      let monthLabel = '—';
+      if (mc && mc.length === 6) {
+        const y = mc.slice(0, 4);
+        const m = parseInt(mc.slice(4, 6), 10);
+        monthKey  = `${y}-${String(m).padStart(2,'0')}`;
+        const dObj = new Date(parseInt(y), m - 1, 1);
+        monthLabel = dObj.toLocaleString('en-US', { month: 'short' }) + " '" + y.slice(2);
+      } else {
+        const fallbackStr = r['Date'] || getExpDate(r) || '';
+        const fallbackObj = parseDate(fallbackStr);
+        if (fallbackObj) {
+          const y = fallbackObj.getFullYear();
+          const m = fallbackObj.getMonth();
+          monthKey  = `${y}-${String(m+1).padStart(2,'0')}`;
+          monthLabel = fallbackObj.toLocaleString('en-US', { month: 'short' }) + " '" + String(y).slice(2);
+        }
+      }
+      if (!tickerMap[ticker]) tickerMap[ticker] = { monthData: {}, total: 0 };
+      tickerMap[ticker].total += net;
+      tickerMap[ticker].monthData[monthKey] = (tickerMap[ticker].monthData[monthKey] || 0) + net;
+      if (!monthSet[monthKey]) monthSet[monthKey] = monthLabel;
     });
 
-    // --- PIE CHARTS ---
-    const positiveTickers = Object.entries(tickerMap).filter(([,d]) => d.net > 0).sort((a,b) => b[1].net - a[1].net);
-    const negativeTickers = Object.entries(tickerMap).filter(([,d]) => d.net < 0).sort((a,b) => a[1].net - b[1].net);
+    // Store globally for filter
+    window._matrixTickerMap = tickerMap;
+    window._matrixMonthSet  = monthSet;
 
-    renderPieChart('pie-positive-inner', positiveTickers.map(([t,d]) => [t, d.net]), GREEN_PALETTE, true);
+    // Populate year filter
+    const allYears = [...new Set(Object.keys(monthSet).map(k => k.slice(0,4)))].sort().reverse();
+    const yearSel = document.getElementById('matrix-year-filter');
+    yearSel.innerHTML = '<option value="all">All years</option>' +
+      allYears.map(y => `<option value="${y}">${y}</option>`).join('');
+
+    renderMatrix('all');
+
+    // --- PIE CHARTS ---
+    const GREEN_PALETTE = [
+      '#00e676','#00b4d8','#c8ff00','#a78bfa','#ffd32a',
+      '#ff6b9d','#38bdf8','#fb923c','#34d399','#f472b6'
+    ];
+    const RED_PALETTE = [
+      '#ff4757','#00b4d8','#ffd32a','#a78bfa','#c8ff00',
+      '#34d399','#fb923c','#f472b6','#38bdf8','#ff6b9d'
+    ];
+    const positiveTickers = Object.entries(tickerMap).filter(([,d]) => d.total > 0).sort((a,b) => b[1].total - a[1].total);
+    const negativeTickers = Object.entries(tickerMap).filter(([,d]) => d.total < 0).sort((a,b) => a[1].total - b[1].total);
+    renderPieChart('pie-positive-inner', positiveTickers.map(([t,d]) => [t, d.total]), GREEN_PALETTE, true);
     renderOpenPremiumPie(openRows);
     renderMonthlyPremium(openRows);
-    renderPieChart('pie-negative-inner', negativeTickers.map(([t,d]) => [t, d.net]), RED_PALETTE, false);
+    renderPieChart('pie-negative-inner', negativeTickers.map(([t,d]) => [t, d.total]), RED_PALETTE, false);
+  }
 
-    const closedGrid = document.getElementById('closed-grid');
-    closedGrid.innerHTML = '';
-    const sortedTickers = Object.entries(tickerMap).sort((a,b) => b[1].net - a[1].net);
+  function applyMatrixFilter() {
+    const year = document.getElementById('matrix-year-filter').value;
+    renderMatrix(year);
+  }
+
+  function monthToQuarter(monthKey) {
+    const m = parseInt(monthKey.slice(5, 7), 10);
+    return 'Q' + Math.ceil(m / 3);
+  }
+
+  function renderMatrix(filterYear) {
+    const tickerMap = window._matrixTickerMap || {};
+    const monthSet  = window._matrixMonthSet  || {};
+
+    const allMonths = Object.keys(monthSet).sort();
+    const filteredMonths = filterYear === 'all'
+      ? allMonths
+      : allMonths.filter(k => k.startsWith(filterYear));
+
+    // Determine which years are in scope
+    const yearsInScope = [...new Set(filteredMonths.map(mk => mk.slice(0, 4)))].sort();
+
+    // Always show all 4 quarters for each year in scope
+    const sortedQuarters = [];
+    const quarterLabels  = {};
+    yearsInScope.forEach(year => {
+      ['Q1','Q2','Q3','Q4'].forEach(q => {
+        const qk = `${year}-${q}`;
+        sortedQuarters.push(qk);
+        quarterLabels[qk] = `${q} '${year.slice(2)}`;
+      });
+    });
+
+    // Aggregate ticker data into quarters
+    const qTickerMap = {};
+    Object.entries(tickerMap).forEach(([ticker, data]) => {
+      filteredMonths.forEach(mk => {
+        const val = data.monthData[mk] || 0;
+        if (!val) return;
+        const year = mk.slice(0, 4);
+        const qk   = `${year}-${monthToQuarter(mk)}`;
+        if (!qTickerMap[ticker]) qTickerMap[ticker] = { qData: {}, total: 0 };
+        qTickerMap[ticker].qData[qk]  = (qTickerMap[ticker].qData[qk] || 0) + val;
+        qTickerMap[ticker].total      += val;
+      });
+    });
+
+    const sortedTickers = Object.entries(qTickerMap)
+      .filter(([, d]) => d.total !== 0)
+      .sort((a, b) => b[1].total - a[1].total);
+
+    const matrixHead = document.getElementById('closed-matrix-head');
+    const matrixBody = document.getElementById('closed-matrix-body');
+    matrixHead.innerHTML = '';
+    matrixBody.innerHTML = '';
 
     if (sortedTickers.length === 0) {
-      closedGrid.innerHTML = `<div class="empty-state">${tr('an_empty_closed')}</div>`;
-    } else {
-      sortedTickers.forEach(([ticker, data]) => {
-        const card = document.createElement('div');
-        card.className = 'ticker-card';
-        const pos = data.net >= 0;
-        const tradesHTML = data.trades.map(t => `
-          <div class="trade-row">
-            <span class="trade-date">${escapeHtml(t.date)}</span>
-            <span>
-              <span class="badge badge-${escapeHtml(t.status.toLowerCase())}">${escapeHtml(t.status)}</span>
-              <span class="trade-amt ${t.net >= 0 ? 'pos' : 'neg'}">${fmt(t.net)}</span>
-            </span>
-          </div>
-        `).join('');
-        card.innerHTML = `
-          <div class="ticker-header">
-            <div class="ticker-name">${escapeHtml(ticker)}</div>
-            <div class="badge badge-closed">${data.trades.length} ${data.trades.length !== 1 ? tr('an_trades') : tr('an_trade')}</div>
-          </div>
-          <div class="ticker-pnl ${pos ? 'pos' : 'neg'}">${fmt(data.net)}</div>
-          <div class="ticker-meta">${pos ? tr('an_profit') : tr('an_loss')}</div>
-          <div class="ticker-trades">${tradesHTML}</div>
-        `;
-        closedGrid.appendChild(card);
-      });
+      matrixBody.innerHTML = `<tr><td colspan="2" class="empty-state">${tr('an_empty_closed')}</td></tr>`;
+      return;
     }
+
+    // Header row
+    const headRow = document.createElement('tr');
+    headRow.innerHTML = `<th class="col-ticker">Ticker</th>` +
+      sortedQuarters.map(qk => `<th>${escapeHtml(quarterLabels[qk])}</th>`).join('') +
+      `<th class="col-total-h">Total</th>`;
+    matrixHead.appendChild(headRow);
+
+    // Data rows
+    sortedTickers.forEach(([ticker, data]) => {
+      const tr_ = document.createElement('tr');
+      let cells = `<td class="col-ticker">${escapeHtml(ticker)}</td>`;
+      sortedQuarters.forEach(qk => {
+        const val = data.qData[qk];
+        if (!val) {
+          cells += `<td class="cell-empty">—</td>`;
+        } else {
+          const cls = val >= 0 ? 'cell-pos' : 'cell-neg';
+          cells += `<td class="${cls}">${fmt(val)}</td>`;
+        }
+      });
+      const tcls = data.total >= 0 ? 'cell-pos' : 'cell-neg';
+      cells += `<td class="col-total ${tcls}">${fmt(data.total)}</td>`;
+      tr_.innerHTML = cells;
+      matrixBody.appendChild(tr_);
+    });
+
+    // Total row
+    const totRow = document.createElement('tr');
+    totRow.className = 'row-total';
+    let totCells = `<td class="col-ticker">Total</td>`;
+    let grandTotal = 0;
+    sortedQuarters.forEach(qk => {
+      const colSum = sortedTickers.reduce((s, [, d]) => s + (d.qData[qk] || 0), 0);
+      grandTotal += colSum;
+      if (colSum === 0) {
+        totCells += `<td class="cell-empty">—</td>`;
+      } else {
+        const cls = colSum >= 0 ? 'cell-pos' : 'cell-neg';
+        totCells += `<td class="${cls}">${fmt(colSum)}</td>`;
+      }
+    });
+    const gcls = grandTotal >= 0 ? 'cell-pos' : 'cell-neg';
+    totCells += `<td class="col-total ${gcls}">${fmt(grandTotal)}</td>`;
+    totRow.innerHTML = totCells;
+    matrixBody.appendChild(totRow);
   }
 
 
@@ -1359,15 +1604,6 @@
   }
 
   // ---- PIE CHARTS ----
-  const GREEN_PALETTE = [
-    '#00e676','#00b4d8','#c8ff00','#a78bfa','#ffd32a',
-    '#ff6b9d','#38bdf8','#fb923c','#34d399','#f472b6'
-  ];
-  const RED_PALETTE = [
-    '#ff4757','#00b4d8','#ffd32a','#a78bfa','#c8ff00',
-    '#34d399','#fb923c','#f472b6','#38bdf8','#ff6b9d'
-  ];
-
   function fmtAbs(val) {
     if (Math.abs(val) >= 1000) return '$' + (val / 1000).toFixed(1) + 'k';
     return '$' + Math.abs(val).toFixed(0);
