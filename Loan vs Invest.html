@@ -310,12 +310,12 @@ input[type=range]{width:100%;accent-color:var(--green);height:4px;margin-top:6px
   <div class="stat">
     <div class="stat-lbl">Scenario A: Net Worth</div>
     <div class="stat-val" style="color:var(--blue)" id="st-netA">—</div>
-    <div class="stat-sub">Repay first, invest after</div>
+    <div class="stat-sub" id="st-netA-sub">Repay first, invest after</div>
   </div>
   <div class="stat">
     <div class="stat-lbl">Scenario B: Net Worth</div>
     <div class="stat-val" style="color:var(--purple)" id="st-netB">—</div>
-    <div class="stat-sub">Min payment + invest now</div>
+    <div class="stat-sub" id="st-netB-sub">Min payment + invest now</div>
   </div>
   <div class="stat">
     <div class="stat-lbl">Difference (B − A)</div>
@@ -585,43 +585,43 @@ function update(){
   var horizonMonths = base.totalMonths; // use original duration as horizon
   var horizonYears  = horizonMonths / 12;
 
-  // ── Scenario A: invest AFTER loan is paid off ──
-  // After loan A is paid off, monthly investable = original payment + free cash
-  var payoffMonthA = loanA.paidOffMonth;
-  var monthlyAfterPayoff = loanA.payment + free; // freed up cash after payoff
-  var investMonthsA = horizonMonths - payoffMonthA;
+  // ── FAIR COMPARISON: both scenarios use the exact same monthly budget ──
+  // Total monthly budget = loan payment + free cash (this is what you actually spend either way)
+  var monthlyBudget = base.payment + free;
+  var payoffMonthA  = loanA.paidOffMonth;
 
+  // Scenario A: while loan runs → pay (payment + free) to loan
+  //             after loan paid off → invest full budget (payment + free) every month
+  var investMonthsA = horizonMonths - payoffMonthA;
   var invA = simulateInvest({
     annualRate: invRate,
     months: Math.max(0, investMonthsA),
-    monthlyContrib: monthlyAfterPayoff,
+    monthlyContrib: monthlyBudget,  // same budget now free to invest
     seed,
     taxRate
   });
-
-  // Net worth A at horizon = investment value (debt is 0 since paid off)
   var netA = invA.afterTax;
 
-  // ── Scenario B: invest immediately, pay minimum ──
+  // Scenario B: pay minimum (base payment) to loan every month
+  //             invest the remainder (free cash) every month immediately
+  //             loan finishes at its original term — no leftover debt
   var invB = simulateInvest({
     annualRate: invRate,
     months: horizonMonths,
-    monthlyContrib: free,
+    monthlyContrib: free,  // only free cash goes to investments
     seed,
     taxRate
   });
-  // Net worth B = investment value - remaining loan balance (should be 0 at base horizon end)
   var remainingDebtB = base.months.length > 0 ? base.months[base.months.length - 1].balance : 0;
   var netB = invB.afterTax - remainingDebtB;
 
   var diff = netB - netA;
 
   // ── Break-even rate ──
-  // Binary search: find invRate where netA ≈ netB
   var lo = 0, hi = 100, beRate = null;
   for(var iter = 0; iter < 50; iter++){
     var mid = (lo + hi) / 2;
-    var tInvA = simulateInvest({ annualRate: mid, months: Math.max(0, investMonthsA), monthlyContrib: monthlyAfterPayoff, seed, taxRate }).afterTax;
+    var tInvA = simulateInvest({ annualRate: mid, months: Math.max(0, investMonthsA), monthlyContrib: monthlyBudget, seed, taxRate }).afterTax;
     var tInvB = simulateInvest({ annualRate: mid, months: horizonMonths, monthlyContrib: free, seed, taxRate }).afterTax - remainingDebtB;
     if(tInvB > tInvA) hi = mid; else lo = mid;
     if(hi - lo < 0.01){ beRate = (lo + hi) / 2; break; }
@@ -684,13 +684,17 @@ function update(){
   document.getElementById('st-interest').textContent = fmt(base.totalInterest);
   document.getElementById('st-payoff-lbl').textContent = 'Scenario A paid off in ' + fmtY(payoffMonthA);
 
+  // Sub-labels showing cash flow breakdown
+  document.getElementById('st-netA-sub').textContent = 'Budget: ' + fmt(monthlyBudget) + '/mo · invest after ' + fmtY(payoffMonthA);
+  document.getElementById('st-netB-sub').textContent = 'Invest ' + fmt(free) + '/mo now · pay ' + fmt(base.payment) + '/mo to loan';
+
   // Comparison table
   var rows = [
-    ['Total interest paid',    fmt(loanA.totalInterest),    fmt(base.totalInterest),        base.totalInterest < loanA.totalInterest ? 'B' : 'A'],
-    ['Loan paid off in',       fmtY(payoffMonthA),          fmtY(base.paidOffMonth),         payoffMonthA < base.paidOffMonth ? 'A' : 'B'],
-    ['Investment at end',     fmt(invA.afterTax),          fmt(invB.afterTax),              invB.afterTax > invA.afterTax ? 'B' : 'A'],
-    ['Net worth',          fmt(netA),                   fmt(netB),                       netB > netA ? 'B' : 'A'],
-    ['Total invested',   fmt((loanA.payment + free) * Math.max(0, investMonthsA)),  fmt(free * horizonMonths), '—'],
+    ['Total interest paid',  fmt(loanA.totalInterest),  fmt(base.totalInterest),  base.totalInterest < loanA.totalInterest ? 'B' : 'A'],
+    ['Loan paid off in',     fmtY(payoffMonthA),         fmtY(base.paidOffMonth),  payoffMonthA < base.paidOffMonth ? 'A' : 'B'],
+    ['Investment at end',    fmt(invA.afterTax),         fmt(invB.afterTax),       invB.afterTax > invA.afterTax ? 'B' : 'A'],
+    ['Net worth',            fmt(netA),                  fmt(netB),                netB > netA ? 'B' : 'A'],
+    ['Monthly to invest',    fmt(monthlyBudget)+' (after payoff)', fmt(free)+' (immediately)', '—'],
   ];
   var tbody = document.getElementById('cmp-tbody');
   tbody.innerHTML = rows.map(function(r){
@@ -730,10 +734,10 @@ function update(){
     loanBase.push({ x: mo/12, y: Math.round(lbBase) });
     loanAdata.push({ x: mo/12, y: Math.round(lbA) });
 
-    // Investment A: starts after loan paid off
-    var contribA = mo > payoffMonthA ? (aPayment + free) : 0;
+    // Investment A: starts after loan paid off, invests full budget
+    var contribA = mo > payoffMonthA ? monthlyBudget : 0;
     balA = balA * (1 + rMo) + contribA;
-    if(mo <= payoffMonthA) balA += (seedOn && mo === 1) ? seed : 0;
+    if(mo === 1 && seedOn) balA += seed;
 
     // Investment B: always investing free cash
     balB = balB * (1 + rMo) + free;
@@ -759,7 +763,7 @@ function update(){
   // Cash flow annual
   for(var yr = 1; yr <= Math.ceil(horizonYears); yr++){
     cfLabels.push('Y'+yr);
-    var contribAyear = yr > payoffMonthA/12 ? (aPayment + free) * 12 : 0;
+    var contribAyear = yr > payoffMonthA/12 ? monthlyBudget * 12 : 0;
     cfAdata.push(Math.round(contribAyear));
     cfBdata.push(Math.round(free * 12));
   }
@@ -768,7 +772,7 @@ function update(){
   var sensRates = [1,2,3,4,5,6,7,8,9,10,12,15,18,20,25,30];
   var sensLabels = sensRates.map(function(r){ return r+'%'; });
   var sensDiffs = sensRates.map(function(r){
-    var sA = simulateInvest({ annualRate: r, months: Math.max(0, investMonthsA), monthlyContrib: monthlyAfterPayoff, seed, taxRate }).afterTax;
+    var sA = simulateInvest({ annualRate: r, months: Math.max(0, investMonthsA), monthlyContrib: monthlyBudget, seed, taxRate }).afterTax;
     var sB = simulateInvest({ annualRate: r, months: horizonMonths, monthlyContrib: free, seed, taxRate }).afterTax - remainingDebtB;
     return Math.round(sB - sA);
   });
@@ -815,8 +819,8 @@ function update(){
   document.getElementById('opp-gain-lbl').textContent = fmt(invGainB) + ' potential investment gain (Scenario B) over ' + horizonYears.toFixed(0) + ' yrs';
   document.getElementById('opp-summary').innerHTML =
     '<strong style="color:var(--txt)">Opportunity cost breakdown:</strong><br>'
-    + '• By using free cash for early repayment (A), you save <strong style="color:var(--green)">'+fmt(intSaved)+'</strong> in interest.<br>'
-    + '• By investing that same cash immediately (B), you could earn <strong style="color:var(--purple)">'+fmt(invGainB)+'</strong>.<br>'
+    + '• Scenario A: pay off loan in <strong>'+fmtY(payoffMonthA)+'</strong>, saving <strong style="color:var(--green)">'+fmt(intSaved)+'</strong> in interest, then invest <strong>'+fmt(monthlyBudget)+'</strong>/mo.<br>'
+    + '• Scenario B: invest <strong>'+fmt(free)+'</strong>/mo immediately; investment could grow by <strong style="color:var(--purple)">'+fmt(invGainB)+'</strong>.<br>'
     + '• <strong style="color:'+(invGainB > intSaved ? 'var(--purple)' : 'var(--green)')+'">'+
       (invGainB > intSaved ? 'Investing yields more' : 'Saving on interest yields more')+'</strong>.<br>'
     + '<span style="font-size:11px;opacity:0.7;">Note: investment returns are not guaranteed; interest savings are a certain "return".</span>';
