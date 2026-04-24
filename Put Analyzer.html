@@ -693,44 +693,65 @@
   .pnl-matrix tr:not(.row-total):hover td.col-total { background: var(--surface2); }
   .pnl-matrix tr:last-child td { border-bottom: none; }
 
-  /* PIE CHARTS */
+  /* PIE CHARTS — redesigned */
   .pie-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
     gap: 20px;
   }
 
   .pie-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 24px;
+    border-radius: 16px;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .pie-card-header {
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
   .pie-card-title {
     font-size: 11px;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--muted);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    flex: 1;
   }
 
   .pie-card-title .dot {
-    width: 8px; height: 8px;
+    width: 7px; height: 7px;
     border-radius: 50%;
     flex-shrink: 0;
+    box-shadow: 0 0 6px currentColor;
   }
 
   .pie-inner {
     display: flex;
+    align-items: stretch;
+    gap: 0;
+    flex: 1;
+  }
+
+  .pie-canvas-side {
+    flex-shrink: 0;
+    width: 180px;
+    padding: 22px 16px 22px 22px;
+    display: flex;
     align-items: center;
-    gap: 24px;
-    flex-wrap: wrap;
+    justify-content: center;
+    position: relative;
   }
 
   .pie-canvas-wrap {
@@ -740,145 +761,192 @@
     position: relative;
   }
 
-  .pie-legend {
+  .pie-legend-side {
     flex: 1;
-    min-width: 140px;
+    border-left: 1px solid var(--border);
+    padding: 12px 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .pie-legend {
+    display: flex;
+    flex-direction: column;
   }
 
   .legend-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 13px;
+    gap: 0;
+    padding: 7px 18px;
+    transition: background 0.15s;
+    cursor: default;
+    border-bottom: 1px solid transparent;
+  }
+
+  .legend-row:hover {
+    background: rgba(255,255,255,0.03);
   }
 
   .legend-left {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
+    flex: 1;
     min-width: 0;
   }
 
   .legend-dot {
-    width: 10px; height: 10px;
-    border-radius: 3px;
+    width: 8px; height: 8px;
+    border-radius: 2px;
     flex-shrink: 0;
   }
 
   .legend-ticker {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.06em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 90px;
+    max-width: 80px;
+  }
+
+  .legend-bar-wrap {
+    flex: 1;
+    height: 3px;
+    background: rgba(128,128,128,0.12);
+    border-radius: 2px;
+    margin: 0 10px;
+    overflow: hidden;
+  }
+
+  .legend-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease;
   }
 
   .legend-pct {
     font-family: 'Space Mono', monospace;
-    font-size: 11px;
+    font-size: 10px;
     color: var(--muted);
     flex-shrink: 0;
+    width: 38px;
+    text-align: right;
   }
 
   .legend-val {
     font-family: 'Space Mono', monospace;
-    font-size: 11px;
+    font-size: 10px;
     flex-shrink: 0;
+    width: 58px;
+    text-align: right;
   }
 
   .pie-empty {
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 100px;
+    height: 120px;
     color: var(--muted);
     font-size: 13px;
     flex: 1;
+    width: 100%;
   }
 
-  /* MONTHLY PREMIUM TABLE */
+  /* MONTHLY PREMIUM — redesigned */
   .monthly-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 2px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
     margin-top: 4px;
   }
   .month-card {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px 22px;
+    padding: 22px 20px 18px;
     position: relative;
     overflow: hidden;
+    transition: background 0.15s;
   }
-  .month-card::after {
+  .month-card:first-child { border-radius: 13px 0 0 13px; }
+  .month-card:last-child  { border-radius: 0 13px 13px 0; }
+  .month-card:hover { background: var(--surface2); }
+
+  .month-card::before {
     content: '';
     position: absolute;
-    bottom: 0; left: 0; right: 0;
-    height: 3px;
-    background: var(--accent);
-    opacity: 0.3;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--border);
+    transition: background 0.2s, height 0.2s;
   }
-  .month-card.has-data::after { opacity: 1; }
+  .month-card.has-data::before {
+    background: var(--accent);
+    height: 2px;
+  }
+
   .month-label {
-    font-size: 10px;
-    letter-spacing: 0.18em;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
     color: var(--muted);
-    margin-bottom: 12px;
-    font-family: 'Space Mono', monospace;
+    margin-bottom: 14px;
   }
   .month-amount {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 28px;
+    font-family: 'Space Mono', monospace;
+    font-size: 26px;
     font-weight: 700;
     color: var(--accent);
     line-height: 1;
-    margin-bottom: 12px;
-    letter-spacing: -0.5px;
+    margin-bottom: 16px;
+    letter-spacing: -1px;
   }
   .month-amount.empty {
-    color: var(--muted);
-    font-size: 20px;
+    color: var(--border);
+    font-size: 22px;
     font-weight: 400;
+    letter-spacing: 0;
   }
   .month-tickers {
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    border-top: 1px solid var(--border);
-    padding-top: 10px;
+    gap: 0;
   }
   .month-ticker-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 13px;
+    padding: 5px 0;
+    border-top: 1px solid rgba(128,128,128,0.1);
+    gap: 8px;
   }
+  .month-ticker-row:first-child { border-top: none; }
   .month-ticker-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .month-ticker-val {
     font-family: 'Space Mono', monospace;
     font-size: 11px;
     font-weight: 700;
-    color: var(--muted);
-    letter-spacing: 0.05em;
-  }
-  .month-ticker-val {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
+    color: var(--accent);
+    opacity: 0.75;
   }
   .month-bar {
-    position: absolute;
-    bottom: 3px; left: 0;
-    height: 3px;
-    background: var(--accent);
-    transition: width 0.4s ease;
+    display: none; /* replaced by top border */
   }
 
 </style>
@@ -1043,9 +1111,11 @@
     <div class="section-title">Premium in play — share by ticker</div>
     <div class="pie-grid">
       <div class="pie-card">
-        <div class="pie-card-title">
-          <span class="dot" style="background:var(--accent)"></span>
-          Open positions — premium by ticker
+        <div class="pie-card-header">
+          <div class="pie-card-title">
+            <span class="dot" style="background:var(--accent)"></span>
+            Open positions — premium by ticker
+          </div>
         </div>
         <div class="pie-inner" id="pie-open-inner">
           <div class="pie-empty">No data</div>
@@ -1063,18 +1133,22 @@
     <div class="section-title">P&L distribution by ticker</div>
     <div class="pie-grid">
       <div class="pie-card">
-        <div class="pie-card-title">
-          <span class="dot" style="background:var(--green)"></span>
-          Positive profits — share by ticker
+        <div class="pie-card-header">
+          <div class="pie-card-title">
+            <span class="dot" style="background:var(--green)"></span>
+            Positive profits — share by ticker
+          </div>
         </div>
         <div class="pie-inner" id="pie-positive-inner">
           <div class="pie-empty">No data</div>
         </div>
       </div>
       <div class="pie-card">
-        <div class="pie-card-title">
-          <span class="dot" style="background:var(--red)"></span>
-          Losses — share by ticker
+        <div class="pie-card-header">
+          <div class="pie-card-title">
+            <span class="dot" style="background:var(--red)"></span>
+            Losses — share by ticker
+          </div>
         </div>
         <div class="pie-inner" id="pie-negative-inner">
           <div class="pie-empty">No data</div>
@@ -1711,7 +1785,7 @@
     }
 
     const slicesWithAngles = buildSliceAngles(slices);
-    const total = slices.reduce((s, sl) => s + sl.value, 0);
+    const maxVal = Math.max(...slices.map(s => s.value));
 
     const size = 160;
     const dpr = window.devicePixelRatio || 1;
@@ -1724,14 +1798,22 @@
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
+    // Left panel: donut
+    const canvasSide = document.createElement('div');
+    canvasSide.className = 'pie-canvas-side';
     const wrap = document.createElement('div');
     wrap.className = 'pie-canvas-wrap';
     wrap.appendChild(canvas);
+    canvasSide.appendChild(wrap);
 
+    // Right panel: legend rows with mini bars
+    const legendSide = document.createElement('div');
+    legendSide.className = 'pie-legend-side';
     const legend = document.createElement('div');
     legend.className = 'pie-legend';
 
     slicesWithAngles.forEach((sl, i) => {
+      const barPct = Math.round((sl.value / maxVal) * 100);
       const row = document.createElement('div');
       row.className = 'legend-row';
       row.dataset.idx = i;
@@ -1740,15 +1822,19 @@
           <span class="legend-dot" style="background:${sl.color}"></span>
           <span class="legend-ticker">${escapeHtml(sl.ticker)}</span>
         </div>
+        <div class="legend-bar-wrap">
+          <div class="legend-bar-fill" style="width:${barPct}%;background:${sl.color};opacity:0.6"></div>
+        </div>
         <span class="legend-pct">${sl.pct}%</span>
-        <span class="legend-val" style="color:${isPositive ? 'var(--green)' : 'var(--red)'}">${isPositive ? '+' : '-'}$${sl.rawVal.toFixed(2)}</span>
+        <span class="legend-val" style="color:${isPositive ? 'var(--green)' : 'var(--red)'}">${isPositive ? '+' : '-'}$${sl.rawVal.toFixed(0)}</span>
       `;
       legend.appendChild(row);
     });
 
+    legendSide.appendChild(legend);
     container.innerHTML = '';
-    container.appendChild(wrap);
-    container.appendChild(legend);
+    container.appendChild(canvasSide);
+    container.appendChild(legendSide);
 
     let hoveredIdx = null;
 
@@ -1758,10 +1844,9 @@
       drawDonut(ctx, size, slicesWithAngles, idx);
       ctx.restore();
 
-      // highlight legend row
       legend.querySelectorAll('.legend-row').forEach((r, i) => {
-        r.style.opacity = (idx === null || i === idx) ? '1' : '0.35';
-        r.style.fontWeight = i === idx ? '700' : '';
+        r.style.opacity = (idx === null || i === idx) ? '1' : '0.3';
+        r.style.background = i === idx ? 'rgba(255,255,255,0.04)' : '';
       });
     }
 
