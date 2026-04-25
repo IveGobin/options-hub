@@ -949,6 +949,152 @@
     display: none; /* replaced by top border */
   }
 
+  /* WEEKLY EXPIRATION CALENDAR */
+  .weekly-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+
+  .week-month-group {
+    background: var(--surface);
+  }
+
+  .week-month-header {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 10px 20px 8px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .week-month-total {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .week-month-total.empty {
+    color: var(--muted);
+    opacity: 0.4;
+    font-weight: 400;
+  }
+
+  .week-rows {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0;
+  }
+
+  .week-row {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid rgba(128,128,128,0.08);
+    border-right: 1px solid rgba(128,128,128,0.08);
+    transition: background 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .week-row:hover { background: var(--surface2); }
+
+  .week-row::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--border);
+    transition: background 0.2s;
+  }
+
+  .week-row.has-exp::before { background: var(--accent); }
+  .week-row.is-today::before { background: var(--blue); }
+
+  .week-row-inner {
+    padding: 12px 16px 12px 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .week-date-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .week-date {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.05em;
+  }
+
+  .week-row.no-exp .week-date { color: var(--muted); opacity: 0.45; }
+
+  .week-days-left {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .week-amount {
+    font-family: 'Space Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .week-row.no-exp .week-amount {
+    color: var(--border);
+    font-size: 15px;
+    font-weight: 400;
+    opacity: 0.6;
+  }
+
+  .week-tickers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .week-ticker-chip {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(200,255,0,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(200,255,0,0.2);
+    white-space: nowrap;
+  }
+
+  .week-ticker-chip span {
+    opacity: 0.7;
+    font-weight: 400;
+    margin-left: 3px;
+  }
+
 </style>
 </head>
 <body>
@@ -1127,6 +1273,14 @@
   <div class="section">
     <div class="section-title">Premium in play — next 4 months</div>
     <div class="monthly-grid" id="monthly-grid"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title" id="weekly-toggle" style="cursor:pointer;user-select:none;" onclick="toggleWeekly()">
+      Expiration calendar — by friday
+      <span id="weekly-chevron" style="margin-left:6px;font-size:11px;color:var(--muted);transition:transform 0.2s;display:inline-block;">▼</span>
+    </div>
+    <div id="weekly-grid" style="display:none;"></div>
   </div>
 
 <div class="section">
@@ -1484,6 +1638,7 @@
     renderPieChart('pie-positive-inner', positiveTickers.map(([t,d]) => [t, d.total]), GREEN_PALETTE, true);
     renderOpenPremiumPie(openRows);
     renderMonthlyPremium(openRows);
+    renderWeeklyExpirations(openRows);
     renderPieChart('pie-negative-inner', negativeTickers.map(([t,d]) => [t, d.total]), RED_PALETTE, false);
   }
 
@@ -1595,6 +1750,162 @@
     matrixBody.appendChild(totRow);
   }
 
+
+  function toggleWeekly() {
+    const grid = document.getElementById('weekly-grid');
+    const chevron = document.getElementById('weekly-chevron');
+    const open = grid.style.display !== 'none';
+    grid.style.display = open ? 'none' : 'block';
+    chevron.style.transform = open ? 'rotate(-90deg)' : 'rotate(0deg)';
+  }
+
+  // ---- WEEKLY EXPIRATION CALENDAR ----
+  function renderWeeklyExpirations(openRows) {
+    const container = document.getElementById('weekly-grid');
+    container.innerHTML = '';
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    // Find the next Friday on or after today, then collect all Fridays for ~4 months (18 weeks)
+    function nextFriday(from) {
+      const d = new Date(from);
+      const day = d.getDay(); // 0=Sun, 5=Fri
+      const diff = (5 - day + 7) % 7;
+      d.setDate(d.getDate() + diff);
+      return d;
+    }
+
+    // Find furthest expiry among open rows, default to 4 months out
+    let furthest = new Date(now);
+    furthest.setMonth(furthest.getMonth() + 4);
+    openRows.forEach(r => {
+      const exp = parseDate(getExpDate(r));
+      if (exp && exp > furthest) furthest = exp;
+    });
+    // Extend one extra week as buffer
+    furthest.setDate(furthest.getDate() + 7);
+
+    const firstFriday = nextFriday(now);
+    const fridays = [];
+    let cursor = new Date(firstFriday);
+    while (cursor <= furthest) {
+      fridays.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 7);
+    }
+
+    // Map each open row to its exact expiration date
+    // We match the date to the closest Friday (on or within the same week)
+    // But options expire ON the date in Exp. Date, so we just group by that date
+    // and show which Friday it falls on (usually the same day, but sometimes Thursdays for indexes)
+    // Strategy: group by exact exp date first, then display under the matching Friday bucket.
+    // A position belongs to a Friday if: expDate == friday OR expDate is within Mon-Thu of that same week
+    // (i.e., ISO week day <= 5, and same year+week). Most puts expire Friday, so exact match is common.
+
+    const fridayMap = {}; // key: friday date string -> { total, tickers: {ticker -> amount} }
+    fridays.forEach(f => {
+      fridayMap[f.toISOString().slice(0,10)] = { total: 0, tickers: {}, fridayDate: new Date(f) };
+    });
+
+    openRows.forEach(r => {
+      const expStr = getExpDate(r);
+      const prem   = toNum(r['Total Premium']);
+      const ticker = r['Ticker'];
+      if (!expStr || isNaN(prem) || prem <= 0) return;
+      const exp = parseDate(expStr);
+      if (!exp || isNaN(exp)) return;
+      exp.setHours(0, 0, 0, 0);
+
+      // Find which Friday bucket this expiration falls into:
+      // Same week = Mon to Fri of that Friday's week
+      for (const fKey of Object.keys(fridayMap)) {
+        const fri = fridayMap[fKey].fridayDate;
+        // Monday of this Friday's week
+        const mon = new Date(fri);
+        mon.setDate(fri.getDate() - 4);
+        if (exp >= mon && exp <= fri) {
+          fridayMap[fKey].total += prem;
+          fridayMap[fKey].tickers[ticker] = (fridayMap[fKey].tickers[ticker] || 0) + prem;
+          break;
+        }
+      }
+    });
+
+    // Group Fridays by month
+    const monthGroups = {}; // key: "YYYY-MM" -> [fridayKeys...]
+    const monthLabels = {};
+    fridays.forEach(f => {
+      const fKey = f.toISOString().slice(0,10);
+      const mk = fKey.slice(0,7);
+      if (!monthGroups[mk]) {
+        monthGroups[mk] = [];
+        monthLabels[mk] = f.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      }
+      monthGroups[mk].push(fKey);
+    });
+
+    const outerGrid = document.createElement('div');
+    outerGrid.className = 'weekly-grid';
+
+    Object.keys(monthGroups).sort().forEach(mk => {
+      const fKeys = monthGroups[mk];
+      const monthTotal = fKeys.reduce((s, k) => s + (fridayMap[k]?.total || 0), 0);
+
+      const group = document.createElement('div');
+      group.className = 'week-month-group';
+
+      const header = document.createElement('div');
+      header.className = 'week-month-header';
+      header.innerHTML = `
+        <span>${monthLabels[mk]}</span>
+        <span class="week-month-total ${monthTotal === 0 ? 'empty' : ''}">${monthTotal > 0 ? '+$' + monthTotal.toFixed(0) : '—'}</span>
+      `;
+      group.appendChild(header);
+
+      const rows = document.createElement('div');
+      rows.className = 'week-rows';
+
+      fKeys.forEach(fKey => {
+        const data    = fridayMap[fKey];
+        const hasExp  = data.total > 0;
+        const fri     = data.fridayDate;
+        const daysLeft = Math.round((fri - now) / (1000 * 60 * 60 * 24));
+        const isToday  = daysLeft === 0;
+
+        const weekEl = document.createElement('div');
+        weekEl.className = 'week-row' +
+          (hasExp  ? ' has-exp'  : ' no-exp') +
+          (isToday ? ' is-today' : '');
+
+        const dayLabel = fri.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        const daysStr  = daysLeft === 0 ? 'today' : daysLeft === 1 ? 'tomorrow' : `in ${daysLeft}d`;
+
+        const tickerChips = hasExp
+          ? Object.entries(data.tickers)
+              .sort((a,b) => b[1]-a[1])
+              .map(([t, v]) => `<span class="week-ticker-chip">${escapeHtml(t)}<span>+$${v.toFixed(0)}</span></span>`)
+              .join('')
+          : '';
+
+        weekEl.innerHTML = `
+          <div class="week-row-inner">
+            <div class="week-date-line">
+              <span class="week-date">${dayLabel}</span>
+              <span class="week-days-left">${daysStr}</span>
+            </div>
+            <div class="week-amount">${hasExp ? '+$' + data.total.toFixed(0) : '—'}</div>
+            ${hasExp ? `<div class="week-tickers">${tickerChips}</div>` : ''}
+          </div>
+        `;
+        rows.appendChild(weekEl);
+      });
+
+      group.appendChild(rows);
+      outerGrid.appendChild(group);
+    });
+
+    container.appendChild(outerGrid);
+  }
 
   // ---- OPEN PREMIUM PIE ----
   const OPEN_PALETTE = [
