@@ -1804,7 +1804,8 @@
 
     const fridayMap = {}; // key: friday date string -> { total, tickers: {ticker -> amount} }
     fridays.forEach(f => {
-      fridayMap[f.toISOString().slice(0,10)] = { total: 0, tickers: {}, fridayDate: new Date(f) };
+      const fKey = `${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}-${String(f.getDate()).padStart(2,'0')}`;
+      fridayMap[fKey] = { total: 0, tickers: {}, fridayDate: new Date(f) };
     });
 
     openRows.forEach(r => {
@@ -1835,7 +1836,7 @@
     const monthGroups = {}; // key: "YYYY-MM" -> [fridayKeys...]
     const monthLabels = {};
     fridays.forEach(f => {
-      const fKey = f.toISOString().slice(0,10);
+      const fKey = `${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}-${String(f.getDate()).padStart(2,'0')}`;
       const mk = fKey.slice(0,7);
       if (!monthGroups[mk]) {
         monthGroups[mk] = [];
