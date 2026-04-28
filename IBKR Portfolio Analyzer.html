@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IB Activity Report</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #13161d;
+    --surface2: #1a1e28;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #e8eaf0;
+    --text2: #8b90a0;
+    --text3: #555a6a;
+    --green: #00e5a0;
+    --green-dim: rgba(0,229,160,0.12);
+    --red: #ff5c5c;
+    --red-dim: rgba(255,92,92,0.12);
+    --blue: #4d9fff;
+    --blue-dim: rgba(77,159,255,0.1);
+    --amber: #ffb347;
+    --amber-dim: rgba(255,179,71,0.1);
+    --radius: 10px;
+    --radius-lg: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Sora', sans-serif; font-size: 14px; line-height: 1.6; min-height: 100vh; }
+  .mono { font-family: 'DM Mono', monospace; }
+
+  /* UPLOAD ZONE */
+  #upload-zone {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+  #upload-zone::before {
+    content: '';
+    position: absolute;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(77,159,255,0.06) 0%, transparent 70%);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .upload-card {
+    background: var(--surface);
+    border: 1.5px dashed var(--border2);
+    border-radius: var(--radius-lg);
+    padding: 3rem 4rem;
+    text-align: center;
+    max-width: 520px;
+    width: 100%;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+    z-index: 1;
+  }
+  .upload-card:hover, .upload-card.drag-over {
+    border-color: var(--blue);
+    background: var(--surface2);
+  }
+  .upload-icon {
+    width: 56px; height: 56px;
+    background: var(--blue-dim);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 1.5rem;
+    font-size: 24px;
+  }
+  .upload-title { font-size: 22px; font-weight: 600; margin-bottom: 0.5rem; }
+  .upload-sub { color: var(--text2); font-size: 13px; line-height: 1.7; }
+  .upload-sub strong { color: var(--text); font-weight: 500; }
+  #file-input { display: none; }
+  .upload-btn {
+    margin-top: 1.5rem;
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: 'Sora', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .upload-btn:hover { opacity: 0.85; }
+  .upload-hint { margin-top: 1rem; font-size: 12px; color: var(--text3); }
+  .error-msg { color: var(--red); font-size: 13px; margin-top: 1rem; display: none; }
+
+  /* REPORT */
+  #report { display: none; }
+  .report-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1.25rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .report-brand { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
+  .report-brand span { color: var(--blue); }
+  .report-meta { font-size: 12px; color: var(--text2); display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  .report-meta b { color: var(--text); font-weight: 500; }
+  .reset-btn {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text2);
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: 'Sora', sans-serif;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .reset-btn:hover { color: var(--text); border-color: var(--text2); }
+
+  .report-body { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+
+  /* SECTION */
+  .section { margin-bottom: 2.5rem; }
+  .section-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 1rem;
+  }
+  .section-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.1em;
+    color: var(--text3); text-transform: uppercase;
+  }
+  .section-line { flex: 1; height: 1px; background: var(--border); }
+
+  /* STAT ROWS — label left, value right, divider between */
+  .metrics { display: flex; flex-direction: column; gap: 0; }
+  .metric {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 1rem;
+  }
+  .metric:last-child { border-bottom: none; }
+  .metric-label { font-size: 13px; color: var(--text2); font-weight: 400; flex-shrink: 0; }
+  .metric-value { font-size: 15px; font-weight: 600; font-family: 'DM Mono', monospace; text-align: right; }
+  .metric-value.pos { color: var(--green); }
+  .metric-value.neg { color: var(--red); }
+  .metric-value.neu { color: var(--blue); }
+  .metric-split-vals { display: flex; align-items: baseline; gap: 16px; }
+  .metric-split-item { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+  .metric-split-tag { font-size: 10px; color: var(--text3); font-family: 'Sora', sans-serif; font-weight: 400; letter-spacing: 0.04em; text-transform: uppercase; }
+  .metric-sub { font-size: 11px; color: var(--text3); margin-left: 8px; font-weight: 400; }
+  /* stat group container */
+  .stat-group {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 4px 20px;
+  }
+  /* stat columns - side by side groups */
+  .stat-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 600px) { .stat-cols { grid-template-columns: 1fr; } }
+  .stat-col-title {
+    font-size: 11px; font-weight: 600; color: var(--text3);
+    letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 14px 0 8px; border-bottom: 1px solid var(--border);
+    margin-bottom: 2px;
+  }
+
+  /* CHART */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+  }
+  .chart-card-title { font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 1.25rem; }
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .chart-grid { grid-template-columns: 1fr; } }
+
+  /* TABS */
+  .tabs { display: flex; gap: 4px; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+  .tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text3);
+    font-size: 13px;
+    font-family: 'Sora', sans-serif;
+    font-weight: 500;
+    padding: 8px 16px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s;
+  }
+  .tab-btn:hover { color: var(--text2); }
+  .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface2); }
+  td.pos { color: var(--green); font-family: 'DM Mono', monospace; font-size: 12px; }
+  td.neg { color: var(--red); font-family: 'DM Mono', monospace; font-size: 12px; }
+  td.neu { color: var(--text2); font-family: 'DM Mono', monospace; font-size: 12px; }
+  td.sym { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500; color: var(--blue); }
+  td.sub-header { background: var(--surface2); color: var(--text3); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  .badge {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    padding: 2px 7px; border-radius: 4px; letter-spacing: 0.04em;
+    font-family: 'DM Mono', monospace;
+  }
+  .badge-put { background: var(--blue-dim); color: var(--blue); }
+  .badge-call { background: var(--amber-dim); color: var(--amber); }
+  .badge-open { background: rgba(0,229,160,0.1); color: var(--green); }
+  .badge-closed { background: rgba(255,255,255,0.05); color: var(--text3); }
+
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+  .tag-pos { background: var(--green-dim); color: var(--green); }
+  .tag-neg { background: var(--red-dim); color: var(--red); }
+
+  /* LEGEND */
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* SUMMARY ROW */
+  .summary-row td { background: var(--surface2) !important; font-weight: 600; border-top: 1px solid var(--border2); }
+
+  /* PROGRESS BAR */
+  .win-bar-wrap { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+  .win-bar { height: 4px; border-radius: 2px; background: var(--border); flex: 1; overflow: hidden; }
+  .win-bar-fill { height: 100%; border-radius: 2px; background: var(--green); }
+
+  /* NAV FLOW */
+  .nav-flow { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding-bottom: 4px; }
+  .nav-item { display: flex; flex-direction: column; align-items: center; min-width: 90px; }
+  .nav-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+    width: 100%;
+    font-size: 12px;
+  }
+  .nav-box-label { font-size: 10px; color: var(--text3); margin-bottom: 4px; }
+  .nav-box-val { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; }
+  .nav-arrow { font-size: 14px; color: var(--text3); align-self: center; padding: 0 4px; margin-top: -8px; }
+
+  /* FOOTER */
+  .report-footer { text-align: center; color: var(--text3); font-size: 11px; padding: 2rem; margin-top: 1rem; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<!-- UPLOAD ZONE -->
+<div id="upload-zone">
+  <div class="upload-card" id="drop-zone">
+    <div class="upload-icon">📊</div>
+    <div class="upload-title">IB Activity Report</div>
+    <p class="upload-sub">Drop your Interactive Brokers <strong>Activity Statement CSV</strong> here to generate a full portfolio report with stocks, options P&amp;L, and open positions.</p>
+    <button class="upload-btn" onclick="document.getElementById('file-input').click()">Choose CSV file</button>
+    <input type="file" id="file-input" accept=".csv">
+    <p class="upload-hint">Your data stays in your browser — nothing is uploaded.</p>
+    <p class="error-msg" id="error-msg"></p>
+  </div>
+</div>
+
+<!-- REPORT -->
+<div id="report">
+  <div class="report-header">
+    <div>
+      <div class="report-brand">IB <span>Report</span></div>
+    </div>
+    <div class="report-meta" id="header-meta"></div>
+    <button class="reset-btn" onclick="resetToUpload()">↩ New file</button>
+  </div>
+  <div class="report-body" id="report-body"></div>
+  <div class="report-footer">Generated from Interactive Brokers Activity Statement CSV · Data processed locally · Not financial advice.</div>
+</div>
+
+<script>
+// ── DRAG & DROP ──────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const errorMsg = document.getElementById('error-msg');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+function handleFile(file) {
+  if (!file) return;
+  if (!file.name.endsWith('.csv')) { showError('Please upload a .csv file.'); return; }
+  const reader = new FileReader();
+  reader.onload = e => { try { processCSV(e.target.result); } catch(err) { showError('Could not parse this CSV. Make sure it is an IBKR Activity Statement. ' + err.message); } };
+  reader.readAsText(file);
+}
+
+function showError(msg) { errorMsg.textContent = msg; errorMsg.style.display = 'block'; }
+
+function resetToUpload() {
+  document.getElementById('upload-zone').style.display = 'flex';
+  document.getElementById('report').style.display = 'none';
+  fileInput.value = '';
+  errorMsg.style.display = 'none';
+}
+
+// ── CSV PARSER ───────────────────────────────────────────────
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = [];
+  let i = 0, n = text.length;
+  while (i < n) {
+    const row = [];
+    while (i < n && text[i] !== '\n') {
+      if (text[i] === '"') {
+        let cell = ''; i++;
+        while (i < n) {
+          if (text[i] === '"' && text[i+1] === '"') { cell += '"'; i += 2; }
+          else if (text[i] === '"') { i++; break; }
+          else { cell += text[i++]; }
+        }
+        row.push(cell);
+      } else {
+        let cell = '';
+        while (i < n && text[i] !== ',' && text[i] !== '\n') cell += text[i++];
+        row.push(cell.trim());
+      }
+      if (i < n && text[i] === ',') i++;
+    }
+    if (i < n) i++;
+    if (row.length > 1 || (row.length === 1 && row[0])) rows.push(row);
+  }
+  return rows;
+}
+
+function num(v) { if (v === '--' || v === '' || v === undefined || v === null) return 0; const n = parseFloat(String(v).replace(/,/g,'')); return isNaN(n) ? 0 : n; }
+function fmt(v, dec=2) { const n = num(v); if (Math.abs(n) >= 1000) return (n<0?'-':'') + '$' + Math.abs(n).toLocaleString(undefined,{minimumFractionDigits:dec,maximumFractionDigits:dec}); return (n<0?'-$':' $') + Math.abs(n).toFixed(dec); }
+function fmtEur(v, dec=2) { const n = num(v); return (n<0?'-€':' €') + Math.abs(num(v)).toLocaleString(undefined,{minimumFractionDigits:dec,maximumFractionDigits:dec}); }
+function fmtN(v, dec=2) { const n = num(v); return (n>0?'+':n<0?'':'') + n.toFixed(dec); }
+function cls(v) { const n=num(v); return n>0?'pos':n<0?'neg':'neu'; }
+function pct(v) { return (num(v)*100).toFixed(2)+'%'; }
+
+// ── MAIN PROCESSOR ───────────────────────────────────────────
+function processCSV(text) {
+  const rows = parseCSV(text);
+
+  // Group rows by section
+  const sections = {};
+  for (const row of rows) {
+    const sec = row[0];
+    if (!sections[sec]) sections[sec] = [];
+    sections[sec].push(row);
+  }
+
+  function getData(sec) { return (sections[sec] || []).filter(r => r[1] === 'Data'); }
+
+  // ── STATEMENT INFO ──
+  const stmtData = getData('Statement');
+  const getField = (rows, name) => { const r = rows.find(r => r[2] === name); return r ? r[3] : ''; };
+  const period = getField(stmtData, 'Period');
+  const broker = getField(stmtData, 'BrokerName');
+  const generated = getField(stmtData, 'WhenGenerated');
+
+  const acctData = getData('Account Information');
+  const acctName = getField(acctData, 'Name');
+  const acctId = getField(acctData, 'Account');
+  const baseCcy = getField(acctData, 'Base Currency');
+
+  // ── NAV ──
+  const navData = getData('Net Asset Value');
+  // NAV cols: [2]=Asset Class [3]=Prior Total [4]=Current Long [5]=Current Short [6]=Current Total [7]=Change
+  const navMap = {};
+  for (const r of navData) { if (r[2] && r[2].trim()) { navMap[r[2].trim()] = { prior: num(r[3]), curLong: num(r[4]), curShort: num(r[5]), curTotal: num(r[6]), change: num(r[7]) }; } }
+  const navTotal = navMap["Total"] || {};
+  const navStart = navTotal.prior || 0;
+  const navEnd = navTotal.curTotal !== undefined ? navTotal.curTotal : (navTotal.curLong + navTotal.curShort);
+  const twrData = (sections['Net Asset Value'] || []).find(r => r[1] === 'Data' && r[2] && r[2].includes('%'));
+  const twr = twrData ? twrData[2] : '';
+
+  // ── CHANGE IN NAV ──
+  const navChange = getData('Change in NAV');
+  const nc = {};
+  for (const r of navChange) { nc[r[2]] = num(r[3]); }
+
+  // ── REALIZED & UNREALIZED ──
+  const ruData = getData('Realized & Unrealized Performance Summary');
+  const stocks = [], options = [];
+  for (const r of ruData) {
+    if (r[2] === 'Total' || r[2] === 'Total (All Assets)') continue;
+    const obj = {
+      cat: r[2], sym: r[3],
+      realST: num(r[5]), realSTLoss: num(r[6]),
+      realLT: num(r[7]), realLTLoss: num(r[8]),
+      realTotal: num(r[9]),
+      unrST: num(r[10]), unrSTLoss: num(r[11]),
+      unrLT: num(r[12]), unrLTLoss: num(r[13]),
+      unrTotal: num(r[14]),
+      total: num(r[15])
+    };
+    if (r[2] === 'Stocks') stocks.push(obj);
+    else if (r[2] === 'Equity and Index Options') options.push(obj);
+  }
+
+  // ── OPEN POSITIONS ──
+  const opData = getData('Open Positions').filter(r => r[2] === 'Summary');
+  const openStocks = [], openOptions = [];
+  for (const r of opData) {
+    const obj = { cat: r[3], ccy: r[4], sym: r[5], qty: num(r[6]), mult: num(r[7]), costPrice: num(r[8]), costBasis: num(r[9]), closePrice: num(r[10]), value: num(r[11]), unrPL: num(r[12]) };
+    if (r[3] === 'Stocks') openStocks.push(obj);
+    else if (r[3] === 'Equity and Index Options') openOptions.push(obj);
+  }
+
+  // ── CASH ──
+  const cashData = getData('Cash Report').filter(r => r[3] === 'Base Currency Summary');
+  const cashMap = {};
+  for (const r of cashData) { cashMap[r[2]] = num(r[4]); }
+
+  // Per-currency cash balances
+  const cashEUR = getData('Cash Report').filter(r => r[3] === 'EUR');
+  const cashUSD = getData('Cash Report').filter(r => r[3] === 'USD');
+  const getC = (rows, label) => { const r = rows.find(x => x[2] === label); return r ? num(r[4]) : 0; };
+  const endCashEUR     = getC(cashEUR, 'Ending Cash');
+  const endCashUSD     = getC(cashUSD, 'Ending Cash');
+  const settledCashEUR = getC(cashEUR, 'Ending Settled Cash');
+  const settledCashUSD = getC(cashUSD, 'Ending Settled Cash');
+  const collateralUSD  = getC(cashUSD, 'Ending Collateral Value');
+  const collateralBase = num((getData('Cash Report').find(r => r[3]==='Base Currency Summary' && r[2]==='Ending Collateral Value') || [])[4] || 0);
+  const endCashBase    = num((getData('Cash Report').find(r => r[3]==='Base Currency Summary' && r[2]==='Ending Cash') || [])[4] || 0);
+  const settledBase    = num((getData('Cash Report').find(r => r[3]==='Base Currency Summary' && r[2]==='Ending Settled Cash') || [])[4] || 0);
+  // Forex balances for EUR equivalent
+  const fxRows = getData('Forex Balances');
+  const fxUSDinEUR = num((fxRows.find(r => r[4]==='USD') || [])[9] || 0);
+  const fxEURcash  = num((fxRows.find(r => r[4]==='EUR') || [])[9] || 0);
+  const totalCashEUR = fxEURcash + fxUSDinEUR;
+
+  // ── DEPOSITS ──
+  const deposits = getData('Deposits & Withdrawals').filter(r => r[2] !== 'Total');
+  const totalDeposits = deposits.reduce((s,r) => s + num(r[5]), 0);
+
+  // ── COMMISSIONS ──
+  const totalComm = num(nc['Commissions'] || 0);
+
+  // ── OPTIONS SUMMARY (cash-based: proceeds + commissions per contract) ──
+  const tradeOptOrders = getData('Trades').filter(r => r[2] === 'Order' && r[3] === 'Equity and Index Options');
+  const optTradeMap = {};
+  for (const r of tradeOptOrders) {
+    const sym = r[5];
+    if (!optTradeMap[sym]) optTradeMap[sym] = { proceeds: 0, comm: 0 };
+    optTradeMap[sym].proceeds += num(r[10]);
+    optTradeMap[sym].comm += num(r[11]);
+  }
+  for (const o of options) {
+    const t = optTradeMap[o.sym];
+    o.tradePL = t ? +(t.proceeds + t.comm).toFixed(2) : o.realTotal;
+  }
+  // Split into closed/expired/assigned vs open
+  const closedOptions = options.filter(o => o.unrTotal === 0);
+  const openOpts = options.filter(o => o.unrTotal !== 0);
+
+  // Closed stats
+  const closedWin = closedOptions.filter(o => o.tradePL > 0).length;
+  const closedLose = closedOptions.filter(o => o.tradePL < 0).length;
+  const closedWinRate = closedOptions.length > 0 ? (closedWin / closedOptions.length * 100).toFixed(0) : 0;
+  const closedGross = closedOptions.reduce((s,o) => s + (o.tradePL > 0 ? o.tradePL : 0), 0);
+  const closedLoss  = closedOptions.reduce((s,o) => s + (o.tradePL < 0 ? o.tradePL : 0), 0);
+  const closedNet   = closedOptions.reduce((s,o) => s + o.tradePL, 0);
+
+  // Open stats — use Open Positions cost basis and current value directly
+  const openOptPositions = getData('Open Positions').filter(r => r[2]==='Summary' && r[3]==='Equity and Index Options');
+  const openPremiumCollected = openOptPositions.reduce((s,r) => s + Math.abs(num(r[9])), 0); // abs(costBasis)
+  const openBuybackCost      = openOptPositions.reduce((s,r) => s + Math.abs(num(r[11])), 0); // abs(current value)
+  const openProfitIfClosed   = openPremiumCollected - openBuybackCost; // profit if all closed now
+  const openWin  = openOptPositions.filter(r => Math.abs(num(r[9])) > Math.abs(num(r[11]))).length;
+  const openLose = openOptPositions.filter(r => Math.abs(num(r[9])) < Math.abs(num(r[11]))).length;
+  // Legacy aliases
+  const openUnrTotal = openProfitIfClosed;
+  const openNetPL = openProfitIfClosed;
+
+  // Legacy aliases used elsewhere
+  const optRealNet = closedNet;
+  const optUnrTotal = openOpts.reduce((s,o) => s + o.unrTotal, 0);
+  const optGrandTotal = closedNet + openNetPL;
+  const optRealWin = closedWin; const optRealLose = closedLose; const optWinRate = closedWinRate;
+  const optRealGross = closedGross; const optRealLoss = closedLoss;
+
+  // ── STOCK SUMMARY ──
+  const stockRealNet = stocks.reduce((s,o) => s + o.realTotal, 0);
+  const stockUnrNet = stocks.reduce((s,o) => s + o.unrTotal, 0);
+  const stockTotal = stocks.reduce((s,o) => s + o.total, 0);
+
+  // ── FEES ──
+  const feesData = getData('Fees').filter(r => r[2] === 'Other Fees');
+  const totalFees = feesData.reduce((s,r) => s + num(r[6]), 0);
+
+  // ── INSTRUMENT INFO ──
+  const instrData = getData('Financial Instrument Information');
+  const instrMap = {};
+  for (const r of instrData) { instrMap[r[2]] = r[3]; }
+
+  // ─────────────────────────────────────────────────────────
+  // BUILD HTML
+  // ─────────────────────────────────────────────────────────
+  document.getElementById('header-meta').innerHTML = `
+    <span><b>${acctName}</b> · ${acctId}</span>
+    <span>Period: <b>${period}</b></span>
+    <span>Base: <b>${baseCcy}</b></span>
+    <span>Generated: <b>${generated ? generated.split(',')[0] : ''}</b></span>
+  `;
+
+  const totalPL = num(nc['Mark-to-Market'] || 0) + num(nc['Dividends'] || 0) + num(nc['Interest'] || 0) + num(nc['Commissions'] || 0) + num(nc['Other Fees'] || 0) + num(nc['Withholding Tax'] || 0);
+
+  const rb = document.getElementById('report-body');
+  rb.innerHTML = '';
+
+  // ── SECTION HELPER ──
+  function section(title, html) {
+    return `<div class="section">
+      <div class="section-header">
+        <div class="section-label">${title}</div>
+        <div class="section-line"></div>
+      </div>
+      ${html}
+    </div>`;
+  }
+
+  function metric(label, val, cls_, sub='') {
+    return `<div class="metric">
+      <div class="metric-label">${label}</div>
+      <div style="display:flex;align-items:baseline;gap:6px;justify-content:flex-end;">
+        <div class="metric-value ${cls_}">${val}</div>
+        ${sub ? `<div class="metric-sub">${sub}</div>` : ''}
+      </div>
+    </div>`;
+  }
+  function metricGroup(html) {
+    return `<div class="stat-group">${html}</div>`;
+  }
+  function metricDouble(label, val1, tag1, cls1, val2, tag2, cls2) {
+    return `<div class="metric">
+      <div class="metric-label">${label}</div>
+      <div class="metric-split-vals">
+        <div class="metric-split-item">
+          <div class="metric-split-tag">${tag1}</div>
+          <div class="metric-value ${cls1}">${val1}</div>
+        </div>
+        <div class="metric-split-item">
+          <div class="metric-split-tag">${tag2}</div>
+          <div class="metric-value ${cls2}">${val2}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ── 1. PORTFOLIO SNAPSHOT ──
+  const organicPL = navEnd - navStart - totalDeposits;
+  const snap = `
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem;margin-bottom:1rem;">
+    <div style="display:grid;grid-template-columns:1fr auto;align-items:start;gap:2rem;margin-bottom:2rem;">
+      <div>
+        <div style="font-size:12px;color:var(--text3);font-weight:500;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;">Total portfolio value</div>
+        <div style="font-size:48px;font-weight:600;font-family:'DM Mono',monospace;color:var(--text);letter-spacing:-0.02em;line-height:1;">€${navEnd.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:13px;color:var(--text3);">Started at</span>
+          <span style="font-size:14px;font-family:'DM Mono',monospace;color:var(--text2);">€${navStart.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          <span style="color:var(--border2);">·</span>
+          <span style="font-size:13px;color:var(--text3);">${period}</span>
+        </div>
+      </div>
+      ${twr ? `<div style="text-align:right;">
+        <div style="font-size:12px;color:var(--text3);font-weight:500;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;">Time-weighted return</div>
+        <div style="font-size:36px;font-weight:600;font-family:'DM Mono',monospace;color:${parseFloat(twr)>=0?'var(--green)':'var(--red)'};line-height:1;">${parseFloat(twr)>=0?'+':''}${parseFloat(twr).toFixed(2)}%</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:6px;">excl. deposits</div>
+      </div>` : ''}
+    </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px;background:var(--border);border-radius:10px;overflow:hidden;">
+      <div style="background:var(--surface);padding:16px 18px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;">Organic P&amp;L</div>
+        <div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;color:${organicPL>=0?'var(--green)':'var(--red)'};white-space:nowrap;">${organicPL>=0?'+':''}€${Math.abs(organicPL).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:11px;color:var(--text3);font-weight:400;">trading gains</span></div>
+      </div>
+      <div style="background:var(--surface);padding:16px 18px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;">Cash deposited</div>
+        <div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;color:var(--blue);white-space:nowrap;">+€${totalDeposits.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:11px;color:var(--text3);font-weight:400;">${deposits.length} transfers</span></div>
+      </div>
+      <div style="background:var(--surface);padding:16px 18px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;">Options income</div>
+        <div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;color:${closedNet>=0?'var(--green)':'var(--red)'};white-space:nowrap;">${closedNet>=0?'+':''}$${Math.abs(closedNet).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:11px;color:var(--text3);font-weight:400;">${closedOptions.length} closed</span></div>
+      </div>
+      <div style="background:var(--surface);padding:16px 18px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;">Stock P&amp;L</div>
+        <div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;color:${stockTotal>=0?'var(--green)':'var(--red)'};white-space:nowrap;">${stockTotal>=0?'+':''}$${Math.abs(stockTotal).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:11px;color:var(--text3);font-weight:400;">realized + unr.</span></div>
+      </div>
+      <div style="background:var(--surface);padding:16px 18px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;">Commissions</div>
+        <div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;color:var(--red);white-space:nowrap;">€${totalComm.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:11px;color:var(--text3);font-weight:400;">total paid</span></div>
+      </div>
+      <div style="background:var(--surface);padding:16px 18px;grid-column:1/-1;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-weight:500;">Cash on account</div>
+        <div style="font-size:28px;font-weight:600;font-family:'DM Mono',monospace;color:var(--text);white-space:nowrap;">€${(totalCashEUR+collateralBase).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:13px;color:var(--text3);font-weight:400;">EUR+USD</span></div>
+      </div>
+    </div>
+  `;
+
+  // ── 2. NAV FLOW ──
+  const navItems = [
+    { label: 'Starting', val: navStart, ccy: '€' },
+    { label: 'Mark-to-Mkt', val: num(nc['Mark-to-Market']||0), ccy: '' },
+    { label: 'Deposits', val: num(nc['Deposits & Withdrawals']||0), ccy: '' },
+    { label: 'Options P&L', val: optRealNet, ccy: '' },
+    { label: 'Interest', val: num(nc['Interest']||0) + num(nc['Change in Interest Accruals']||0), ccy: '' },
+    { label: 'Fees', val: totalFees + num(nc['Commissions']||0) + num(nc['Withholding Tax']||0), ccy: '' },
+    { label: 'Ending', val: navEnd, ccy: '€' },
+  ];
+  const navFlowHtml = '<div style="display:flex;align-items:stretch;gap:0;overflow-x:auto;padding-bottom:4px;">' +
+    navItems.map(function(it,i) {
+      var col = (i===0||i===navItems.length-1) ? 'var(--blue)' : (it.val>=0 ? 'var(--green)' : 'var(--red)');
+      var valStr = (it.val<0?'-':'') + it.ccy + Math.abs(it.val).toLocaleString(undefined,{maximumFractionDigits:0});
+      var arrow = i < navItems.length-1 ? '<div style="font-size:18px;color:var(--text3);padding:0 8px;flex-shrink:0;">→</div>' : '';
+      return '<div style="display:flex;align-items:center;">'
+        + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 22px;min-width:110px;text-align:center;">'
+        + '<div style="font-size:11px;color:var(--text3);font-weight:500;letter-spacing:0.04em;margin-bottom:10px;text-transform:uppercase;">' + it.label + '</div>'
+        + '<div style="font-size:18px;font-weight:600;font-family:DM Mono,monospace;color:' + col + ';white-space:nowrap;">' + valStr + '</div>'
+        + '</div>'
+        + arrow
+        + '</div>';
+    }).join('') + '</div>';
+
+  // ── 3. STOCK P&L TABLE ──
+  // Enrich stocks with open position data
+  const openStockMap = {};
+  for (const p of openStocks) { openStockMap[p.sym] = p; }
+
+  const stockRows = stocks.map(s => {
+    const op = openStockMap[s.sym];
+    const isOpen = !!op;
+    const ccy = op ? op.ccy : 'USD';
+    const ccySign = ccy === 'EUR' ? '€' : '$';
+    const qty = op ? op.qty : '—';
+    const costBasis = op ? op.costBasis : null;
+    const costPrice = op ? op.costPrice : null;
+    const lastPrice = op ? op.closePrice : null;
+    const mktValue = op ? op.value : null;
+    return `<tr>
+      <td class="sym">${s.sym}</td>
+      <td style="color:var(--text2);font-size:12px;">${instrMap[s.sym] || ''}</td>
+      <td class="neu">${ccy}</td>
+      <td class="neu" style="text-align:right;">${isOpen ? qty.toLocaleString() : '<span style="color:var(--text3)">sold</span>'}</td>
+      <td class="neu" style="text-align:right;">${costPrice !== null ? ccySign + num(costPrice).toFixed(2) : '—'}</td>
+      <td class="neu" style="text-align:right;">${costBasis !== null ? ccySign + num(costBasis).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</td>
+      <td class="neu" style="text-align:right;">${lastPrice !== null ? ccySign + num(lastPrice).toFixed(2) : '—'}</td>
+      <td class="neu" style="text-align:right;">${mktValue !== null ? ccySign + num(mktValue).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0}) : '—'}</td>
+      <td class="${cls(s.realTotal)}" style="text-align:right;">${s.realTotal !== 0 ? fmtN(s.realTotal) : '—'}</td>
+      <td class="${cls(s.unrTotal)}" style="text-align:right;">${s.unrTotal !== 0 ? fmtN(s.unrTotal) : '—'}</td>
+      <td class="${cls(s.total)}" style="text-align:right;font-weight:500;">${fmtN(s.total)}</td>
+    </tr>`;
+  }).join('');
+
+  const totalCostBasis = openStocks.reduce((s,p) => s + p.costBasis, 0);
+  const totalMktValue  = openStocks.reduce((s,p) => s + p.value, 0);
+
+  const stockSummaryRow = `<tr class="summary-row">
+    <td colspan="6" class="sym">TOTAL</td>
+    <td></td>
+    <td style="text-align:right;font-family:'DM Mono',monospace;font-size:12px;">$${totalMktValue.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+    <td class="${cls(stockRealNet)}" style="text-align:right;">${fmtN(stockRealNet)}</td>
+    <td class="${cls(stockUnrNet)}" style="text-align:right;">${fmtN(stockUnrNet)}</td>
+    <td class="${cls(stockTotal)}" style="text-align:right;font-weight:500;">${fmtN(stockTotal)}</td>
+  </tr>`;
+
+  const stockTable = `<div class="table-wrap"><table>
+    <thead><tr>
+      <th>Symbol</th><th>Description</th><th>CCY</th>
+      <th style="text-align:right;">Qty</th>
+      <th style="text-align:right;">Avg cost</th>
+      <th style="text-align:right;">Cost basis</th>
+      <th style="text-align:right;">Last price</th>
+      <th style="text-align:right;">Mkt value</th>
+      <th style="text-align:right;">Realized P&amp;L</th>
+      <th style="text-align:right;">Unrealized P&amp;L</th>
+      <th style="text-align:right;">Total P&amp;L</th>
+    </tr></thead>
+    <tbody>${stockRows}${stockSummaryRow}</tbody>
+  </table></div>`;
+
+  // ── 4. OPTIONS TABLE ──
+  function optType(sym) { return sym.endsWith(' C') || / \d+ C$/.test(sym) ? 'call' : 'put'; }
+  function optStatus(o) { return o.unrTotal !== 0 ? 'open' : 'closed'; }
+
+  const optRows = options.map(o => {
+    const type = optType(o.sym);
+    const status = optStatus(o);
+    const isOpen = status === 'open';
+    const openPos = openOptions.find(p => p.sym.trim() === o.sym.trim());
+    return `<tr>
+      <td class="sym">${o.sym}</td>
+      <td><span class="badge badge-${type}">${type.toUpperCase()}</span></td>
+      <td><span class="badge badge-${status}">${status}</span>${isOpen && openPos ? ` <span style="font-size:11px;color:var(--text3)">${openPos.qty}</span>` : ''}</td>
+      <td class="${cls(o.tradePL)}">${fmtN(o.tradePL)}</td>
+      <td class="${cls(o.unrTotal)}">${!isOpen ? '—' : fmtN(o.unrTotal)}</td>
+      <td class="${cls(o.total)}">${fmtN(o.total)}</td>
+    </tr>`;
+  }).join('');
+
+  const optSummaryRow = `<tr class="summary-row">
+    <td colspan="3" class="sym">TOTAL</td>
+    <td class="${cls(optRealNet)}">${fmtN(optRealNet)}</td>
+    <td class="${cls(optUnrTotal)}">${fmtN(optUnrTotal)}</td>
+    <td class="${cls(optGrandTotal)}">${fmtN(optGrandTotal)}</td>
+  </tr>`;
+
+  const optTable = `<div class="table-wrap"><table>
+    <thead><tr><th>Contract</th><th>Type</th><th>Status / Qty</th><th>Realized P&amp;L</th><th>Unrealized P&amp;L</th><th>Total P&amp;L</th></tr></thead>
+    <tbody>${optRows}${optSummaryRow}</tbody>
+  </table></div>`;
+
+  // ── 5. OPEN POSITIONS TABLE ──
+  const openStockRows = openStocks.map(p => `<tr>
+    <td class="sym">${p.sym}</td>
+    <td>${instrMap[p.sym] || p.sym}</td>
+    <td class="neu">${p.ccy}</td>
+    <td class="neu">${p.qty.toLocaleString()}</td>
+    <td class="neu">${p.ccy === 'EUR' ? '€' : '$'}${p.costPrice.toFixed(2)}</td>
+    <td class="neu">${p.ccy === 'EUR' ? '€' : '$'}${p.closePrice.toFixed(2)}</td>
+    <td class="neu">${p.ccy === 'EUR' ? '€' : '$'}${Math.round(p.value).toLocaleString()}</td>
+    <td class="${cls(p.unrPL)}">${(p.unrPL >= 0 ? '+' : '') + (p.ccy === 'EUR' ? '€' : '$') + Math.abs(p.unrPL).toFixed(0)}</td>
+  </tr>`).join('');
+
+  const openOptRows = openOptions.map(p => {
+    const type = optType(p.sym);
+    return `<tr>
+      <td class="sym">${p.sym}</td>
+      <td><span class="badge badge-${type}">${type.toUpperCase()}</span></td>
+      <td class="neu">USD</td>
+      <td class="neu">${p.qty}</td>
+      <td class="neu">$${p.costPrice.toFixed(2)}</td>
+      <td class="neu">$${p.closePrice.toFixed(2)}</td>
+      <td class="neu">$${Math.abs(Math.round(p.value)).toLocaleString()}</td>
+      <td class="${cls(p.unrPL)}">${(p.unrPL >= 0 ? '+' : '') + '$' + Math.abs(p.unrPL).toFixed(0)}</td>
+    </tr>`;
+  }).join('');
+
+  // Open positions totals
+  const openStockTotalValue  = openStocks.reduce((s,p) => s + p.value, 0);
+  const openStockTotalUnrPL  = openStocks.reduce((s,p) => s + p.unrPL, 0);
+  const openOptTotalValue    = openOptions.reduce((s,p) => s + p.value, 0);
+  const openOptTotalUnrPL    = openOptions.reduce((s,p) => s + p.unrPL, 0);
+  const grandOpenValue       = openStockTotalValue + openOptTotalValue;
+  const grandOpenUnrPL       = openStockTotalUnrPL + openOptTotalUnrPL;
+
+  const openStockTotalRow = `<tr class="summary-row">
+    <td colspan="6" class="sym">Stocks total</td>
+    <td style="text-align:right;font-family:'DM Mono',monospace;font-size:12px;">€/$ ${Math.round(openStockTotalValue).toLocaleString()}</td>
+    <td class="${openStockTotalUnrPL >= 0 ? 'pos' : 'neg'}" style="text-align:right;">${(openStockTotalUnrPL >= 0 ? '+' : '') + '$' + Math.abs(openStockTotalUnrPL).toFixed(0)}</td>
+  </tr>`;
+
+  const openOptTotalRow = `<tr class="summary-row">
+    <td colspan="6" class="sym">Options total</td>
+    <td style="text-align:right;font-family:'DM Mono',monospace;font-size:12px;">$${Math.abs(Math.round(openOptTotalValue)).toLocaleString()}</td>
+    <td class="${openOptTotalUnrPL >= 0 ? 'pos' : 'neg'}" style="text-align:right;">${(openOptTotalUnrPL >= 0 ? '+' : '') + '$' + Math.abs(openOptTotalUnrPL).toFixed(0)}</td>
+  </tr>`;
+
+  const grandTotalRow = `<tr style="background:var(--surface2);border-top:1px solid var(--blue);border-bottom:1px solid var(--blue);">
+    <td colspan="6" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:var(--blue);padding:9px 10px;">GRAND TOTAL</td>
+    <td style="text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:var(--text);padding:9px 10px;">€/$ ${Math.round(Math.abs(grandOpenValue)).toLocaleString()}</td>
+    <td class="${grandOpenUnrPL >= 0 ? 'pos' : 'neg'}" style="text-align:right;font-weight:600;padding:9px 10px;">${(grandOpenUnrPL >= 0 ? '+' : '') + '$' + Math.abs(grandOpenUnrPL).toFixed(0)}</td>
+  </tr>`;
+
+  const openTable = `<div class="table-wrap"><table>
+    <thead><tr><th>Symbol</th><th>Description / Type</th><th>CCY</th><th>Qty</th><th>Avg Cost</th><th>Last Price</th><th>Market Value</th><th>Unrealized P&amp;L</th></tr></thead>
+    <tbody>
+      ${openStocks.length ? `<tr><td colspan="8" class="sub-header">Stocks</td></tr>${openStockRows}${openStockTotalRow}` : ''}
+      ${openOptions.length ? `<tr><td colspan="8" class="sub-header">Short options</td></tr>${openOptRows}${openOptTotalRow}` : ''}
+      ${grandTotalRow}
+    </tbody>
+  </table></div>`;
+
+  // ── 6. OPTIONS SUMMARY METRICS ──
+  const optSummary = `
+    <div class="stat-cols">
+      <div>
+        <div class="stat-col-title">Closed / Expired / Assigned</div>
+        ${metricGroup(`
+          ${metric('Net realized', fmtN(closedNet), closedNet >= 0 ? 'pos' : 'neg')}
+          ${metric('Gross wins', fmtN(closedGross), 'pos', closedWin + ' contracts')}
+          ${metric('Gross losses', fmtN(closedLoss), 'neg', closedLose + ' contracts')}
+          ${metric('Win rate', closedWinRate + '%', parseInt(closedWinRate) >= 50 ? 'pos' : 'neg', closedOptions.length + ' closed')}
+        `)}
+      </div>
+      <div>
+        <div class="stat-col-title">Open positions</div>
+        ${metricGroup(`
+          ${metric('Premium collected', fmtN(openPremiumCollected), 'neu', openOptPositions.length + ' contracts')}
+          ${metric('Buyback cost now', fmtN(-openBuybackCost), 'neg', 'to close all today')}
+          ${metric('Profit if closed now', fmtN(openProfitIfClosed), openProfitIfClosed >= 0 ? 'pos' : 'neg', 'premium − buyback')}
+          ${metric('Still at risk', fmtN(openBuybackCost), 'neg', openWin + ' winning · ' + openLose + ' losing')}
+        `)}
+      </div>
+    </div>`;
+
+  // ── 7. CASH BALANCES ──
+  const cashBalances = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:1.5rem;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;">
+        <div style="font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);">EUR account</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Ending cash</span><span style="font-family:'DM Mono',monospace;color:var(--text);">€${endCashEUR.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Settled cash</span><span style="font-family:'DM Mono',monospace;color:var(--text);">€${settledCashEUR.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;">
+        <div style="font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);">USD account</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Ending cash</span><span style="font-family:'DM Mono',monospace;color:var(--text);">$${endCashUSD.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Settled cash</span><span style="font-family:'DM Mono',monospace;color:var(--text);">$${settledCashUSD.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;border-top:1px solid var(--border);padding-top:8px;margin-top:2px;"><span style="color:var(--text2);">Collateral (lent stocks)</span><span style="font-family:'DM Mono',monospace;color:var(--amber);">$${collateralUSD.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Net cash balance</span><span style="font-family:'DM Mono',monospace;color:var(--text);font-weight:500;">$${(endCashUSD + collateralUSD).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+        </div>
+      </div>
+      <div style="background:var(--surface);border:2px solid var(--blue);border-radius:var(--radius-lg);padding:1.25rem;">
+        <div style="font-size:11px;font-weight:600;color:var(--blue);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);">Total (EUR equivalent)</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">EUR cash</span><span style="font-family:'DM Mono',monospace;color:var(--text);">€${fxEURcash.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">USD cash (in EUR)</span><span style="font-family:'DM Mono',monospace;color:var(--text);">€${fxUSDinEUR.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Collateral (in EUR)</span><span style="font-family:'DM Mono',monospace;color:var(--amber);">€${collateralBase.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:600;border-top:1px solid var(--border2);padding-top:10px;margin-top:4px;"><span style="color:var(--text);">Total cash</span><span style="font-family:'DM Mono',monospace;color:var(--blue);">€${(totalCashEUR + collateralBase).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+        </div>
+      </div>
+    </div>`;
+
+  // ── 8. CASH & OTHER ──
+  const div_data = getData('Dividends').find(r => r[2] === 'Total in EUR');
+  const divEur = div_data ? num(div_data[5]) : 0;
+  const int_data = getData('Interest');
+  const intTotal = int_data.find(r => r[2] === 'Total in EUR');
+  const intEur = intTotal ? num(intTotal[5]) : 0;
+  const accrual_data = getData('Interest Accruals');
+  const accrualEndingRow = accrual_data.find(r => r[2] === 'Base Currency Summary' && r[3] === 'Ending Accrual Balance');
+  const accrualEur = accrualEndingRow ? num(accrualEndingRow[4]) : 0;
+  const wht_data = getData('Withholding Tax');
+  const whtEur = wht_data.find(r => r[2] === 'Total in EUR');
+  const whtVal = whtEur ? num(whtEur[5]) : 0;
+
+  // lending
+  const lendInterest = getData('Stock Yield Enhancement Program Securities Lent Interest Details');
+  const lendTotal = lendInterest.find(r => r[2] === 'Total in EUR');
+  const lendVal = lendTotal ? num(lendTotal[10]) : 0;
+
+  const cashSummary = `<div class="stat-cols">
+    <div>${metricGroup(`
+      ${metric('Total deposits', fmtEur(totalDeposits), 'pos', deposits.length + ' transfers')}
+      ${metric('Dividends', fmtEur(divEur), 'pos')}
+      ${metricDouble('Broker interest', fmtEur(intEur), 'settled', intEur >= 0 ? 'pos' : 'neg', fmtEur(accrualEur), 'accrued', accrualEur >= 0 ? 'pos' : 'neg')}
+    `)}</div>
+    <div>${metricGroup(`
+      ${metric('Withholding tax', fmtEur(whtVal), 'neg')}
+      ${metric('Market data fees', fmtEur(totalFees), 'neg', feesData.length + ' charges')}
+      ${lendVal ? metric('Stock lending income', '€' + lendVal.toFixed(2), 'pos', 'SYEP') : metric('Stock lending income', '€0.00', 'neu')}
+    `)}</div>
+  </div>`;
+
+  // ── TABS ──
+  const tabsHtml = `
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(event,'tab-stocks')">Stocks</button>
+      <button class="tab-btn" onclick="switchTab(event,'tab-options')">Options</button>
+      <button class="tab-btn" onclick="switchTab(event,'tab-open')">Open Positions</button>
+    </div>
+    <div id="tab-stocks" class="tab-pane active">${stockTable}</div>
+    <div id="tab-options" class="tab-pane">${optTable}</div>
+    <div id="tab-open" class="tab-pane">${openTable}</div>
+  `;
+
+  // ── GROUP OPTIONS BY MONTH ──
+  // closedPL   = R&U realTotal (locked in on closed/expired contracts)
+  // openProfit = profitIfClosed = premium collected - current buyback cost (open positions only)
+  // Map open positions: sym -> premium collected (abs costBasis)
+  const openOptPosMap = {};
+  getData('Open Positions').filter(r => r[2]==='Summary' && r[3]==='Equity and Index Options')
+    .forEach(r => { openOptPosMap[r[5].trim()] = Math.abs(num(r[9])); });
+
+  const optByMonth = {};
+  for (const o of options) {
+    const m = o.sym.match(/(\d{2})([A-Z]{3})(\d{2})/);
+    const key = m ? m[2] + "'" + m[3] : 'Other';
+    if (!optByMonth[key]) optByMonth[key] = { closedPL: 0, premiumCollected: 0, count: 0 };
+    const isOpen = openOptPosMap.hasOwnProperty(o.sym.trim());
+    if (isOpen) {
+      optByMonth[key].premiumCollected += openOptPosMap[o.sym.trim()];
+    } else {
+      optByMonth[key].closedPL += o.realTotal;
+    }
+    optByMonth[key].count++;
+  }
+  // Sort by calendar month
+  const monthOrder = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const sortedMonths = Object.keys(optByMonth).sort((a,b) => {
+    const ma = monthOrder.indexOf(a.substring(0,3));
+    const mb = monthOrder.indexOf(b.substring(0,3));
+    return ma - mb;
+  });
+
+  // ── CHARTS ──
+  const chartsHtml = `
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <div class="chart-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+          <div class="chart-card-title" style="margin:0;">Options P&amp;L grouped by expiry month</div>
+          <div style="display:flex;gap:14px;font-size:12px;color:var(--text3);">
+            <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#00e5a0;display:inline-block;"></span>Profit</span>
+            <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#ff5c5c;display:inline-block;"></span>Loss</span>
+            <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#4d9fff;display:inline-block;"></span>Open (unrealized)</span>
+          </div>
+        </div>
+        <div style="position:relative;height:260px"><canvas id="optChart" role="img" aria-label="Options P&L by month"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+          <div class="chart-card-title" style="margin:0;">Stock P&amp;L by position</div>
+          <div style="display:flex;gap:14px;font-size:12px;color:var(--text3);">
+            <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#00e5a0;display:inline-block;"></span>Realized</span>
+            <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#4d9fff;display:inline-block;"></span>Unrealized</span>
+          </div>
+        </div>
+        <div style="position:relative;height:220px"><canvas id="stockChart" role="img" aria-label="Stock P&L chart"></canvas></div>
+      </div>
+    </div>
+  `;
+
+  // ── ASSEMBLE ──
+  rb.innerHTML = [
+    section('Portfolio Snapshot', snap),
+    section('Cash Balances', cashBalances),
+    section('Cash &amp; Other', cashSummary),
+    section('NAV Flow', navFlowHtml),
+    section('Options Summary', optSummary),
+    section('P&amp;L Detail', tabsHtml),
+    section('Charts', chartsHtml),
+  ].join('');
+
+  // ── RENDER CHARTS ──
+  // Options by month - grouped bar: closed P&L + open unrealized
+  const optMonthLabels = sortedMonths;
+  const optMonthClosed = sortedMonths.map(k => +optByMonth[k].closedPL.toFixed(2));
+  const optMonthOpen   = sortedMonths.map(k => +optByMonth[k].premiumCollected.toFixed(2));
+  const optMonthColors = optMonthClosed.map(v => v >= 0 ? '#00e5a0' : '#ff5c5c');
+
+  new Chart(document.getElementById('optChart'), {
+    type: 'bar',
+    data: {
+      labels: optMonthLabels,
+      datasets: [
+        { label: 'Closed P&L', data: optMonthClosed, backgroundColor: optMonthColors, borderRadius: 6, barPercentage: 0.5 },
+        { label: 'Open (premium collected)', data: optMonthOpen, backgroundColor: 'rgba(77,159,255,0.55)', borderRadius: 6, barPercentage: 0.5 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterBody: (items) => {
+              return 'Contracts: ' + optByMonth[sortedMonths[items[0].dataIndex]].count;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#8b90a0', font: { size: 12, family: 'DM Mono' } }, grid: { display: false } },
+        y: { ticks: { color: '#555a6a', font: { size: 11 }, callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { display: false } }
+      }
+    }
+  });
+
+  // Stock chart — horizontal bars, sorted by total P&L
+  const stockSorted = [...stocks].sort((a,b) => b.total - a.total);
+  const stockLabels = stockSorted.map(s => s.sym);
+  const stockReal   = stockSorted.map(s => +s.realTotal.toFixed(2));
+  const stockUnr    = stockSorted.map(s => +s.unrTotal.toFixed(2));
+  const stockRealColors = stockReal.map(v => v >= 0 ? '#00e5a0' : '#ff5c5c');
+  const stockUnrColors  = stockUnr.map(v => v >= 0 ? 'rgba(77,159,255,0.65)' : 'rgba(255,92,92,0.5)');
+
+  new Chart(document.getElementById('stockChart'), {
+    type: 'bar',
+    data: {
+      labels: stockLabels,
+      datasets: [
+        { label: 'Realized', data: stockReal, backgroundColor: stockRealColors, borderRadius: 4, barPercentage: 0.55 },
+        { label: 'Unrealized', data: stockUnr, backgroundColor: stockUnrColors, borderRadius: 4, barPercentage: 0.55 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8b90a0', font: { size: 12, family: 'DM Mono' } }, grid: { display: false } },
+        y: { ticks: { color: '#555a6a', font: { size: 11 }, callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { display: false } }
+      }
+    }
+  });
+
+  document.getElementById('upload-zone').style.display = 'none';
+  document.getElementById('report').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+
+function switchTab(e, id) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  e.target.classList.add('active');
+  document.getElementById(id).classList.add('active');
+}
+</script>
+<script>
+  // Hub integration — height reporting for mobile iframe resize
+  (function() {
+    function reportHeight() {
+      try { parent.postMessage({ type: 'hub-height', height: document.body.scrollHeight }, '*'); } catch(e) {}
+    }
+    window.addEventListener('load', reportHeight);
+    window.addEventListener('resize', reportHeight);
+    if (window.MutationObserver) {
+      new MutationObserver(reportHeight).observe(document.body, { childList: true, subtree: true, attributes: true });
+    }
+  })();
+</script>
+</body>
+</html>

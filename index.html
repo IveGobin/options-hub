@@ -19,7 +19,7 @@
   body[data-theme="dark"] { background: #141414; color: #e0e0e0; }
 
   .sidebar {
-    width: 230px;
+    width: 184px;
     background: #fff;
     border-right: 1px solid rgba(0,0,0,0.08);
     display: flex;
@@ -68,6 +68,7 @@
   .dot-put  { background: #1D9E75; }
   .dot-call { background: #D85A30; }
   .dot-gen  { background: #7F77DD; }
+  .dot-ibkr { background: #00b4d8; }
 
   .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
@@ -139,6 +140,7 @@
   .card-icon.put  { background: #E1F5EE; }
   .card-icon.call { background: #FAECE7; }
   .card-icon.gen  { background: #EEEDFE; }
+  .card-icon.ibkr { background: #E0F6FB; }
   .card-name { font-size: 13px; font-weight: 500; }
   body[data-theme="dark"] .card-name { color: #e0e0e0; }
   .card-tag  { font-size: 11px; color: #888; margin-top: 2px; }
@@ -180,6 +182,16 @@
     <div class="nav-label">Call Options</div>
     <div class="nav-item" onclick="openTool('Call Analyzer.html','Call Analyzer')">
       <span class="dot dot-call"></span> Call Analyzer
+    </div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">IBKR</div>
+    <div class="nav-item" onclick="openTool('IBKR Analyzer.html','IBKR Analyzer')">
+      <span class="dot dot-ibkr"></span> IBKR Analyzer
+    </div>
+    <div class="nav-item" onclick="openTool('IBKR Portfolio Analyzer.html','IB Portfolio')">
+      <span class="dot dot-ibkr"></span> IB Portfolio
     </div>
   </div>
 
@@ -232,6 +244,16 @@
           <div class="card-icon call">📊</div>
           <div class="card-name">Call Analyzer</div>
           <div class="card-tag">Call Options</div>
+        </div>
+        <div class="card" onclick="openTool('IBKR Analyzer.html','IBKR Analyzer')">
+          <div class="card-icon ibkr">📈</div>
+          <div class="card-name">IBKR Analyzer</div>
+          <div class="card-tag">IBKR</div>
+        </div>
+        <div class="card" onclick="openTool('IBKR Portfolio Analyzer.html','IB Portfolio')">
+          <div class="card-icon ibkr">🏦</div>
+          <div class="card-name">IB Portfolio</div>
+          <div class="card-tag">IBKR</div>
         </div>
         <div class="card" onclick="openTool('Portfolio.html','Portfolio')">
           <div class="card-icon gen">💼</div>
