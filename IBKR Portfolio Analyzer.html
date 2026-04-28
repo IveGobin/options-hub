@@ -655,6 +655,19 @@ function processCSV(text) {
         <div style="font-size:28px;font-weight:600;font-family:'DM Mono',monospace;color:var(--text);white-space:nowrap;">€${(totalCashEUR+collateralBase).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:13px;color:var(--text3);font-weight:400;">EUR+USD</span></div>
       </div>
     </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;">
+        <div style="font-size:12px;color:var(--text3);font-weight:500;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:16px;">Portfolio Allocation</div>
+        <div style="position:relative;height:200px;"><canvas id="portfolioPieChart"></canvas></div>
+        <div id="portfolioPieLegend" style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px;font-size:12px;"></div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;">
+        <div style="font-size:12px;color:var(--text3);font-weight:500;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:16px;">Cash Earned by Source</div>
+        <div style="position:relative;height:200px;"><canvas id="incomePieChart"></canvas></div>
+        <div id="incomePieLegend" style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px;font-size:12px;"></div>
+      </div>
+    </div>
   `;
 
   // ── 2. NAV FLOW ──
@@ -1070,7 +1083,95 @@ function processCSV(text) {
     }
   });
 
-  document.getElementById('upload-zone').style.display = 'none';
+
+  // ── PIE CHART 1: Portfolio Allocation ──
+  // Values from NAV section (base currency EUR)
+  // navMap already declared above — read current totals (column index 4) directly
+  const pieStock = Math.max(0, (navMap['Stock'] || {}).curTotal || 0);
+  const pieCash  = Math.max(0, (navMap['Cash'] || navMap['Cash '] || {}).curTotal || 0);
+  const pieCollateral = Math.max(0, (navMap['Collateral Value'] || {}).curTotal || 0);
+  const pieOther = Math.max(0, ((navMap['Interest Accruals'] || {}).curTotal || 0) + ((navMap['Dividend Accruals'] || {}).curTotal || 0));
+
+  const portfolioPieData = [];
+  const portfolioPieLabels = [];
+  const portfolioPieColors = [];
+  if (pieStock > 0)      { portfolioPieData.push(+pieStock.toFixed(2));      portfolioPieLabels.push('Stocks');      portfolioPieColors.push('#4d9fff'); }
+  if (pieCash > 0)       { portfolioPieData.push(+pieCash.toFixed(2));       portfolioPieLabels.push('Cash');        portfolioPieColors.push('#00e5a0'); }
+  if (pieCollateral > 0) { portfolioPieData.push(+pieCollateral.toFixed(2)); portfolioPieLabels.push('Collateral');  portfolioPieColors.push('#f59e0b'); }
+  if (pieOther > 0)      { portfolioPieData.push(+pieOther.toFixed(2));      portfolioPieLabels.push('Accruals');    portfolioPieColors.push('#a78bfa'); }
+
+  const portfolioPieTotal = portfolioPieData.reduce((a,b)=>a+b,0);
+  new Chart(document.getElementById('portfolioPieChart'), {
+    type: 'doughnut',
+    data: { labels: portfolioPieLabels, datasets: [{ data: portfolioPieData, backgroundColor: portfolioPieColors, borderWidth: 2, borderColor: 'var(--surface2)', hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' €' + ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0}) + '  (' + (ctx.parsed/portfolioPieTotal*100).toFixed(1) + '%)' } }
+      }
+    }
+  });
+  const portfolioLegendEl = document.getElementById('portfolioPieLegend');
+  portfolioPieLabels.forEach((lbl, i) => {
+    portfolioLegendEl.innerHTML += `<span style="display:flex;align-items:center;gap:5px;color:var(--text2);">
+      <span style="width:9px;height:9px;border-radius:50%;background:${portfolioPieColors[i]};flex-shrink:0;display:inline-block;"></span>
+      ${lbl} <span style="color:var(--text3);margin-left:2px;">(${(portfolioPieData[i]/portfolioPieTotal*100).toFixed(1)}%)</span>
+    </span>`;
+  });
+
+  // ── PIE CHART 2: Cash Earned by Source ──
+  const tradeOptAll  = getData('Trades').filter(r => r[2]==='Order' && r[3]==='Equity and Index Options');
+  const tradeStockAll = getData('Trades').filter(r => r[2]==='Order' && r[3]==='Stocks');
+
+  // Put premiums: selling puts (qty < 0, symbol ends with P)
+  let putPremium = 0, callPremium = 0;
+  tradeOptAll.forEach(r => {
+    if (num(r[7]) < 0) { // sell = opening short
+      if (r[5].trim().endsWith(' P')) putPremium  += num(r[10]);
+      if (r[5].trim().endsWith(' C')) callPremium += num(r[10]);
+    }
+  });
+
+  // Stock sale proceeds (qty < 0 = sell)
+  let stockSaleProceeds = 0;
+  tradeStockAll.forEach(r => { if (num(r[7]) < 0) stockSaleProceeds += num(r[10]); });
+
+  // Dividends + interest from NAV change data
+  const ncRows = getData('Change in NAV').filter(r => r[1]==='Data');
+  const ncMap = {};
+  ncRows.forEach(r => { ncMap[r[2]] = num(r[3]); });
+  const divIncome  = Math.max(0, (ncMap['Dividends'] || 0) + (ncMap['Change in Dividend Accruals'] || 0));
+  const intIncome  = Math.max(0, (ncMap['Interest'] || 0) + (ncMap['Change in Interest Accruals'] || 0));
+
+  const incomeData = [], incomeLabels = [], incomeColors = [];
+  if (putPremium > 0)       { incomeData.push(+putPremium.toFixed(2));       incomeLabels.push('Put selling');       incomeColors.push('#00e5a0'); }
+  if (callPremium > 0)      { incomeData.push(+callPremium.toFixed(2));      incomeLabels.push('Call selling');      incomeColors.push('#4d9fff'); }
+  if (stockSaleProceeds > 0){ incomeData.push(+stockSaleProceeds.toFixed(2)); incomeLabels.push('Stock sales');      incomeColors.push('#f59e0b'); }
+  if (divIncome > 0)        { incomeData.push(+divIncome.toFixed(2));        incomeLabels.push('Dividends');         incomeColors.push('#a78bfa'); }
+  if (intIncome > 0)        { incomeData.push(+intIncome.toFixed(2));        incomeLabels.push('Interest');          incomeColors.push('#fb923c'); }
+
+  const incomePieTotal = incomeData.reduce((a,b)=>a+b,0);
+  new Chart(document.getElementById('incomePieChart'), {
+    type: 'doughnut',
+    data: { labels: incomeLabels, datasets: [{ data: incomeData, backgroundColor: incomeColors, borderWidth: 2, borderColor: 'var(--surface2)', hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' $' + ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0}) + '  (' + (ctx.parsed/incomePieTotal*100).toFixed(1) + '%)' } }
+      }
+    }
+  });
+  const incomeLegendEl = document.getElementById('incomePieLegend');
+  incomeLabels.forEach((lbl, i) => {
+    incomeLegendEl.innerHTML += `<span style="display:flex;align-items:center;gap:5px;color:var(--text2);">
+      <span style="width:9px;height:9px;border-radius:50%;background:${incomeColors[i]};flex-shrink:0;display:inline-block;"></span>
+      ${lbl} <span style="color:var(--text3);margin-left:2px;">(${(incomeData[i]/incomePieTotal*100).toFixed(1)}%)</span>
+    </span>`;
+  });
+
+      document.getElementById('upload-zone').style.display = 'none';
   document.getElementById('report').style.display = 'block';
   window.scrollTo(0, 0);
 }
