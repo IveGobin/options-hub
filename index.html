@@ -69,6 +69,8 @@
   .dot-call { background: #D85A30; }
   .dot-gen  { background: #7F77DD; }
   .dot-ibkr { background: #00b4d8; }
+  .dot-tax  { background: #ffb347; }
+  .card-icon.tax { background: #FFF4E0; }
 
   .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
@@ -196,6 +198,13 @@
   </div>
 
   <div class="nav-section">
+    <div class="nav-label">Tax</div>
+    <div class="nav-item" onclick="openTool('Tax Calculator.html','Tax Calculator')">
+      <span class="dot dot-tax"></span> Tax Calculator
+    </div>
+  </div>
+
+  <div class="nav-section">
     <div class="nav-label">General</div>
     <div class="nav-item" onclick="openTool('Portfolio.html','Portfolio')">
       <span class="dot dot-gen"></span> Portfolio
@@ -254,6 +263,11 @@
           <div class="card-icon ibkr">🏦</div>
           <div class="card-name">IBKR Portfolio</div>
           <div class="card-tag">IBKR</div>
+        </div>
+        <div class="card" onclick="openTool('Tax Calculator.html','Tax Calculator')">
+          <div class="card-icon tax">🧾</div>
+          <div class="card-name">Tax Calculator</div>
+          <div class="card-tag">Tax</div>
         </div>
         <div class="card" onclick="openTool('Portfolio.html','Portfolio')">
           <div class="card-icon gen">💼</div>
