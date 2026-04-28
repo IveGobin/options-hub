@@ -496,6 +496,20 @@ function processCSV(text) {
     const t = optTradeMap[o.sym];
     o.tradePL = t ? +(t.proceeds + t.comm).toFixed(2) : o.realTotal;
   }
+  // Build openOptPosMap early — needed below and again for charting
+  const openOptPosMap = {};
+  getData('Open Positions').filter(r => r[2]==='Summary' && r[3]==='Equity and Index Options')
+    .forEach(r => { openOptPosMap[r[5].trim()] = Math.abs(num(r[9])); });
+
+  // Add assigned/expired contracts that appear in Trades but not in R&U
+  // (IBKR omits assigned options from R&U — these have "A;C" trade codes)
+  const ruSyms = new Set(options.map(o => o.sym.trim()));
+  for (const sym of Object.keys(optTradeMap)) {
+    if (!ruSyms.has(sym.trim()) && !openOptPosMap.hasOwnProperty(sym.trim())) {
+      const t = optTradeMap[sym];
+      options.push({ sym, realTotal: 0, unrTotal: 0, tradePL: +(t.proceeds + t.comm).toFixed(2) });
+    }
+  }
   // Split into closed/expired/assigned vs open
   const closedOptions = options.filter(o => o.unrTotal === 0);
   const openOpts = options.filter(o => o.unrTotal !== 0);
@@ -913,34 +927,37 @@ function processCSV(text) {
   `;
 
   // ── GROUP OPTIONS BY MONTH ──
-  // closedPL   = R&U realTotal (locked in on closed/expired contracts)
-  // openProfit = profitIfClosed = premium collected - current buyback cost (open positions only)
-  // Map open positions: sym -> premium collected (abs costBasis)
-  const openOptPosMap = {};
-  getData('Open Positions').filter(r => r[2]==='Summary' && r[3]==='Equity and Index Options')
-    .forEach(r => { openOptPosMap[r[5].trim()] = Math.abs(num(r[9])); });
+  // closedPL   = tradePL (proceeds+comm, locked in on closed/expired/assigned contracts)
+  // openProfit = premium collected - current buyback cost (open positions only)
+  // openOptPosMap is already built above
 
   const MONTH_ABBR = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
   const optByMonth = {};
   for (const o of options) {
     let key = 'Other';
-    const tradeInfo = optTradeMap[o.sym.trim()];
-    if (tradeInfo && tradeInfo.lastDate) {
-      // Group by actual close/trade date
-      const d = new Date(tradeInfo.lastDate + 'T00:00:00');
-      key = MONTH_ABBR[d.getMonth()] + "'" + String(d.getFullYear()).slice(2);
-    } else {
-      // Fallback: use expiry month from option symbol
+    const isOpen = openOptPosMap.hasOwnProperty(o.sym.trim());
+    if (isOpen) {
+      // Open positions: group by expiry month from the option symbol (e.g. "18JUN26" → JUN'26)
       const m = o.sym.match(/(\d{2})([A-Z]{3})(\d{2})/);
       key = m ? m[2] + "'" + m[3] : 'Other';
+    } else {
+      // Closed/expired positions: group by actual close/last-trade date
+      const tradeInfo = optTradeMap[o.sym.trim()];
+      if (tradeInfo && tradeInfo.lastDate) {
+        const d = new Date(tradeInfo.lastDate + 'T00:00:00');
+        key = MONTH_ABBR[d.getMonth()] + "'" + String(d.getFullYear()).slice(2);
+      } else {
+        // Fallback: expiry month from symbol
+        const m = o.sym.match(/(\d{2})([A-Z]{3})(\d{2})/);
+        key = m ? m[2] + "'" + m[3] : 'Other';
+      }
     }
     if (!optByMonth[key]) optByMonth[key] = { closedPL: 0, premiumCollected: 0, count: 0 };
-    const isOpen = openOptPosMap.hasOwnProperty(o.sym.trim());
     if (isOpen) {
       optByMonth[key].premiumCollected += openOptPosMap[o.sym.trim()];
     } else {
-      optByMonth[key].closedPL += o.realTotal;
+      optByMonth[key].closedPL += o.tradePL;
     }
     optByMonth[key].count++;
   }
