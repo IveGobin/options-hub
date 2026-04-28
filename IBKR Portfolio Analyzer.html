@@ -483,9 +483,14 @@ function processCSV(text) {
   const optTradeMap = {};
   for (const r of tradeOptOrders) {
     const sym = r[5];
-    if (!optTradeMap[sym]) optTradeMap[sym] = { proceeds: 0, comm: 0 };
+    if (!optTradeMap[sym]) optTradeMap[sym] = { proceeds: 0, comm: 0, lastDate: null };
     optTradeMap[sym].proceeds += num(r[10]);
     optTradeMap[sym].comm += num(r[11]);
+    // Track the latest trade date so we can group by close month, not expiry month
+    const d = r[6] ? r[6].substring(0, 10) : null; // "YYYY-MM-DD"
+    if (d && (!optTradeMap[sym].lastDate || d > optTradeMap[sym].lastDate)) {
+      optTradeMap[sym].lastDate = d;
+    }
   }
   for (const o of options) {
     const t = optTradeMap[o.sym];
@@ -915,10 +920,21 @@ function processCSV(text) {
   getData('Open Positions').filter(r => r[2]==='Summary' && r[3]==='Equity and Index Options')
     .forEach(r => { openOptPosMap[r[5].trim()] = Math.abs(num(r[9])); });
 
+  const MONTH_ABBR = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
   const optByMonth = {};
   for (const o of options) {
-    const m = o.sym.match(/(\d{2})([A-Z]{3})(\d{2})/);
-    const key = m ? m[2] + "'" + m[3] : 'Other';
+    let key = 'Other';
+    const tradeInfo = optTradeMap[o.sym.trim()];
+    if (tradeInfo && tradeInfo.lastDate) {
+      // Group by actual close/trade date
+      const d = new Date(tradeInfo.lastDate + 'T00:00:00');
+      key = MONTH_ABBR[d.getMonth()] + "'" + String(d.getFullYear()).slice(2);
+    } else {
+      // Fallback: use expiry month from option symbol
+      const m = o.sym.match(/(\d{2})([A-Z]{3})(\d{2})/);
+      key = m ? m[2] + "'" + m[3] : 'Other';
+    }
     if (!optByMonth[key]) optByMonth[key] = { closedPL: 0, premiumCollected: 0, count: 0 };
     const isOpen = openOptPosMap.hasOwnProperty(o.sym.trim());
     if (isOpen) {
@@ -928,20 +944,21 @@ function processCSV(text) {
     }
     optByMonth[key].count++;
   }
-  // Sort by calendar month
+  // Sort by year then month (key format: "APR'26")
   const monthOrder = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-  const sortedMonths = Object.keys(optByMonth).sort((a,b) => {
-    const ma = monthOrder.indexOf(a.substring(0,3));
-    const mb = monthOrder.indexOf(b.substring(0,3));
-    return ma - mb;
-  });
+  const keyToNum = k => {
+    const mo = monthOrder.indexOf(k.substring(0, 3));
+    const yr = parseInt(k.substring(4)) || 0;
+    return yr * 12 + mo;
+  };
+  const sortedMonths = Object.keys(optByMonth).sort((a, b) => keyToNum(a) - keyToNum(b));
 
   // ── CHARTS ──
   const chartsHtml = `
     <div style="display:flex;flex-direction:column;gap:16px;">
       <div class="chart-card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-          <div class="chart-card-title" style="margin:0;">Options P&amp;L grouped by expiry month</div>
+          <div class="chart-card-title" style="margin:0;">Options P&amp;L grouped by close month</div>
           <div style="display:flex;gap:14px;font-size:12px;color:var(--text3);">
             <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#00e5a0;display:inline-block;"></span>Profit</span>
             <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#ff5c5c;display:inline-block;"></span>Loss</span>
