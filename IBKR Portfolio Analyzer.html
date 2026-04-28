@@ -163,6 +163,9 @@
   .metric-split-item { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
   .metric-split-tag { font-size: 10px; color: var(--text3); font-family: 'Sora', sans-serif; font-weight: 400; letter-spacing: 0.04em; text-transform: uppercase; }
   .metric-sub { font-size: 11px; color: var(--text3); margin-left: 8px; font-weight: 400; }
+  .stat-group-left .metric-value { text-align: left; }
+  .stat-group-left .metric-split-vals { justify-content: flex-start; }
+  .stat-group-left .metric-split-item { align-items: flex-start; }
   /* stat group container */
   .stat-group {
     background: var(--surface);
@@ -914,17 +917,114 @@ function processCSV(text) {
   const lendTotal = lendInterest.find(r => r[2] === 'Total in EUR');
   const lendVal = lendTotal ? num(lendTotal[10]) : 0;
 
-  const cashSummary = `<div class="stat-cols">
-    <div>${metricGroup(`
-      ${metric('Total deposits', fmtEur(totalDeposits), 'pos', deposits.length + ' transfers')}
-      ${metric('Dividends', fmtEur(divEur), 'pos')}
-      ${metricDouble('Broker interest', fmtEur(intEur), 'settled', intEur >= 0 ? 'pos' : 'neg', fmtEur(accrualEur), 'accrued', accrualEur >= 0 ? 'pos' : 'neg')}
-    `)}</div>
-    <div>${metricGroup(`
-      ${metric('Withholding tax', fmtEur(whtVal), 'neg')}
-      ${metric('Market data fees', fmtEur(totalFees), 'neg', feesData.length + ' charges')}
-      ${lendVal ? metric('Stock lending income', '€' + lendVal.toFixed(2), 'pos', 'SYEP') : metric('Stock lending income', '€0.00', 'neu')}
-    `)}</div>
+  const totalInflow = divEur + Math.max(0, intEur) + Math.max(0, accrualEur) + Math.max(0, lendVal);
+  const totalDeductions = Math.abs(Math.min(0, whtVal)) + Math.abs(Math.min(0, totalFees));
+  const intTotal_eur = intEur + accrualEur;
+
+  const cashSummary = `
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+
+    <!-- Key Balances -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:16px;">Key Balances</div>
+
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Total Deposits</div>
+          <div style="font-size:26px;font-weight:700;font-family:'DM Mono',monospace;color:var(--green);">${fmtEur(totalDeposits)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px;">${deposits.length} transfers</div>
+        </div>
+        <div style="font-size:22px;opacity:0.25;">🏦</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Total Inflow</div>
+          <div style="font-size:14px;font-weight:600;font-family:'DM Mono',monospace;color:var(--green);">${fmtEur(totalInflow)}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px;">from other sources</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Total Deductions</div>
+          <div style="font-size:14px;font-weight:600;font-family:'DM Mono',monospace;color:var(--red);">${fmtEur(-totalDeductions)}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px;">${whtVal.toFixed(2)} · ${totalFees.toFixed(2)}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Earnings Summary -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:16px;">Earnings Summary</div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+
+        <div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--surface2);border-radius:8px;">
+          <div style="font-size:18px;">📈</div>
+          <div style="flex:1;">
+            <div style="font-size:11px;color:var(--text3);">Dividends</div>
+            <div style="font-size:16px;font-weight:600;font-family:'DM Mono',monospace;color:${divEur >= 0 ? 'var(--green)' : 'var(--red)'};">${fmtEur(divEur)}</div>
+          </div>
+          <div style="font-size:10px;color:var(--text3);background:var(--surface);border:1px solid var(--border);padding:3px 7px;border-radius:4px;">payout</div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--surface2);border-radius:8px;">
+          <div style="font-size:18px;">🔗</div>
+          <div style="flex:1;">
+            <div style="font-size:11px;color:var(--text3);">Stock Lending Income (SYEP)</div>
+            <div style="font-size:16px;font-weight:600;font-family:'DM Mono',monospace;color:${lendVal > 0 ? 'var(--green)' : 'var(--text3)'};">${lendVal ? '€' + lendVal.toFixed(2) : '€0.00'}</div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--surface2);border-radius:8px;">
+          <div style="font-size:18px;">💰</div>
+          <div style="flex:1;">
+            <div style="font-size:11px;color:var(--text3);">Total Investment Income</div>
+            <div style="font-size:16px;font-weight:600;font-family:'DM Mono',monospace;color:${totalInflow >= 0 ? 'var(--green)' : 'var(--red)'};">${fmtEur(totalInflow)}</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Broker Interest & Costs -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:16px;">Broker Interest &amp; Costs</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+
+        <div style="border:1px solid var(--border2);border-radius:8px;overflow:hidden;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);">
+            <span style="font-size:12px;color:var(--text2);">Broker Interest</span>
+            <div style="display:flex;gap:16px;font-size:10px;color:var(--text3);">
+              <span>Settled</span><span style="color:var(--border2);">·</span><span>Accrued</span>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:16px;padding:10px 12px;">
+            <span style="font-size:15px;font-weight:600;font-family:'DM Mono',monospace;color:${intEur >= 0 ? 'var(--green)' : 'var(--red)'};">${fmtEur(intEur)}</span>
+            <span style="font-size:15px;font-weight:600;font-family:'DM Mono',monospace;color:${accrualEur >= 0 ? 'var(--green)' : 'var(--red)'};">${fmtEur(accrualEur)}</span>
+          </div>
+          <div style="padding:4px 12px 10px;font-size:11px;color:var(--text3);">Total Interest: ${fmtEur(intTotal_eur)}</div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:16px;">🧾</span>
+            <span style="font-size:12px;color:var(--text2);">Withholding Tax</span>
+          </div>
+          <span style="font-size:15px;font-weight:600;font-family:'DM Mono',monospace;color:var(--red);">${fmtEur(whtVal)}</span>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:16px;">📡</span>
+            <span style="font-size:12px;color:var(--text2);">Market Data Fees ⚠</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:15px;font-weight:600;font-family:'DM Mono',monospace;color:var(--red);">${fmtEur(totalFees)}</span>
+            <span style="font-size:10px;color:var(--text3);background:var(--surface);border:1px solid var(--border);padding:3px 7px;border-radius:4px;">${feesData.length} charges</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
   </div>`;
 
   // ── TABS ──
