@@ -1121,21 +1121,16 @@ function processCSV(text) {
   });
 
   // ── PIE CHART 2: Cash Earned by Source ──
-  const tradeOptAll  = getData('Trades').filter(r => r[2]==='Order' && r[3]==='Equity and Index Options');
-  const tradeStockAll = getData('Trades').filter(r => r[2]==='Order' && r[3]==='Stocks');
-
-  // Put premiums: selling puts (qty < 0, symbol ends with P)
-  let putPremium = 0, callPremium = 0;
-  tradeOptAll.forEach(r => {
-    if (num(r[7]) < 0) { // sell = opening short
-      if (r[5].trim().endsWith(' P')) putPremium  += num(r[10]);
-      if (r[5].trim().endsWith(' C')) callPremium += num(r[10]);
-    }
+  // Realised P&L by option type — use closedOptions (expired + closed, excludes open positions)
+  let putRealPL = 0, callRealPL = 0;
+  closedOptions.forEach(o => {
+    if (o.sym.trim().endsWith(' P')) putRealPL  += o.tradePL;
+    else if (o.sym.trim().endsWith(' C')) callRealPL += o.tradePL;
   });
 
-  // Stock sale proceeds (qty < 0 = sell)
-  let stockSaleProceeds = 0;
-  tradeStockAll.forEach(r => { if (num(r[7]) < 0) stockSaleProceeds += num(r[10]); });
+  // Stock realised P&L (closed positions only, from R&U realTotal)
+  let stockRealPL = 0;
+  stocks.forEach(s => { stockRealPL += s.realTotal; });
 
   // Dividends + interest from NAV change data
   const ncRows = getData('Change in NAV').filter(r => r[1]==='Data');
@@ -1145,11 +1140,11 @@ function processCSV(text) {
   const intIncome  = Math.max(0, (ncMap['Interest'] || 0) + (ncMap['Change in Interest Accruals'] || 0));
 
   const incomeData = [], incomeLabels = [], incomeColors = [];
-  if (putPremium > 0)       { incomeData.push(+putPremium.toFixed(2));       incomeLabels.push('Put selling');       incomeColors.push('#00e5a0'); }
-  if (callPremium > 0)      { incomeData.push(+callPremium.toFixed(2));      incomeLabels.push('Call selling');      incomeColors.push('#4d9fff'); }
-  if (stockSaleProceeds > 0){ incomeData.push(+stockSaleProceeds.toFixed(2)); incomeLabels.push('Stock sales');      incomeColors.push('#f59e0b'); }
-  if (divIncome > 0)        { incomeData.push(+divIncome.toFixed(2));        incomeLabels.push('Dividends');         incomeColors.push('#a78bfa'); }
-  if (intIncome > 0)        { incomeData.push(+intIncome.toFixed(2));        incomeLabels.push('Interest');          incomeColors.push('#fb923c'); }
+  if (putRealPL > 0)    { incomeData.push(+putRealPL.toFixed(2));    incomeLabels.push('Put selling');  incomeColors.push('#00e5a0'); }
+  if (callRealPL > 0)   { incomeData.push(+callRealPL.toFixed(2));   incomeLabels.push('Call selling'); incomeColors.push('#4d9fff'); }
+  if (stockRealPL > 0)  { incomeData.push(+stockRealPL.toFixed(2));  incomeLabels.push('Stock P&L');    incomeColors.push('#f59e0b'); }
+  if (divIncome > 0)    { incomeData.push(+divIncome.toFixed(2));     incomeLabels.push('Dividends');    incomeColors.push('#a78bfa'); }
+  if (intIncome > 0)    { incomeData.push(+intIncome.toFixed(2));     incomeLabels.push('Interest');     incomeColors.push('#fb923c'); }
 
   const incomePieTotal = incomeData.reduce((a,b)=>a+b,0);
   new Chart(document.getElementById('incomePieChart'), {
