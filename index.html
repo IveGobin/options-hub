@@ -112,40 +112,135 @@
 
   #welcome {
     flex: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 2rem; overflow-y: auto; text-align: center;
+    align-items: center; justify-content: flex-start;
+    padding: 2rem 2.5rem; overflow-y: auto; text-align: center;
   }
-  #welcome h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.4rem; }
-  #welcome p { font-size: 14px; color: #777; margin-bottom: 2rem; }
-  body[data-theme="dark"] #welcome p { color: #666; }
+  #welcome h1 { font-size: 22px; font-weight: 600; margin-bottom: 0.3rem; }
+  #welcome p { font-size: 13px; color: #777; margin-bottom: 2rem; }
+  body[data-theme="dark"] #welcome p { color: #555; }
 
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 12px; width: 100%; max-width: 680px; text-align: left;
+  /* ── Card groups container ── */
+  .card-groups {
+    width: 100%; max-width: 720px; text-align: left;
+    display: flex; flex-direction: column; gap: 2rem;
   }
-  .card {
+  .card-group {}
+  .card-group-label {
+    font-size: 10px; font-weight: 700; color: #888;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+  .card-group-toggle {
+    cursor: pointer; user-select: none;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .card-group-toggle:hover { color: #555; }
+  body[data-theme="dark"] .card-group-toggle:hover { color: #bbb; }
+
+  /* ── Featured card (single wide) ── */
+  .card-featured {
+    display: flex; align-items: center; gap: 1.25rem;
     background: #fff;
     border: 1px solid rgba(0,0,0,0.08);
-    border-radius: 12px;
-    padding: 1.1rem; cursor: pointer;
+    border-radius: 14px;
+    padding: 1.25rem 1.5rem;
+    cursor: pointer;
     transition: box-shadow 0.15s, transform 0.12s;
+    width: 100%;
   }
-  body[data-theme="dark"] .card { background: #1a1a1a; border-color: rgba(255,255,255,0.08); }
-  .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); transform: translateY(-2px); }
-  body[data-theme="dark"] .card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
-  .card-icon {
-    width: 36px; height: 36px; border-radius: 8px;
+  body[data-theme="dark"] .card-featured {
+    background: #1c1c1c;
+    border-color: rgba(255,255,255,0.07);
+  }
+  .card-featured:hover { box-shadow: 0 6px 24px rgba(0,0,0,0.1); transform: translateY(-1px); }
+  body[data-theme="dark"] .card-featured:hover { box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
+  .card-featured .feat-icon {
+    width: 52px; height: 52px; border-radius: 12px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 18px; margin-bottom: 10px;
+    font-size: 26px;
   }
-  .card-icon.put  { background: #E1F5EE; }
-  .card-icon.call { background: #FAECE7; }
-  .card-icon.gen  { background: #EEEDFE; }
-  .card-icon.ibkr { background: #E0F6FB; }
-  .card-name { font-size: 13px; font-weight: 500; }
-  body[data-theme="dark"] .card-name { color: #e0e0e0; }
-  .card-tag  { font-size: 11px; color: #888; margin-top: 2px; }
+  .card-featured .feat-icon.put  { background: linear-gradient(135deg,#1a7a56,#27c085); }
+  .card-featured .feat-icon.call { background: linear-gradient(135deg,#b84424,#e8703a); }
+  .card-featured .feat-icon.ibkr { background: linear-gradient(135deg,#0077a8,#00c2e0); }
+  .card-featured .feat-icon.tax  { background: linear-gradient(135deg,#a06800,#f5a623); }
+  .card-featured .feat-icon.gen  { background: linear-gradient(135deg,#5043b5,#9b8ef5); }
+  .card-featured .feat-text {}
+  .card-featured .feat-name { font-size: 17px; font-weight: 600; margin-bottom: 3px; }
+  body[data-theme="dark"] .card-featured .feat-name { color: #e8e8e8; }
+  .card-featured .feat-desc { font-size: 12px; color: #888; line-height: 1.4; }
+  body[data-theme="dark"] .card-featured .feat-desc { color: #555; }
+
+  /* ── Grid cards (medium) ── */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .card-medium {
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 14px;
+    padding: 1.1rem 1.1rem 1rem;
+    cursor: pointer;
+    transition: box-shadow 0.15s, transform 0.12s;
+    display: flex; flex-direction: column;
+  }
+  body[data-theme="dark"] .card-medium {
+    background: #1c1c1c;
+    border-color: rgba(255,255,255,0.07);
+  }
+  .card-medium:hover { box-shadow: 0 4px 18px rgba(0,0,0,0.09); transform: translateY(-2px); }
+  body[data-theme="dark"] .card-medium:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+  .card-medium .med-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; margin-bottom: 10px;
+  }
+  .card-medium .med-icon.ibkr { background: linear-gradient(135deg,#0077a8,#00c2e0); }
+  .card-medium .med-icon.tax  { background: linear-gradient(135deg,#a06800,#f5a623); }
+  .card-medium .med-icon.gen  { background: linear-gradient(135deg,#5043b5,#9b8ef5); }
+  .card-medium .med-icon.put  { background: linear-gradient(135deg,#1a7a56,#27c085); }
+  .card-medium .med-icon.call { background: linear-gradient(135deg,#b84424,#e8703a); }
+  .card-medium .med-name { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  body[data-theme="dark"] .card-medium .med-name { color: #e0e0e0; }
+  .card-medium .med-desc { font-size: 11px; color: #888; line-height: 1.4; }
+  body[data-theme="dark"] .card-medium .med-desc { color: #555; }
+
+  /* ── Custom tools pills ── */
+  .custom-pills {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    padding: 0.9rem 1rem;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 14px;
+  }
+  body[data-theme="dark"] .custom-pills {
+    background: #1c1c1c;
+    border-color: rgba(255,255,255,0.07);
+  }
+  .custom-pill {
+    font-size: 12px; font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(0,0,0,0.1);
+    background: #f5f5f3;
+    color: #333;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    user-select: none;
+  }
+  body[data-theme="dark"] .custom-pill {
+    background: #252525; border-color: rgba(255,255,255,0.1); color: #ccc;
+  }
+  .custom-pill:hover { background: #e8e8e8; color: #111; }
+  body[data-theme="dark"] .custom-pill:hover { background: #333; color: #fff; }
+
+  .nav-label-toggle {
+    cursor: pointer;
+    user-select: none;
+  }
+  .nav-label-toggle:hover { color: #666; }
+  body[data-theme="dark"] .nav-label-toggle:hover { color: #bbb; }
 
   .hamburger {
     display: none; background: none; border: none;
@@ -175,16 +270,6 @@
     <div class="nav-item" onclick="openTool('Put Coach.html','Put Coach')">
       <span class="dot dot-put"></span> Put Coach
     </div>
-    <div class="nav-item" onclick="openTool('Put Analyzer.html','Put Analyzer')">
-      <span class="dot dot-put"></span> Put Analyzer
-    </div>
-  </div>
-
-  <div class="nav-section">
-    <div class="nav-label">Call Options</div>
-    <div class="nav-item" onclick="openTool('Call Analyzer.html','Call Analyzer')">
-      <span class="dot dot-call"></span> Call Analyzer
-    </div>
   </div>
 
   <div class="nav-section">
@@ -206,9 +291,6 @@
 
   <div class="nav-section">
     <div class="nav-label">General</div>
-    <div class="nav-item" onclick="openTool('Portfolio.html','Portfolio')">
-      <span class="dot dot-gen"></span> Portfolio
-    </div>
     <div class="nav-item" onclick="openTool('Compound Growth Simulator.html','Growth Simulator')">
       <span class="dot dot-gen"></span> Growth Simulator
     </div>
@@ -217,6 +299,23 @@
     </div>
     <div class="nav-item" onclick="openTool('Loan vs Invest.html','Loan vs Invest')">
       <span class="dot dot-gen"></span> Loan vs Invest
+    </div>
+  </div>
+
+  <div class="nav-section" id="custom-section">
+    <div class="nav-label nav-label-toggle" onclick="toggleCustom()">
+      Custom <span id="custom-arrow" style="float:right; margin-right:1.25rem; transition: transform 0.2s;">▸</span>
+    </div>
+    <div id="custom-items" style="display:none;">
+      <div class="nav-item" onclick="openTool('Put Analyzer.html','Put Analyzer')">
+        <span class="dot dot-put"></span> Put Analyzer
+      </div>
+      <div class="nav-item" onclick="openTool('Call Analyzer.html','Call Analyzer')">
+        <span class="dot dot-call"></span> Call Analyzer
+      </div>
+      <div class="nav-item" onclick="openTool('Portfolio.html','Portfolio')">
+        <span class="dot dot-gen"></span> Portfolio
+      </div>
     </div>
   </div>
 </div>
@@ -238,57 +337,85 @@
     <div id="welcome">
       <h1>Options Hub</h1>
       <p>Select a tool from the sidebar or click a card below.</p>
-      <div class="cards">
-        <div class="card" onclick="openTool('Put Coach.html','Put Coach')">
-          <div class="card-icon put">🧑‍🏫</div>
-          <div class="card-name">Put Coach</div>
-          <div class="card-tag">Put Options</div>
+      <div class="card-groups">
+
+        <!-- PUT OPTIONS: single featured card -->
+        <div class="card-group">
+          <div class="card-group-label">Put Options</div>
+          <div class="card-featured" onclick="openTool('Put Coach.html','Put Coach')">
+            <div class="feat-icon put">🧑‍🏫</div>
+            <div class="feat-text">
+              <div class="feat-name">Put Coach</div>
+              <div class="feat-desc">Optimize your put strategy with real-time insights.</div>
+            </div>
+          </div>
         </div>
-        <div class="card" onclick="openTool('Put Analyzer.html','Put Analyzer')">
-          <div class="card-icon put">📊</div>
-          <div class="card-name">Put Analyzer</div>
-          <div class="card-tag">Put Options</div>
+
+        <!-- IBKR: grid of medium cards -->
+        <div class="card-group">
+          <div class="card-group-label">IBKR</div>
+          <div class="cards-grid">
+            <div class="card-medium" onclick="openTool('IBKR Options Analyzer.html','IBKR Options')">
+              <div class="med-icon ibkr">📈</div>
+              <div class="med-name">IBKR Options</div>
+              <div class="med-desc">Analyze options tools for your IBKR account.</div>
+            </div>
+            <div class="card-medium" onclick="openTool('IBKR Portfolio Analyzer.html','IBKR Portfolio')">
+              <div class="med-icon ibkr">🏦</div>
+              <div class="med-name">IBKR Portfolio</div>
+              <div class="med-desc">Track and manage options tools for your IBKR account.</div>
+            </div>
+          </div>
         </div>
-        <div class="card" onclick="openTool('Call Analyzer.html','Call Analyzer')">
-          <div class="card-icon call">📊</div>
-          <div class="card-name">Call Analyzer</div>
-          <div class="card-tag">Call Options</div>
+
+        <!-- TAX: single featured card -->
+        <div class="card-group">
+          <div class="card-group-label">Tax</div>
+          <div class="card-featured" onclick="openTool('IBKR Tax Calculator.html','IBKR Tax Calculator')">
+            <div class="feat-icon tax">🧾</div>
+            <div class="feat-text">
+              <div class="feat-name">IBKR Tax Calculator</div>
+              <div class="feat-desc">Estimate your tax liabilities easily.</div>
+            </div>
+          </div>
         </div>
-        <div class="card" onclick="openTool('IBKR Options Analyzer.html','IBKR Options')">
-          <div class="card-icon ibkr">📈</div>
-          <div class="card-name">IBKR Options</div>
-          <div class="card-tag">IBKR</div>
+
+        <!-- GENERAL: grid of medium cards -->
+        <div class="card-group">
+          <div class="card-group-label">General</div>
+          <div class="cards-grid">
+            <div class="card-medium" onclick="openTool('Compound Growth Simulator.html','Growth Simulator')">
+              <div class="med-icon gen">📈</div>
+              <div class="med-name">Growth Simulator</div>
+              <div class="med-desc">Visualize projected asset growth.</div>
+            </div>
+            <div class="card-medium" onclick="openTool('Loan Calculator.html','Loan Calculator')">
+              <div class="med-icon gen">🏦</div>
+              <div class="med-name">Loan Calculator</div>
+              <div class="med-desc">Plan and compare your loan options.</div>
+            </div>
+            <div class="card-medium" onclick="openTool('Loan vs Invest.html','Loan vs Invest')">
+              <div class="med-icon gen">⚖️</div>
+              <div class="med-name">Loan vs Invest</div>
+              <div class="med-desc">Compare loan costs vs investment returns.</div>
+            </div>
+          </div>
         </div>
-        <div class="card" onclick="openTool('IBKR Portfolio Analyzer.html','IBKR Portfolio')">
-          <div class="card-icon ibkr">🏦</div>
-          <div class="card-name">IBKR Portfolio</div>
-          <div class="card-tag">IBKR</div>
+
+        <!-- CUSTOM: collapsible pills row -->
+        <div class="card-group">
+          <div class="card-group-label card-group-toggle" onclick="toggleCustomCards()">
+            Custom Tools <span id="custom-cards-arrow" style="transition:transform 0.2s;display:inline-block;">▸</span>
+          </div>
+          <div id="custom-cards" style="display:none; margin-top:0.75rem;">
+            <div class="custom-pills">
+              <div class="custom-pill" onclick="openTool('Put Analyzer.html','Put Analyzer')">Put Analyzer</div>
+              <div class="custom-pill" onclick="openTool('Call Analyzer.html','Call Analyzer')">Call Analyzer</div>
+              <div class="custom-pill" onclick="openTool('Portfolio.html','Portfolio')">Portfolio</div>
+            </div>
+          </div>
         </div>
-        <div class="card" onclick="openTool('IBKR Tax Calculator.html','IBKR Tax Calculator')">
-          <div class="card-icon tax">🧾</div>
-          <div class="card-name">IBKR Tax Calculator</div>
-          <div class="card-tag">Tax</div>
-        </div>
-        <div class="card" onclick="openTool('Portfolio.html','Portfolio')">
-          <div class="card-icon gen">💼</div>
-          <div class="card-name">Portfolio</div>
-          <div class="card-tag">General</div>
-        </div>
-        <div class="card" onclick="openTool('Compound Growth Simulator.html','Growth Simulator')">
-          <div class="card-icon gen">📈</div>
-          <div class="card-name">Growth Simulator</div>
-          <div class="card-tag">General</div>
-        </div>
-        <div class="card" onclick="openTool('Loan Calculator.html','Loan Calculator')">
-          <div class="card-icon gen">🏦</div>
-          <div class="card-name">Loan Calculator</div>
-          <div class="card-tag">General</div>
-        </div>
-        <div class="card" onclick="openTool('Loan vs Invest.html','Loan vs Invest')">
-          <div class="card-icon gen">⚖️</div>
-          <div class="card-name">Loan vs Invest</div>
-          <div class="card-tag">General</div>
-        </div>
+
       </div>
     </div>
   </div>
@@ -384,6 +511,22 @@
   function closeSidebar() {
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('overlay').classList.remove('active');
+  }
+
+  // ── Custom section toggle ──────────────────────────────
+  function toggleCustom() {
+    var items = document.getElementById('custom-items');
+    var arrow = document.getElementById('custom-arrow');
+    var isHidden = items.style.display === 'none';
+    items.style.display = isHidden ? 'block' : 'none';
+    arrow.style.transform = isHidden ? 'rotate(90deg)' : '';
+  }
+  function toggleCustomCards() {
+    var items = document.getElementById('custom-cards');
+    var arrow = document.getElementById('custom-cards-arrow');
+    var isHidden = items.style.display === 'none';
+    items.style.display = isHidden ? 'block' : 'none';
+    arrow.style.transform = isHidden ? 'rotate(90deg)' : '';
   }
 
   // ── Init ───────────────────────────────────────────────
