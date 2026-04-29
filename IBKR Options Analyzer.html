@@ -348,6 +348,20 @@
   .unr-neg { color: var(--red);   font-family: 'Space Mono', monospace; font-size: 12px; }
   .unr-neu { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 12px; }
 
+  .kept-pill {
+    display: inline-block;
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .kept-pill.high  { background: rgba(0,200,83,0.12);  color: var(--green); }
+  .kept-pill.mid   { background: rgba(255,211,42,0.12); color: var(--yellow); }
+  .kept-pill.low   { background: rgba(255,71,87,0.12);  color: var(--red); }
+  .kept-pill.neg   { background: rgba(255,71,87,0.18);  color: var(--red); }
+
   .empty-state {
     text-align: center;
     color: var(--muted);
@@ -837,6 +851,7 @@
             <th>Premium collected</th>
             <th>Cost to close</th>
             <th>Unrealized P&amp;L</th>
+            <th>% Kept</th>
             <th>Exposure</th>
             <th>Days left</th>
           </tr>
@@ -1333,7 +1348,7 @@ function renderOpenTable(openPositions) {
   tbody.innerHTML = '';
 
   if (!openPositions.length) {
-    tbody.innerHTML = `<tr><td colspan="10" class="empty-state">No open option positions found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="empty-state">No open option positions found.</td></tr>`;
     return;
   }
 
@@ -1350,6 +1365,15 @@ function renderOpenTable(openPositions) {
     const unrStr = p.unrPL > 0 ? `+$${p.unrPL.toFixed(2)}` : p.unrPL < 0 ? `-$${Math.abs(p.unrPL).toFixed(2)}` : '$0';
     const exposureStr = p.exposure !== null ? fmtK(p.exposure) : '—';
 
+    // % of premium kept if closed right now
+    const keptPct = p.premiumCollected > 0
+      ? ((p.premiumCollected - p.currentValue) / p.premiumCollected) * 100
+      : null;
+    const keptEl = keptPct === null ? '—' : (() => {
+      const cls = keptPct >= 75 ? 'high' : keptPct >= 40 ? 'mid' : keptPct >= 0 ? 'low' : 'neg';
+      return `<span class="kept-pill ${cls}">${keptPct.toFixed(1)}%</span>`;
+    })();
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>${escHtml(p.ticker)}</strong></td>
@@ -1360,6 +1384,7 @@ function renderOpenTable(openPositions) {
       <td><span class="premium-pill">+$${p.premiumCollected.toFixed(2)}</span></td>
       <td class="mono" style="color:var(--muted)">$${p.currentValue.toFixed(2)}</td>
       <td class="${unrCls}">${unrStr}</td>
+      <td>${keptEl}</td>
       <td class="mono">${exposureStr}</td>
       <td class="mono">${dlEl}</td>
     `;
@@ -1375,11 +1400,19 @@ function renderOpenTable(openPositions) {
 
   const tfoot = document.createElement('tr');
   tfoot.style.borderTop = '1px solid var(--border)';
+
+  // Weighted-average % kept across all positions
+  const totCostToClose = openPositions.reduce((s, p) => s + p.currentValue, 0);
+  const totKeptPct = totPrem > 0 ? ((totPrem - totCostToClose) / totPrem) * 100 : null;
+  const totKeptCls = totKeptPct === null ? '' : totKeptPct >= 75 ? 'high' : totKeptPct >= 40 ? 'mid' : totKeptPct >= 0 ? 'low' : 'neg';
+  const totKeptEl  = totKeptPct === null ? '—' : `<span class="kept-pill ${totKeptCls}">${totKeptPct.toFixed(1)}%</span>`;
+
   tfoot.innerHTML = `
     <td colspan="5" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">TOTAL</td>
     <td><span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$${totPrem.toFixed(2)}</span></td>
     <td></td>
     <td class="${totUnrCls}">${totUnrStr}</td>
+    <td>${totKeptEl}</td>
     <td class="mono" style="color:var(--text)">${fmtK(totExp)}</td>
     <td></td>
   `;
