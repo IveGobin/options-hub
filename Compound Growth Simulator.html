@@ -376,7 +376,7 @@
     var doWith  = o.noWithdrawal ? false : document.getElementById('gs-withdrawal-on').checked;
     var wStart  = parseInt(document.getElementById('gs-wstart').value);
     var wAmt    = doWith?(parseFloat(document.getElementById('gs-wamount').value)||0)*12:0;
-    if(o.noContrib){ monthAmt=0; }
+    if(o.noContrib){ monthAmt=0; doMonth=false; }
 
     var doPhase2 = document.getElementById('gs-phase2-on').checked;
     var phase1Rate = parseInt(document.getElementById('gs-phase1-rate').value)/100;
@@ -665,15 +665,13 @@
     chart.data.datasets[1].data=res.contribData;
     if(compareData && compareMode !== 'none'){
       chart.data.datasets[2].data=compareData.totalData;
-      chart.data.datasets[2].hidden=false;
-      chart.getDatasetMeta(2).hidden=false;
+      chart.setDatasetVisibility(2, true);
       document.getElementById('legend-compare').style.display='flex';
       var labels={nowithdrawal:'No Withdrawals',nocontrib:'No Contributions',half:'Half Growth Rate',double:'Double Growth Rate'};
       document.getElementById('legend-compare-label').textContent=labels[compareMode]||'Comparison';
     } else {
       chart.data.datasets[2].data=[];
-      chart.data.datasets[2].hidden=true;
-      chart.getDatasetMeta(2).hidden=true;
+      chart.setDatasetVisibility(2, false);
       document.getElementById('legend-compare').style.display='none';
     }
     chart.options.scales.x.max=y||1;
