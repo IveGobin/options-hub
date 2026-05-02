@@ -1064,33 +1064,59 @@ function parseTradeDate(str) {
 function processIBKR(sections) {
 
   // ── OPEN POSITIONS ──────────────────────────────────────────
-  // Two IBKR CSV formats exist:
-  // Standard: [5]=sym [6]=qty  [7]=mult [8]=costPrice [9]=costBasis [10]=closePrice [11]=value [12]=unrPL
-  // Extended: [5]=sym [6]=open [7]=qty  [8]=mult [9]=costPrice [10]=costBasis [11]=closePrice [12]=value [13]=unrPL
-  // Detect by checking if the Header row has "Open" at position [6]
-  const openHeader = (sections['Open Positions'] || []).find(r => r[1] === 'Header' && r[3] === 'Asset Category');
-  const o = (openHeader && openHeader[6] === 'Open') ? 1 : 0;  // column offset
+  // Header-driven column mapping: read the Header row to find each column by name.
+  // This handles any column order or extra columns IBKR may add in future exports.
+  // Supported header names (case-insensitive, trimmed):
+  //   Symbol, Quantity, Mult, Cost Price, Cost Basis, Close Price, Value, Unrealized P/L
+  // The "Open" date column (present in some account types) is detected and skipped automatically.
+
+  function colMap(headerRow) {
+    // Returns an object mapping lowercase column name → index, starting after col[4] (Currency)
+    const map = {};
+    if (!headerRow) return map;
+    for (let i = 5; i < headerRow.length; i++) {
+      map[headerRow[i].trim().toLowerCase()] = i;
+    }
+    return map;
+  }
+
+  // Find the Header row for Open Positions that covers options (there may be two headers:
+  // one for Stocks and one for Options — we use the last one found, which covers options,
+  // but both always have the same column layout so either works)
+  const openHeaders = (sections['Open Positions'] || []).filter(r => r[1] === 'Header' && r[3] === 'Asset Category');
+  const openHeader  = openHeaders[openHeaders.length - 1] || null;
+  const oCols       = colMap(openHeader);
+
+  // Resolve column indices by name; fall back to legacy hardcoded positions if a column
+  // is absent from the header (keeps backwards compatibility with hand-crafted test files)
+  const iSym   = oCols['symbol']        ?? 5;
+  const iQty   = oCols['quantity']      ?? 6;
+  const iMult  = oCols['mult']          ?? 7;
+  const iCostP = oCols['cost price']    ?? 8;
+  const iCostB = oCols['cost basis']    ?? 9;
+  const iVal   = oCols['value']         ?? 11;
+  const iUnrPL = oCols['unrealized p/l']?? 12;
 
   const openRaw = getData(sections, 'Open Positions')
     .filter(r => r[2] === 'Summary' && r[3] === 'Equity and Index Options')
-    .filter(r => num(r[6 + o]) !== 0);  // exclude expired/closed positions IBKR leaves with qty=0
+    .filter(r => num(r[iQty]) !== 0);  // exclude expired/closed positions IBKR leaves with qty=0
 
   const openPositions = openRaw.map(r => {
-    const parsed = parseOptSym(r[5]);
+    const parsed = parseOptSym(r[iSym]);
     if (!parsed) return null;
-    const qty       = num(r[6+o]);          // negative = short
-    const mult      = num(r[7+o]) || 100;   // multiplier (usually 100)
-    const costPrice = num(r[8+o]);          // per-share cost price
-    const costBasis = num(r[9+o]);          // signed cost basis
-    const curValue  = num(r[11+o]);         // negative for short (current buyback cost)
-    const unrPL     = num(r[12+o]);         // positive = profitable (collected > current cost)
+    const qty       = num(r[iQty]);           // negative = short
+    const mult      = num(r[iMult]) || 100;   // multiplier (usually 100)
+    const costPrice = num(r[iCostP]);         // per-share cost price
+    const costBasis = num(r[iCostB]);         // signed cost basis
+    const curValue  = num(r[iVal]);           // negative for short (current buyback cost)
+    const unrPL     = num(r[iUnrPL]);        // positive = profitable (collected > current cost)
     const exposure  = parsed.type === 'P'
       ? Math.abs(qty) * parsed.strike * mult
       : null;                             // calls: exposure concept differs
     // Premium collected = costPrice * qty * mult (always positive for short)
     const premCollected = Math.abs(costPrice) * Math.abs(qty) * mult;
     return {
-      sym: r[5].trim(),
+      sym: r[iSym].trim(),
       ticker: parsed.ticker,
       expiry: parsed.expiry,
       strike: parsed.strike,
@@ -1105,30 +1131,36 @@ function processIBKR(sections) {
   }).filter(Boolean);
 
   // ── TRADES ───────────────────────────────────────────────────
-  // Individual trade rows (Order):
-  // Cols: [0] [1]=Data [2]=Order [3]=cat [4]=ccy [5]=sym [6]=datetime
-  //       [7]=qty [8]=price [9]=mult [10]=proceeds [11]=comm [12]=basis [13]=realPL [14]=mtmPL [15]=code
+  // Header-driven column mapping for Trades section.
+  const tradesHeader = (sections['Trades'] || []).find(r => r[1] === 'Header' && r[3] === 'Asset Category');
+  const tCols        = colMap(tradesHeader);
+
+  const itSym      = tCols['symbol']       ?? 5;
+  const itDateTime = tCols['date/time']    ?? 6;
+  const itQty      = tCols['quantity']     ?? 7;
+  const itProceeds = tCols['proceeds']     ?? 10;
+  const itComm     = tCols['comm/fee']     ?? 11;
+  const itCode     = tCols['code']         ?? 15;
+  const itRealPL   = tCols['realized p/l'] ?? 13;
+
   const tradesRaw = getData(sections, 'Trades')
     .filter(r => r[2] === 'Order' && r[3] === 'Equity and Index Options');
 
-  // SubTotal rows per symbol (one row per symbol, summarises all its trades):
-  // Cols: [0] [1]=SubTotal [2]='' [3]=cat [4]=ccy [5]=sym [6]=remainingQty ...
-  //       [13]=totalRealizedPL_USD
   const tradeSubTotals = (sections['Trades'] || [])
     .filter(r => r[1] === 'SubTotal' && r[3] === 'Equity and Index Options');
 
-  // Build per-symbol trade info: openDate and individual trades
+  // Build per-symbol trade info
   const tradesBySym = {};
   for (const r of tradesRaw) {
-    const sym = r[5] ? r[5].trim() : '';
+    const sym = r[itSym] ? r[itSym].trim() : '';
     if (!sym) continue;
     if (!tradesBySym[sym]) tradesBySym[sym] = [];
     tradesBySym[sym].push({
-      date:     parseTradeDate(r[6]),
-      qty:      num(r[7]),
-      proceeds: num(r[10]),
-      comm:     num(r[11]),
-      code:     (r[15] || '').trim()
+      date:     parseTradeDate(r[itDateTime]),
+      qty:      num(r[itQty]),
+      proceeds: num(r[itProceeds]),
+      comm:     num(r[itComm]),
+      code:     (r[itCode] || '').trim()
     });
   }
 
@@ -1152,16 +1184,15 @@ function processIBKR(sections) {
   const openSyms = new Set(openPositions.map(p => p.sym));
 
   for (const r of tradeSubTotals) {
-    const sym          = r[5] ? r[5].trim() : '';
-    // SubTotal header: ..., Symbol(5), Date/Time(6=blank), Quantity(7), ...
-    const remainingQty = num(r[7]);
+    const sym          = r[itSym] ? r[itSym].trim() : '';
+    const remainingQty = num(r[itQty]);
     if (!sym) continue;
     // Skip if still an open position (remaining qty != 0)
     if (remainingQty !== 0) continue;
     // Skip if this symbol is in our open positions list (extra safety)
     if (openSyms.has(sym)) continue;
 
-    const realTotal = num(r[13]); // USD realized P/L
+    const realTotal = num(r[itRealPL]); // USD realized P/L
 
     const parsed = parseOptSym(sym);
     if (!parsed) continue;
