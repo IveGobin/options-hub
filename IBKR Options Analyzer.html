@@ -1067,7 +1067,8 @@ function processIBKR(sections) {
   // Cols: [0]=section [1]=Data [2]=Summary [3]=cat [4]=ccy [5]=sym
   //       [6]=qty [7]=mult [8]=costPrice [9]=costBasis [10]=closePrice [11]=value [12]=unrPL
   const openRaw = getData(sections, 'Open Positions')
-    .filter(r => r[2] === 'Summary' && r[3] === 'Equity and Index Options');
+    .filter(r => r[2] === 'Summary' && r[3] === 'Equity and Index Options')
+    .filter(r => num(r[6]) !== 0);  // exclude expired/closed positions IBKR leaves with qty=0
 
   const openPositions = openRaw.map(r => {
     const parsed = parseOptSym(r[5]);
