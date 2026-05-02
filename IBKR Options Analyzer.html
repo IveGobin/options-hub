@@ -1047,8 +1047,9 @@ function fmtDate(d) {
 function daysLeft(expiry) {
   const today = new Date();
   today.setHours(0,0,0,0);
-  expiry.setHours(0,0,0,0);
-  return Math.round((expiry - today) / 86400000);
+  const exp = new Date(expiry);   // never mutate the original
+  exp.setHours(0,0,0,0);
+  return Math.round((exp - today) / 86400000);
 }
 
 function parseTradeDate(str) {
@@ -1072,12 +1073,16 @@ function processIBKR(sections) {
     const parsed = parseOptSym(r[5]);
     if (!parsed) return null;
     const qty       = num(r[6]);          // negative = short
-    const costBasis = num(r[9]);          // negative for short (premium collected)
+    const mult      = num(r[7]) || 100;   // multiplier (usually 100)
+    const costPrice = num(r[8]);          // per-share cost price
+    const costBasis = num(r[9]);          // signed cost basis
     const curValue  = num(r[11]);         // negative for short (current buyback cost)
     const unrPL     = num(r[12]);         // positive = profitable (collected > current cost)
     const exposure  = parsed.type === 'P'
-      ? Math.abs(qty) * parsed.strike * 100
+      ? Math.abs(qty) * parsed.strike * mult
       : null;                             // calls: exposure concept differs
+    // Premium collected = costPrice * qty * mult (always positive for short)
+    const premCollected = Math.abs(costPrice) * Math.abs(qty) * mult;
     return {
       sym: r[5].trim(),
       ticker: parsed.ticker,
@@ -1085,7 +1090,7 @@ function processIBKR(sections) {
       strike: parsed.strike,
       type:   parsed.type,
       qty:    Math.abs(qty),
-      premiumCollected: Math.abs(costBasis),  // what we received when selling
+      premiumCollected: premCollected > 0 ? premCollected : Math.abs(costBasis),  // what we received when selling
       currentValue:     Math.abs(curValue),   // what it costs to close now
       unrPL,
       exposure,
@@ -1104,7 +1109,7 @@ function processIBKR(sections) {
   // Cols: [0] [1]=SubTotal [2]='' [3]=cat [4]=ccy [5]=sym [6]=remainingQty ...
   //       [13]=totalRealizedPL_USD
   const tradeSubTotals = (sections['Trades'] || [])
-    .filter(r => r[1] === 'SubTotal' && r[3] === 'Equity and Index Options' && r[4] === 'USD');
+    .filter(r => r[1] === 'SubTotal' && r[3] === 'Equity and Index Options');
 
   // Build per-symbol trade info: openDate and individual trades
   const tradesBySym = {};
