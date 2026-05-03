@@ -308,7 +308,7 @@
 <div id="report">
   <div class="report-header">
     <div>
-      <div class="report-brand">IB <span>Report</span></div>
+      <div class="report-brand">IB <span>Report</span> <span style="font-size:10px;font-weight:400;color:var(--text3);font-family:'DM Mono',monospace;margin-left:6px;">v1.0</span></div>
     </div>
     <div class="report-meta" id="header-meta"></div>
     <button class="reset-btn" onclick="resetToUpload()">↩ New file</button>
@@ -395,6 +395,32 @@ function processCSV(text) {
 
   function getData(sec) { return (sections[sec] || []).filter(r => r[1] === 'Data'); }
 
+  // Header-driven column mapping helper
+  function colMap(sec, startCol) {
+    startCol = startCol === undefined ? 2 : startCol;
+    const headerRow = (sections[sec] || []).find(r => r[1] === "Header");
+    const map = {};
+    if (!headerRow) return map;
+    for (let i = startCol; i < headerRow.length; i++) {
+      const key = headerRow[i].trim().toLowerCase();
+      if (key) map[key] = i;
+    }
+    return map;
+  }
+  function colMapLast(sec, startCol) {
+    startCol = startCol === undefined ? 2 : startCol;
+    const headerRows = (sections[sec] || []).filter(r => r[1] === "Header");
+    const headerRow  = headerRows[headerRows.length - 1] || null;
+    const map = {};
+    if (!headerRow) return map;
+    for (let i = startCol; i < headerRow.length; i++) {
+      const key = headerRow[i].trim().toLowerCase();
+      if (key) map[key] = i;
+    }
+    return map;
+  }
+  function ci(map, name, fallback) { return map[name] !== undefined ? map[name] : fallback; }
+
   // ── STATEMENT INFO ──
   const stmtData = getData('Statement');
   const getField = (rows, name) => { const r = rows.find(r => r[2] === name); return r ? r[3] : ''; };
@@ -409,9 +435,14 @@ function processCSV(text) {
 
   // ── NAV ──
   const navData = getData('Net Asset Value');
-  // NAV cols: [2]=Asset Class [3]=Prior Total [4]=Current Long [5]=Current Short [6]=Current Total [7]=Change
+  const navCols = colMap('Net Asset Value');
+  const iNavPrior   = ci(navCols, 'prior total',   3);
+  const iNavCurLong = ci(navCols, 'current long',  4);
+  const iNavCurShort= ci(navCols, 'current short', 5);
+  const iNavCurTot  = ci(navCols, 'current total', 6);
+  const iNavChange  = ci(navCols, 'change',        7);
   const navMap = {};
-  for (const r of navData) { if (r[2] && r[2].trim()) { navMap[r[2].trim()] = { prior: num(r[3]), curLong: num(r[4]), curShort: num(r[5]), curTotal: num(r[6]), change: num(r[7]) }; } }
+  for (const r of navData) { if (r[2] && r[2].trim()) { navMap[r[2].trim()] = { prior: num(r[iNavPrior]), curLong: num(r[iNavCurLong]), curShort: num(r[iNavCurShort]), curTotal: num(r[iNavCurTot]), change: num(r[iNavChange]) }; } }
   const navTotal = navMap["Total"] || {};
   const navStart = navTotal.prior || 0;
   const navEnd = navTotal.curTotal !== undefined ? navTotal.curTotal : (navTotal.curLong + navTotal.curShort);
@@ -425,28 +456,49 @@ function processCSV(text) {
 
   // ── REALIZED & UNREALIZED ──
   const ruData = getData('Realized & Unrealized Performance Summary');
+  const ruCols   = colMap('Realized & Unrealized Performance Summary');
+  const iRUST    = ci(ruCols, 'realized st gain',        5);
+  const iRUSTL   = ci(ruCols, 'realized st loss',        6);
+  const iRULT    = ci(ruCols, 'realized lt gain',        7);
+  const iRULTL   = ci(ruCols, 'realized lt loss',        8);
+  const iRUReal  = ci(ruCols, 'total realized',          9);
+  const iRUUnrST = ci(ruCols, 'unrealized st gain',     10);
+  const iRUUnrSTL= ci(ruCols, 'unrealized st loss',     11);
+  const iRUUnrLT = ci(ruCols, 'unrealized lt gain',     12);
+  const iRUUnrLTL= ci(ruCols, 'unrealized lt loss',     13);
+  const iRUUnr   = ci(ruCols, 'total unrealized',       14);
+  const iRUTotal = ci(ruCols, 'total',                  15);
   const stocks = [], options = [];
   for (const r of ruData) {
     if (r[2] === 'Total' || r[2] === 'Total (All Assets)') continue;
     const obj = {
       cat: r[2], sym: r[3],
-      realST: num(r[5]), realSTLoss: num(r[6]),
-      realLT: num(r[7]), realLTLoss: num(r[8]),
-      realTotal: num(r[9]),
-      unrST: num(r[10]), unrSTLoss: num(r[11]),
-      unrLT: num(r[12]), unrLTLoss: num(r[13]),
-      unrTotal: num(r[14]),
-      total: num(r[15])
+      realST: num(r[iRUST]), realSTLoss: num(r[iRUSTL]),
+      realLT: num(r[iRULT]), realLTLoss: num(r[iRULTL]),
+      realTotal: num(r[iRUReal]),
+      unrST: num(r[iRUUnrST]), unrSTLoss: num(r[iRUUnrSTL]),
+      unrLT: num(r[iRUUnrLT]), unrLTLoss: num(r[iRUUnrLTL]),
+      unrTotal: num(r[iRUUnr]),
+      total: num(r[iRUTotal])
     };
     if (r[2] === 'Stocks') stocks.push(obj);
     else if (r[2] === 'Equity and Index Options') options.push(obj);
   }
 
   // ── OPEN POSITIONS ──
+  const opCols     = colMapLast('Open Positions', 5);
+  const iOpSym      = ci(opCols, 'symbol',         5);
+  const iOpQty      = ci(opCols, 'quantity',        6);
+  const iOpMult     = ci(opCols, 'mult',            7);
+  const iOpCostP    = ci(opCols, 'cost price',      8);
+  const iOpCostB    = ci(opCols, 'cost basis',      9);
+  const iOpCloseP   = ci(opCols, 'close price',    10);
+  const iOpVal      = ci(opCols, 'value',          11);
+  const iOpUnrPL    = ci(opCols, 'unrealized p/l', 12);
   const opData = getData('Open Positions').filter(r => r[2] === 'Summary');
   const openStocks = [], openOptions = [];
   for (const r of opData) {
-    const obj = { cat: r[3], ccy: r[4], sym: r[5], qty: num(r[6]), mult: num(r[7]), costPrice: num(r[8]), costBasis: num(r[9]), closePrice: num(r[10]), value: num(r[11]), unrPL: num(r[12]) };
+    const obj = { cat: r[3], ccy: r[4], sym: r[iOpSym], qty: num(r[iOpQty]), mult: num(r[iOpMult]), costPrice: num(r[iOpCostP]), costBasis: num(r[iOpCostB]), closePrice: num(r[iOpCloseP]), value: num(r[iOpVal]), unrPL: num(r[iOpUnrPL]) };
     if (r[3] === 'Stocks') openStocks.push(obj);
     else if (r[3] === 'Equity and Index Options') openOptions.push(obj);
   }
@@ -470,27 +522,35 @@ function processCSV(text) {
   const settledBase    = num((getData('Cash Report').find(r => r[3]==='Base Currency Summary' && r[2]==='Ending Settled Cash') || [])[4] || 0);
   // Forex balances for EUR equivalent
   const fxRows = getData('Forex Balances');
-  const fxUSDinEUR = num((fxRows.find(r => r[4]==='USD') || [])[9] || 0);
-  const fxEURcash  = num((fxRows.find(r => r[4]==='EUR') || [])[9] || 0);
+  const fxCols     = colMap('Forex Balances');
+  const iFxVal     = ci(fxCols, 'value in base',  9);
+  const fxUSDinEUR = num((fxRows.find(r => r[4]==='USD') || [])[iFxVal] || 0);
+  const fxEURcash  = num((fxRows.find(r => r[4]==='EUR') || [])[iFxVal] || 0);
   const totalCashEUR = fxEURcash + fxUSDinEUR;
 
   // ── DEPOSITS ──
   const deposits = getData('Deposits & Withdrawals').filter(r => r[2] !== 'Total');
-  const totalDeposits = deposits.reduce((s,r) => s + num(r[5]), 0);
+  const depCols = colMap('Deposits & Withdrawals');
+  const iDepAmt = ci(depCols, 'amount', 5);
+  const totalDeposits = deposits.reduce((s,r) => s + num(r[iDepAmt]), 0);
 
   // ── COMMISSIONS ──
   const totalComm = num(nc['Commissions'] || 0);
 
   // ── OPTIONS SUMMARY (cash-based: proceeds + commissions per contract) ──
+  const tradeCols    = colMap('Trades');
+  const iTrSym      = ci(tradeCols, 'symbol',    5);
+  const iTrDateTime = ci(tradeCols, 'date/time', 6);
+  const iTrProceeds = ci(tradeCols, 'proceeds',  10);
+  const iTrComm     = ci(tradeCols, 'comm/fee',  11);
   const tradeOptOrders = getData('Trades').filter(r => r[2] === 'Order' && r[3] === 'Equity and Index Options');
   const optTradeMap = {};
   for (const r of tradeOptOrders) {
-    const sym = r[5];
+    const sym = r[iTrSym];
     if (!optTradeMap[sym]) optTradeMap[sym] = { proceeds: 0, comm: 0, lastDate: null };
-    optTradeMap[sym].proceeds += num(r[10]);
-    optTradeMap[sym].comm += num(r[11]);
-    // Track the latest trade date so we can group by close month, not expiry month
-    const d = r[6] ? r[6].substring(0, 10) : null; // "YYYY-MM-DD"
+    optTradeMap[sym].proceeds += num(r[iTrProceeds]);
+    optTradeMap[sym].comm += num(r[iTrComm]);
+    const d = r[iTrDateTime] ? r[iTrDateTime].substring(0, 10) : null;
     if (d && (!optTradeMap[sym].lastDate || d > optTradeMap[sym].lastDate)) {
       optTradeMap[sym].lastDate = d;
     }
@@ -502,7 +562,7 @@ function processCSV(text) {
   // Build openOptPosMap early — needed below and again for charting
   const openOptPosMap = {};
   getData('Open Positions').filter(r => r[2]==='Summary' && r[3]==='Equity and Index Options')
-    .forEach(r => { openOptPosMap[r[5].trim()] = Math.abs(num(r[9])); });
+    .forEach(r => { openOptPosMap[r[iOpSym].trim()] = Math.abs(num(r[iOpCostB])); });
 
   // Add assigned/expired contracts that appear in Trades but not in R&U
   // (IBKR omits assigned options from R&U — these have "A;C" trade codes)
@@ -527,11 +587,11 @@ function processCSV(text) {
 
   // Open stats — use Open Positions cost basis and current value directly
   const openOptPositions = getData('Open Positions').filter(r => r[2]==='Summary' && r[3]==='Equity and Index Options');
-  const openPremiumCollected = openOptPositions.reduce((s,r) => s + Math.abs(num(r[9])), 0); // abs(costBasis)
-  const openBuybackCost      = openOptPositions.reduce((s,r) => s + Math.abs(num(r[11])), 0); // abs(current value)
-  const openProfitIfClosed   = openPremiumCollected - openBuybackCost; // profit if all closed now
-  const openWin  = openOptPositions.filter(r => Math.abs(num(r[9])) > Math.abs(num(r[11]))).length;
-  const openLose = openOptPositions.filter(r => Math.abs(num(r[9])) < Math.abs(num(r[11]))).length;
+  const openPremiumCollected = openOptPositions.reduce((s,r) => s + Math.abs(num(r[iOpCostB])), 0); // abs(costBasis)
+  const openBuybackCost      = openOptPositions.reduce((s,r) => s + Math.abs(num(r[iOpVal])), 0);   // abs(current value)
+  const openProfitIfClosed   = openPremiumCollected - openBuybackCost;
+  const openWin  = openOptPositions.filter(r => Math.abs(num(r[iOpCostB])) > Math.abs(num(r[iOpVal]))).length;
+  const openLose = openOptPositions.filter(r => Math.abs(num(r[iOpCostB])) < Math.abs(num(r[iOpVal]))).length;
   // Legacy aliases
   const openUnrTotal = openProfitIfClosed;
   const openNetPL = openProfitIfClosed;
@@ -550,7 +610,9 @@ function processCSV(text) {
 
   // ── FEES ──
   const feesData = getData('Fees').filter(r => r[2] === 'Other Fees');
-  const totalFees = feesData.reduce((s,r) => s + num(r[6]), 0);
+  const feesCols = colMap('Fees');
+  const iFeesAmt = ci(feesCols, 'amount', 6);
+  const totalFees = feesData.reduce((s,r) => s + num(r[iFeesAmt]), 0);
 
   // ── INSTRUMENT INFO ──
   const instrData = getData('Financial Instrument Information');
@@ -910,7 +972,9 @@ function processCSV(text) {
   const accrualEur = accrualEndingRow ? num(accrualEndingRow[4]) : 0;
   const wht_data = getData('Withholding Tax');
   const whtEur = wht_data.find(r => r[2] === 'Total in EUR');
-  const whtVal = whtEur ? num(whtEur[5]) : 0;
+  const whtCols = colMap('Withholding Tax');
+  const iWhtAmt = ci(whtCols, 'amount', 5);
+  const whtVal = whtEur ? num(whtEur[iWhtAmt]) : 0;
 
   // lending
   const lendInterest = getData('Stock Yield Enhancement Program Securities Lent Interest Details');
