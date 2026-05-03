@@ -235,7 +235,7 @@
   </div>
 
   <div class="top-bar">
-    <h1>IBKR <span id="db-title-span"></span></h1>
+    <h1>IBKR <span id="db-title-span"></span> <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v1.0</span></h1>
     <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;">
       <div class="file-chip"><span>📋</span><span id="chip-csv">—</span></div>
       <div class="file-chip eur-chip" id="chip-fx-wrap" style="display:none">
@@ -570,6 +570,34 @@ function parseIBKR(text) {
 
 function getData(sections, sec) { return (sections[sec] || []).filter(r => r[1] === 'Data'); }
 
+// Header-driven column mapping — finds each column by name, not by hardcoded index.
+// Returns lowercase column name → array index, scanning from startCol (default 5).
+function colMap(sections, sec, startCol) {
+  startCol = startCol === undefined ? 5 : startCol;
+  const headerRow = (sections[sec] || []).find(r => r[1] === 'Header');
+  const map = {};
+  if (!headerRow) return map;
+  for (let i = startCol; i < headerRow.length; i++) {
+    const key = headerRow[i].trim().toLowerCase();
+    if (key) map[key] = i;
+  }
+  return map;
+}
+// Variant for sections with multiple headers (e.g. Open Positions — one per asset class)
+function colMapLast(sections, sec, startCol) {
+  startCol = startCol === undefined ? 5 : startCol;
+  const headers = (sections[sec] || []).filter(r => r[1] === 'Header');
+  const headerRow = headers[headers.length - 1] || null;
+  const map = {};
+  if (!headerRow) return map;
+  for (let i = startCol; i < headerRow.length; i++) {
+    const key = headerRow[i].trim().toLowerCase();
+    if (key) map[key] = i;
+  }
+  return map;
+}
+function ci(map, name, fallback) { return map[name] !== undefined ? map[name] : fallback; }
+
 const MONTHS_MAP = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
 
 function parseOptSym(sym) {
@@ -586,23 +614,38 @@ function processTax(sections) {
   const hasFx   = _fxRates !== null;
   const period  = (getData(sections,'Statement').find(r => r[2]==='Period') || [])[3] || '';
 
+  // ── Header-driven column indices for Trades ──
+  const trCols     = colMap(sections, 'Trades');
+  const iTrSym     = ci(trCols, 'symbol',       5);
+  const iTrDate    = ci(trCols, 'date/time',     6);
+  const iTrQty     = ci(trCols, 'quantity',      7);
+  const iTrProc    = ci(trCols, 'proceeds',     10);
+  const iTrComm    = ci(trCols, 'comm/fee',     11);
+  const iTrRealPL  = ci(trCols, 'realized p/l', 13);
+  const iTrCode    = ci(trCols, 'code',         15);
+
+  // ── Header-driven column indices for Open Positions ──
+  const opCols  = colMapLast(sections, 'Open Positions');
+  const iOpSym  = ci(opCols, 'symbol',   5);
+  const iOpQty  = ci(opCols, 'quantity', 6);
+
   const optOrderRows = (sections['Trades']||[]).filter(r => r[1]==='Data' && r[2]==='Order' && r[3]==='Equity and Index Options');
   const optTradesBySym = {};
   for (const r of optOrderRows) {
-    const sym = (r[5]||'').trim(); if (!sym) continue;
+    const sym = (r[iTrSym]||'').trim(); if (!sym) continue;
     if (!optTradesBySym[sym]) optTradesBySym[sym] = [];
-    optTradesBySym[sym].push({ date: parseTradeDate(r[6]), qty: num(r[7]), code: (r[15]||'').trim() });
+    optTradesBySym[sym].push({ date: parseTradeDate(r[iTrDate]), qty: num(r[iTrQty]), code: (r[iTrCode]||'').trim() });
   }
 
   const optSubTotals = (sections['Trades']||[]).filter(r => r[1]==='SubTotal' && r[3]==='Equity and Index Options' && r[4]==='USD');
-  const openOptSyms  = new Set((sections['Open Positions']||[]).filter(r => r[1]==='Data' && r[2]==='Summary' && r[3]==='Equity and Index Options').map(r => (r[5]||'').trim()));
+  const openOptSyms  = new Set((sections['Open Positions']||[]).filter(r => r[1]==='Data' && r[2]==='Summary' && r[3]==='Equity and Index Options').map(r => (r[iOpSym]||'').trim()));
 
   const closedOptions = [];
   for (const r of optSubTotals) {
-    const sym = (r[5]||'').trim();
-    if (!sym || num(r[7]) !== 0 || openOptSyms.has(sym)) continue;
+    const sym = (r[iTrSym]||'').trim();
+    if (!sym || num(r[iTrQty]) !== 0 || openOptSyms.has(sym)) continue;
     const parsed = parseOptSym(sym); if (!parsed) continue;
-    const realPL  = num(r[13]);
+    const realPL  = num(r[iTrRealPL]);
     const trades  = (optTradesBySym[sym]||[]).slice().sort((a,b) => a.date-b.date);
     const openT   = trades.filter(t => t.qty < 0);
     const closeT  = trades.filter(t => t.qty > 0 || t.code.includes('A'));
@@ -620,16 +663,16 @@ function processTax(sections) {
   const stockOrderRows = (sections['Trades']||[]).filter(r => r[1]==='Data' && r[2]==='Order' && r[3]==='Stocks');
   const stockBuysBySym = {}, stockSellsBySym = {};
   for (const r of stockOrderRows) {
-    const sym = (r[5]||'').trim(), qty = num(r[7]), date = parseTradeDate(r[6]);
+    const sym = (r[iTrSym]||'').trim(), qty = num(r[iTrQty]), date = parseTradeDate(r[iTrDate]);
     if (!sym || !date) continue;
     if (qty > 0) {
-      const tc = Math.abs(num(r[10])) + Math.abs(num(r[11]));
+      const tc = Math.abs(num(r[iTrProc])) + Math.abs(num(r[iTrComm]));
       if (!stockBuysBySym[sym]) stockBuysBySym[sym] = [];
       stockBuysBySym[sym].push({ date, qty, totalCost: tc, pricePerShare: tc/qty });
     } else if (qty < 0) {
-      const np = num(r[10]) + num(r[11]);
+      const np = num(r[iTrProc]) + num(r[iTrComm]);
       if (!stockSellsBySym[sym]) stockSellsBySym[sym] = [];
-      stockSellsBySym[sym].push({ date, qty: Math.abs(qty), netProceeds: np, ibkrRL: num(r[13]) });
+      stockSellsBySym[sym].push({ date, qty: Math.abs(qty), netProceeds: np, ibkrRL: num(r[iTrRealPL]) });
     }
   }
 
