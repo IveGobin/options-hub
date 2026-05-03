@@ -105,10 +105,19 @@
     .gs-stats{grid-template-columns:1fr 1fr;}
     .gs-breakdown{grid-template-columns:1fr;}
   }
+  .gs-step-btn{
+    width:26px;height:26px;flex-shrink:0;
+    background:var(--surface2);border:1.5px solid var(--border);
+    color:var(--txt);border-radius:6px;font-size:16px;line-height:1;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;
+    transition:all .15s;user-select:none;padding:0;font-family:var(--mono);
+  }
+  .gs-step-btn:hover{border-color:var(--green);color:var(--green);background:rgba(0,201,141,0.1);}
+  .gs-step-btn:active{transform:scale(0.93);}
 </style>
 </head>
 <body>
-  <div class="gs-section-title">📐 Compound Growth Simulator</div>
+  <div class="gs-section-title">📐 Compound Growth Simulator <span style="opacity:0.45;font-size:0.6rem">v1.0</span></div>
 
   <!-- Scenario Presets -->
   <div class="gs-presets">
@@ -122,8 +131,12 @@
   <div class="gs-controls">
     <div>
       <div class="gs-ctrl-label">Annual Growth Rate: <span class="gs-ctrl-value" id="gs-rate-val">8%</span></div>
-      <input type="range" id="gs-rate" min="1" max="50" value="8" step="1">
-      <div class="gs-range-labels"><span>1%</span><span>50%</span></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+        <button class="gs-step-btn" onclick="stepSlider('gs-rate',-1)">−</button>
+        <input type="range" id="gs-rate" min="1" max="200" value="8" step="1" style="flex:1">
+        <button class="gs-step-btn" onclick="stepSlider('gs-rate',1)">+</button>
+      </div>
+      <div class="gs-range-labels"><span>1%</span><span>200%</span></div>
       <div class="gs-ctrl-sub" id="gs-rate-sub">Average annual S&amp;P 500 return over 100 years.</div>
     </div>
     <div>
@@ -170,8 +183,12 @@
       </div>
       <div class="gs-collapsible" id="gs-phase2-collapse">
         <div class="gs-ctrl-label" style="margin-top:14px">Phase 1 Rate: <span class="gs-ctrl-value" id="gs-phase1-rate-val">30%</span></div>
-        <input type="range" id="gs-phase1-rate" min="1" max="50" value="30" step="1">
-        <div class="gs-range-labels"><span>1%</span><span>50%</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+          <button class="gs-step-btn" onclick="stepSlider('gs-phase1-rate',-1)">−</button>
+          <input type="range" id="gs-phase1-rate" min="1" max="200" value="30" step="1" style="flex:1">
+          <button class="gs-step-btn" onclick="stepSlider('gs-phase1-rate',1)">+</button>
+        </div>
+        <div class="gs-range-labels"><span>1%</span><span>200%</span></div>
         <div class="gs-ctrl-label" style="margin-top:10px">Phase 1 Duration: <span class="gs-ctrl-value" id="gs-phase1-yrs-val">10</span> yrs</div>
         <input type="range" id="gs-phase1-yrs" min="1" max="50" value="10" step="1">
         <div class="gs-range-labels"><span>1</span><span>50</span></div>
@@ -748,6 +765,14 @@
     document.getElementById(id).addEventListener('change',update);
   });
   document.getElementById('gs-compare-mode').addEventListener('change',update);
+
+  function stepSlider(id, delta) {
+    var el = document.getElementById(id);
+    var newVal = Math.min(parseInt(el.max), Math.max(parseInt(el.min), parseInt(el.value) + delta));
+    el.value = newVal;
+    if (id === 'gs-rate') document.querySelectorAll('.gs-preset-btn').forEach(function(b){b.classList.remove('active');});
+    update();
+  }
 
   update();
 </script>
