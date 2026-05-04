@@ -823,7 +823,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR Options <span>Analyzer</span> <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v1.0</span></h1>
+    <h1>IBKR Options <span>Analyzer</span> <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v1.01</span></h1>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <div class="file-chip" id="file-name-chip">
         <span>📄</span>
@@ -849,6 +849,7 @@
             <th>Strike</th>
             <th>Qty</th>
             <th>Premium collected</th>
+            <th>Per share</th>
             <th>Cost to close</th>
             <th>Unrealized P&amp;L</th>
             <th>% Kept</th>
@@ -857,6 +858,29 @@
           </tr>
         </thead>
         <tbody id="open-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ASSIGNED POSITIONS -->
+  <div class="section" id="assigned-section" style="display:none;">
+    <div class="section-title">Options Assigned</div>
+    <div class="table-wrapper">
+      <table class="open-table" id="assigned-table">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Type</th>
+            <th>Strike</th>
+            <th>Qty assigned</th>
+            <th>Assign date</th>
+            <th>Premium collected</th>
+            <th>Per share</th>
+            <th>Effective cost</th>
+            <th>P&amp;L at assign</th>
+          </tr>
+        </thead>
+        <tbody id="assigned-tbody"></tbody>
       </table>
     </div>
   </div>
@@ -1218,6 +1242,52 @@ function processIBKR(sections) {
     });
   }
 
+  // ── ASSIGNED POSITIONS ──────────────────────────────────────
+  // Detect option contracts closed via assignment (code contains 'A').
+  // For each assigned option trade, find premium originally collected and
+  // compute effective cost basis of the resulting stock position.
+  const assignedPositions = [];
+
+  for (const r of tradesRaw) {
+    const code = (r[itCode] || '').trim();
+    if (!code.split(';').map(c=>c.trim()).includes('A')) continue;
+
+    const sym = r[itSym] ? r[itSym].trim() : '';
+    const parsed = parseOptSym(sym);
+    if (!parsed) continue;
+
+    const qty      = Math.abs(num(r[itQty]));   // # contracts closed by assignment
+    const mult     = 100;
+    const assignDate = parseTradeDate(r[itDateTime]);
+
+    // Find the original sell trade (negative qty) to get premium collected
+    const sellTrades = (tradesBySym[sym] || []).filter(t => t.qty < 0);
+    let premCollected = 0;
+    sellTrades.forEach(t => { premCollected += Math.abs(t.proceeds); });
+    const perShare = qty > 0 ? premCollected / (qty * mult) : 0;
+
+    // Effective cost basis per share = strike - premium/share (for puts)
+    const effectiveCost = parsed.type === 'P'
+      ? parsed.strike - perShare
+      : parsed.strike + perShare;
+
+    // Realized P&L on the option itself at assignment
+    const realAtAssign = num(r[itRealPL]);
+
+    assignedPositions.push({
+      sym, ticker: parsed.ticker,
+      type: parsed.type,
+      strike: parsed.strike,
+      qtyContracts: qty,
+      sharesAssigned: qty * mult,
+      assignDate,
+      premCollected,
+      perShare,
+      effectiveCost,
+      realAtAssign
+    });
+  }
+
   // ── SUMMARY STATS ──────────────────────────────────────────
   const totalRealized      = closedPL.reduce((s, c) => s + c.realTotal, 0);
   const totalPremiumInPlay = openPositions.reduce((s, p) => s + p.premiumCollected, 0);
@@ -1234,6 +1304,7 @@ function processIBKR(sections) {
   return {
     openPositions,
     closedPL,
+    assignedPositions,
     totalRealized,
     totalPremiumInPlay,
     totalUnrPL,
@@ -1289,7 +1360,7 @@ function renderDashboard(data, fileName) {
   document.getElementById('dashboard').style.display    = 'block';
   document.getElementById('file-name-text').textContent = fileName;
 
-  const { openPositions, closedPL, totalRealized, totalPremiumInPlay,
+  const { openPositions, closedPL, assignedPositions, totalRealized, totalPremiumInPlay,
           totalUnrPL, totalExposure, closedWins, closedLoses, winRate } = data;
 
   // ── KPI GRID ──
@@ -1331,6 +1402,9 @@ function renderDashboard(data, fileName) {
 
   // ── OPEN TABLE ──
   renderOpenTable(openPositions);
+
+  // ── ASSIGNED TABLE ──
+  renderAssignedTable(assignedPositions);
 
   // ── PIE: open premium by ticker ──
   const openByTicker = {};
@@ -1390,7 +1464,7 @@ function renderOpenTable(openPositions) {
   tbody.innerHTML = '';
 
   if (!openPositions.length) {
-    tbody.innerHTML = `<tr><td colspan="11" class="empty-state">No open option positions found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="empty-state">No open option positions found.</td></tr>`;
     return;
   }
 
@@ -1424,6 +1498,7 @@ function renderOpenTable(openPositions) {
       <td class="mono">$${p.strike % 1 === 0 ? p.strike.toFixed(0) : p.strike.toFixed(2)}</td>
       <td class="mono">${p.qty}</td>
       <td><span class="premium-pill">+$${p.premiumCollected.toFixed(2)}</span></td>
+      <td class="mono" style="color:var(--accent);font-size:11px;">$${(p.premiumCollected / (p.qty * 100)).toFixed(2)}/sh</td>
       <td class="mono" style="color:var(--muted)">$${p.currentValue.toFixed(2)}</td>
       <td class="${unrCls}">${unrStr}</td>
       <td>${keptEl}</td>
@@ -1453,11 +1528,71 @@ function renderOpenTable(openPositions) {
     <td colspan="5" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">TOTAL</td>
     <td><span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$${totPrem.toFixed(2)}</span></td>
     <td></td>
+    <td></td>
     <td class="${totUnrCls}">${totUnrStr}</td>
     <td>${totKeptEl}</td>
     <td class="mono" style="color:var(--text)">${fmtK(totExp)}</td>
     <td></td>
   `;
+  tbody.appendChild(tfoot);
+}
+
+// ── ASSIGNED TABLE ─────────────────────────────────────────────────────
+function renderAssignedTable(assignedPositions) {
+  var section = document.getElementById('assigned-section');
+  var tbody   = document.getElementById('assigned-tbody');
+  tbody.innerHTML = '';
+
+  if (!assignedPositions.length) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+
+  var sorted = assignedPositions.slice().sort(function(a, b) {
+    return (b.assignDate || 0) - (a.assignDate || 0);
+  });
+
+  sorted.forEach(function(p) {
+    var plCls = p.realAtAssign >= 0 ? 'unr-pos' : 'unr-neg';
+    var plSign = p.realAtAssign >= 0 ? '+' : '-';
+    var plAmt  = '$' + Math.abs(p.realAtAssign).toFixed(2);
+    var plStr  = plSign + plAmt;
+
+    var strikeStr = (p.strike % 1 === 0) ? p.strike.toFixed(0) : p.strike.toFixed(2);
+    var contractWord = p.qtyContracts !== 1 ? 'contracts' : 'contract';
+    var dateStr = p.assignDate ? fmtDate(p.assignDate) : '\u2014';
+    var perShStr = '$' + p.perShare.toFixed(2) + '/sh';
+    var effStr   = '$' + p.effectiveCost.toFixed(2) + '/sh';
+
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><strong>' + escHtml(p.ticker) + '</strong></td>' +
+      '<td><span class="type-badge ' + p.type + '">' + p.type + '</span></td>' +
+      '<td class="mono">$' + strikeStr + '</td>' +
+      '<td class="mono">' + p.sharesAssigned + ' sh <span style="color:var(--muted);font-size:11px;">(' + p.qtyContracts + ' ' + contractWord + ')</span></td>' +
+      '<td class="mono">' + dateStr + '</td>' +
+      '<td><span class="premium-pill">+$' + p.premCollected.toFixed(2) + '</span></td>' +
+      '<td class="mono" style="color:var(--accent);font-size:11px;">' + perShStr + '</td>' +
+      '<td class="mono" style="color:var(--yellow);">' + effStr + '</td>' +
+      '<td class="' + plCls + '">' + plStr + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  var totPrem  = assignedPositions.reduce(function(s, p) { return s + p.premCollected; }, 0);
+  var totPL    = assignedPositions.reduce(function(s, p) { return s + p.realAtAssign; }, 0);
+  var totPlCls = totPL >= 0 ? 'unr-pos' : 'unr-neg';
+  var totPlSign = totPL >= 0 ? '+' : '-';
+  var totPlStr  = totPlSign + '$' + Math.abs(totPL).toFixed(2);
+
+  var tfoot = document.createElement('tr');
+  tfoot.style.borderTop = '1px solid var(--border)';
+  tfoot.innerHTML =
+    '<td colspan="5" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">TOTAL</td>' +
+    '<td><span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$' + totPrem.toFixed(2) + '</span></td>' +
+    '<td></td>' +
+    '<td></td>' +
+    '<td class="' + totPlCls + '">' + totPlStr + '</td>';
   tbody.appendChild(tfoot);
 }
 
