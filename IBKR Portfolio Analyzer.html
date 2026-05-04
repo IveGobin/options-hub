@@ -308,7 +308,7 @@
 <div id="report">
   <div class="report-header">
     <div>
-      <div class="report-brand">IB <span>Report</span> <span style="font-size:10px;font-weight:400;color:var(--text3);font-family:'DM Mono',monospace;margin-left:6px;">v1.0</span></div>
+      <div class="report-brand">IB <span>Report</span> <span style="font-size:10px;font-weight:400;color:var(--text3);font-family:'DM Mono',monospace;margin-left:6px;">v1.01</span></div>
     </div>
     <div class="report-meta" id="header-meta"></div>
     <button class="reset-btn" onclick="resetToUpload()">↩ New file</button>
@@ -736,28 +736,140 @@ function processCSV(text) {
   `;
 
   // ── 2. NAV FLOW ──
-  const navItems = [
-    { label: 'Starting', val: navStart, ccy: '€' },
-    { label: 'Mark-to-Mkt', val: num(nc['Mark-to-Market']||0), ccy: '' },
-    { label: 'Deposits', val: num(nc['Deposits & Withdrawals']||0), ccy: '' },
-    { label: 'Options P&L', val: optRealNet, ccy: '' },
-    { label: 'Interest', val: num(nc['Interest']||0) + num(nc['Change in Interest Accruals']||0), ccy: '' },
-    { label: 'Fees', val: totalFees + num(nc['Commissions']||0) + num(nc['Withholding Tax']||0), ccy: '' },
-    { label: 'Ending', val: navEnd, ccy: '€' },
-  ];
-  const navFlowHtml = '<div style="display:flex;align-items:stretch;gap:0;overflow-x:auto;padding-bottom:4px;">' +
-    navItems.map(function(it,i) {
-      var col = (i===0||i===navItems.length-1) ? 'var(--blue)' : (it.val>=0 ? 'var(--green)' : 'var(--red)');
-      var valStr = (it.val<0?'-':'') + it.ccy + Math.abs(it.val).toLocaleString(undefined,{maximumFractionDigits:0});
-      var arrow = i < navItems.length-1 ? '<div style="font-size:18px;color:var(--text3);padding:0 8px;flex-shrink:0;">→</div>' : '';
-      return '<div style="display:flex;align-items:center;">'
-        + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 22px;min-width:110px;text-align:center;">'
-        + '<div style="font-size:11px;color:var(--text3);font-weight:500;letter-spacing:0.04em;margin-bottom:10px;text-transform:uppercase;">' + it.label + '</div>'
-        + '<div style="font-size:18px;font-weight:600;font-family:DM Mono,monospace;color:' + col + ';white-space:nowrap;">' + valStr + '</div>'
-        + '</div>'
-        + arrow
-        + '</div>';
-    }).join('') + '</div>';
+  // Precise buckets derived directly from Change in NAV section
+  const navMtM        = num(nc['Mark-to-Market'] || 0);
+  const navDeposits   = num(nc['Deposits & Withdrawals'] || 0);
+  const navDividends  = num(nc['Dividends'] || 0);
+  const navWHT        = num(nc['Withholding Tax'] || 0);
+  const navDivAccrual = num(nc['Change in Dividend Accruals'] || 0);
+  const navInterest   = num(nc['Interest'] || 0);
+  const navIntAccrual = num(nc['Change in Interest Accruals'] || 0);
+  const navOtherFees  = num(nc['Other Fees'] || 0);
+  const navComm       = num(nc['Commissions'] || 0);
+  const navSalesTax   = num(nc['Sales Tax'] || 0);
+  const navFX         = num(nc['Other FX Translations'] || 0);
+
+  // Grouped totals for the flow boxes
+  const navIncomeTotal = navDividends + navWHT + navDivAccrual + navInterest + navIntAccrual;
+  const navCostsTotal  = navComm + navOtherFees + navSalesTax;
+  const navFXTotal     = navFX;
+
+  // NAV check
+  const navCheck = navStart + navDeposits + navMtM + navIncomeTotal + navCostsTotal + navFXTotal;
+
+  function navSign(v, ccy) {
+    if (v === 0) return ccy + '0.00';
+    return (v > 0 ? '+' : '−') + ccy + Math.abs(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  function navCol(v, isEndpoint) {
+    if (isEndpoint) return 'var(--blue)';
+    return v >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+
+  function navBox(label, val, ccy, isEndpoint, sub) {
+    return '<div style="display:flex;align-items:center;">'
+      + '<div style="background:var(--surface' + (isEndpoint ? '' : '2') + ');border:1px solid var(--border' + (isEndpoint ? '2' : '') + ');border-radius:10px;padding:14px 18px;min-width:108px;text-align:center;flex-shrink:0;">'
+      + '<div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:0.06em;margin-bottom:8px;text-transform:uppercase;">' + label + '</div>'
+      + '<div style="font-size:16px;font-weight:600;font-family:\'DM Mono\',monospace;color:' + navCol(val, isEndpoint) + ';white-space:nowrap;">' + navSign(val, ccy) + '</div>'
+      + (sub ? '<div style="font-size:10px;color:var(--text3);margin-top:4px;font-family:\'DM Mono\',monospace;">' + sub + '</div>' : '')
+      + '</div></div>';
+  }
+
+  function navArrow() {
+    return '<div style="font-size:16px;color:var(--text3);padding:0 6px;flex-shrink:0;">→</div>';
+  }
+
+  // Breakdown row helper
+  function nbRow(label, val, ccy) {
+    var col = val >= 0 ? 'var(--green)' : 'var(--red)';
+    if (val === 0) col = 'var(--text2)';
+    return '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:5px 12px;border-bottom:1px solid var(--border);font-size:12px;gap:10px;">'
+      + '<span style="color:var(--text2);flex:1;">' + label + '</span>'
+      + '<span style="font-family:\'DM Mono\',monospace;color:' + col + ';font-size:12px;flex-shrink:0;">' + navSign(val, ccy) + '</span>'
+      + '</div>';
+  }
+  function nbTotal(label, val, ccy) {
+    var col = val >= 0 ? 'var(--green)' : 'var(--red)';
+    if (val === 0) col = 'var(--text2)';
+    return '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 12px;border-top:1px solid var(--border2);font-size:12px;font-weight:600;gap:10px;background:var(--surface);">'
+      + '<span style="color:var(--text2);">' + label + '</span>'
+      + '<span style="font-family:\'DM Mono\',monospace;color:' + col + ';font-size:12px;">' + navSign(val, ccy) + '</span>'
+      + '</div>';
+  }
+  function nbGroup(title, rows, total) {
+    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;flex:1;min-width:190px;">'
+      + '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface);">' + title + '</div>'
+      + rows
+      + total
+      + '</div>';
+  }
+
+  // MtM split: use R&U totals for stocks vs options
+  const mtmStocks  = stocks.reduce((s,o) => s + o.total, 0);
+  const mtmOptions = navMtM - mtmStocks;
+
+  // Verify string
+  const navDiff = Math.abs(navCheck - navEnd);
+  const navVerifyStr = navDiff < 0.05
+    ? '✓ Reconciles to €' + navEnd.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})
+    : '⚠ Off by €' + navDiff.toFixed(2);
+  const navVerifyCol = navDiff < 0.05 ? 'var(--green)' : 'var(--amber)';
+
+  const navFlowHtml =
+    // ── Flow strip ──
+    '<div style="overflow-x:auto;padding-bottom:4px;">'
+    + '<div style="display:flex;align-items:center;gap:0;min-width:max-content;">'
+    + navBox('Starting', navStart, '€', true, 'new account')
+    + navArrow()
+    + navBox('Deposits', navDeposits, '€', false, 'cash in')
+    + navArrow()
+    + navBox('Mark-to-market', navMtM, '€', false, 'price changes')
+    + navArrow()
+    + navBox('Income', navIncomeTotal, '€', false, 'div + interest')
+    + navArrow()
+    + navBox('Costs', navCostsTotal, '€', false, 'comm + fees')
+    + (Math.abs(navFXTotal) > 0.001 ? navArrow() + navBox('FX / other', navFXTotal, '€', false, 'translation') : '')
+    + navArrow()
+    + navBox('Ending NAV', navEnd, '€', true, navVerifyStr)
+    + '</div></div>'
+
+    // ── Breakdown panels ──
+    + '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:1.25rem;">'
+
+    + nbGroup('Mark-to-market breakdown',
+        nbRow('Stocks (realized + unrealized)', mtmStocks, '€')
+        + nbRow('Options (unrealized positions)', mtmOptions, '€'),
+        nbTotal('Total MtM', navMtM, '€')
+      )
+
+    + nbGroup('Income detail',
+        nbRow('Dividends received', navDividends, '€')
+        + nbRow('Withholding tax', navWHT, '€')
+        + nbRow('Dividend accrual change', navDivAccrual, '€')
+        + nbRow('Interest received', navInterest, '€')
+        + nbRow('Interest accrual change', navIntAccrual, '€'),
+        nbTotal('Net income', navIncomeTotal, '€')
+      )
+
+    + nbGroup('Costs detail',
+        nbRow('Commissions', navComm, '€')
+        + nbRow('Market data fees', navOtherFees, '€')
+        + nbRow('Sales tax', navSalesTax, '€'),
+        nbTotal('Total costs', navCostsTotal, '€')
+      )
+
+    + '</div>'
+
+    // ── Verify bar ──
+    + '<div style="margin-top:1rem;padding:9px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text2);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">'
+    + '<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text3);">'
+    + '€' + navStart.toLocaleString(undefined,{minimumFractionDigits:2}) + ' + €' + navDeposits.toLocaleString(undefined,{minimumFractionDigits:2})
+    + ' + €' + navMtM.toFixed(2) + ' + €' + navIncomeTotal.toFixed(2) + ' − €' + Math.abs(navCostsTotal).toFixed(2)
+    + (Math.abs(navFXTotal) > 0.001 ? ' + €' + navFXTotal.toFixed(2) : '')
+    + ' = <strong style="color:var(--text);">€' + navEnd.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</strong>'
+    + '</span>'
+    + '<span style="font-size:11px;font-weight:600;color:' + navVerifyCol + ';background:' + (navDiff < 0.05 ? 'var(--green-dim)' : 'var(--amber-dim)') + ';padding:3px 8px;border-radius:4px;">' + navVerifyStr + '</span>'
+    + '</div>';
 
   // ── 3. STOCK P&L TABLE ──
   // Enrich stocks with open position data
