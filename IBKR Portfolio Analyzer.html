@@ -139,9 +139,15 @@
   }
   .section-label {
     font-size: 11px; font-weight: 600; letter-spacing: 0.1em;
-    color: var(--text3); text-transform: uppercase;
+    color: var(--blue); text-transform: uppercase; opacity: 0.7;
   }
-  .section-line { flex: 1; height: 1px; background: var(--border); }
+  .section-line { flex: 1; height: 1px; background: linear-gradient(to right, rgba(77,159,255,0.25), transparent); }
+
+  /* Custom scrollbars — dark theme */
+  ::-webkit-scrollbar { height: 4px; width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--surface2); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
 
   /* STAT ROWS — label left, value right, divider between */
   .metrics { display: flex; flex-direction: column; gap: 0; }
