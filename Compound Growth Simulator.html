@@ -117,7 +117,7 @@
 </style>
 </head>
 <body>
-  <div class="gs-section-title">📐 Compound Growth Simulator <span style="opacity:0.45;font-size:0.6rem">v1.0</span></div>
+  <div class="gs-section-title">📐 Compound Growth Simulator <span style="opacity:0.45;font-size:0.6rem">v1.1</span></div>
 
   <!-- Scenario Presets -->
   <div class="gs-presets">
@@ -217,6 +217,14 @@
         <input type="range" id="gs-wstart" min="1" max="99" value="20" step="1">
         <div class="gs-ctrl-label" style="margin-top:10px">Monthly Withdrawal</div>
         <div class="gs-capital-input"><span>$</span><input type="number" id="gs-wamount" value="3000" min="0"></div>
+        <div class="gs-ctrl-label" style="margin-top:14px">Annual Withdrawal Increase: <span class="gs-ctrl-value" id="gs-winfl-val">0%</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+          <button class="gs-step-btn" onclick="stepSlider('gs-winfl',-0.5)">−</button>
+          <input type="range" id="gs-winfl" min="0" max="20" value="0" step="0.5" style="flex:1">
+          <button class="gs-step-btn" onclick="stepSlider('gs-winfl',0.5)">+</button>
+        </div>
+        <div class="gs-range-labels"><span>0%</span><span>20%</span></div>
+        <div class="gs-ctrl-sub">Withdrawal amount rises by this % each year (e.g. to keep up with inflation).</div>
       </div>
     </div>
     <div>
@@ -393,6 +401,7 @@
     var doWith  = o.noWithdrawal ? false : document.getElementById('gs-withdrawal-on').checked;
     var wStart  = parseInt(document.getElementById('gs-wstart').value);
     var wAmt    = doWith?(parseFloat(document.getElementById('gs-wamount').value)||0)*12:0;
+    var wInfl   = parseFloat(document.getElementById('gs-winfl').value)/100;
     if(o.noContrib){ monthAmt=0; doMonth=false; }
 
     var doPhase2 = document.getElementById('gs-phase2-on').checked;
@@ -401,13 +410,17 @@
 
     var totalData=[],contribData=[],annualGains=[];
     var v=cap, totalContrib=cap, curMonthly=monthAmt;
+    var curWAmt = wAmt;
     var prevV = cap;
 
     for(var y=0;y<=maxY;y++){
       if(y>0){
         if(y>1) curMonthly*=(1+infl);
+        // Increase withdrawal each year after it starts
+        if(doWith && y === wStart) curWAmt = wAmt; // set base at start year
+        else if(doWith && y > wStart && wInfl > 0) curWAmt *= (1 + wInfl);
         var addContrib=(doMonth&&(!doWith||y<wStart))?curMonthly*12:0;
-        var drawdown=(doWith&&y>=wStart)?wAmt:0;
+        var drawdown=(doWith&&y>=wStart)?curWAmt:0;
         var yr = (doPhase2 && y <= phase1Yrs) ? phase1Rate : r;
 
         if(doCrash&&y===cYear){
@@ -649,6 +662,8 @@
     document.getElementById('gs-monthly-label').textContent =document.getElementById('gs-monthly-on').checked?'On':'Off';
     document.getElementById('gs-withdrawal-label').textContent=document.getElementById('gs-withdrawal-on').checked?'On':'Off';
     document.getElementById('gs-monthly-collapse').classList.toggle('open',document.getElementById('gs-monthly-on').checked);
+    var winflVal = parseFloat(document.getElementById('gs-winfl').value);
+    document.getElementById('gs-winfl-val').textContent = winflVal % 1 === 0 ? winflVal + '%' : winflVal.toFixed(1) + '%';
     document.getElementById('gs-withdrawal-collapse').classList.toggle('open',document.getElementById('gs-withdrawal-on').checked);
     document.getElementById('gs-sideways-collapse').classList.toggle('open',document.getElementById('gs-sideways').checked);
 
@@ -752,7 +767,7 @@
     });
   });
 
-  ['gs-rate','gs-years','gs-infl','gs-wstart','gs-sstart','gs-sdur','gs-cyear','gs-csev','gs-real-infl','gs-phase1-rate','gs-phase1-yrs'].forEach(function(id){
+  ['gs-rate','gs-years','gs-infl','gs-wstart','gs-sstart','gs-sdur','gs-cyear','gs-csev','gs-real-infl','gs-phase1-rate','gs-phase1-yrs','gs-winfl'].forEach(function(id){
     document.getElementById(id).addEventListener('input',function(){
       if(id==='gs-rate') document.querySelectorAll('.gs-preset-btn').forEach(function(b){b.classList.remove('active');});
       update();
@@ -768,8 +783,8 @@
 
   function stepSlider(id, delta) {
     var el = document.getElementById(id);
-    var newVal = Math.min(parseInt(el.max), Math.max(parseInt(el.min), parseInt(el.value) + delta));
-    el.value = newVal;
+    var newVal = Math.min(parseFloat(el.max), Math.max(parseFloat(el.min), parseFloat(el.value) + delta));
+    el.value = Math.round(newVal * 100) / 100;
     if (id === 'gs-rate') document.querySelectorAll('.gs-preset-btn').forEach(function(b){b.classList.remove('active');});
     update();
   }
