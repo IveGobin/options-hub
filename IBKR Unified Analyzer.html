@@ -351,6 +351,60 @@
   .earn-item-value { font-size:16px; font-weight:700; font-family:'Space Mono',monospace; }
   .earn-item-tag { font-size:10px; color:var(--muted); background:var(--surface); border:1px solid var(--border); padding:3px 7px; border-radius:4px; margin-left:auto; }
 
+  /* ── STOCK TRANSACTION DRAWER ── */
+  .stock-row-expandable { cursor:pointer; }
+  .stock-row-expandable td:first-child::before { content:'▶ '; font-size:9px; color:var(--muted); transition:transform 0.15s; display:inline-block; margin-right:4px; }
+  .stock-row-expandable.expanded td:first-child::before { content:'▼ '; color:var(--blue); }
+  .stock-tx-row { background:var(--surface2); }
+  .stock-tx-row td { padding:0!important; }
+  .stock-tx-inner { padding:8px 24px 12px 40px; border-top:1px solid var(--border); }
+  .stock-tx-title { font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; padding-top:4px; }
+  table.tx-table { width:100%; border-collapse:collapse; font-size:11px; }
+  table.tx-table th { font-family:'Space Mono',monospace; font-size:9px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); padding:0 10px 6px; text-align:right; white-space:nowrap; border-bottom:1px solid rgba(128,128,128,0.12); }
+  table.tx-table th:first-child { text-align:left; }
+  table.tx-table td { font-family:'Space Mono',monospace; font-size:11px; padding:5px 10px; text-align:right; border-bottom:1px solid rgba(128,128,128,0.05); }
+  table.tx-table td:first-child { text-align:left; color:var(--muted); }
+  table.tx-table tr:last-child td { border-bottom:none; }
+  .tx-buy { color:var(--blue)!important; }
+  .tx-sell { color:var(--green)!important; }
+  .tx-open-badge { background:rgba(0,180,216,0.1); color:var(--blue); border-radius:4px; padding:1px 5px; font-size:9px; }
+  .tx-close-badge { background:rgba(0,200,83,0.1); color:var(--green); border-radius:4px; padding:1px 5px; font-size:9px; }
+  .tx-empty { color:var(--muted); font-size:12px; padding:8px 0; }
+
+  /* ── DEPOSITS TAB ── */
+  .dep-summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:2px; background:var(--border); border-radius:12px; overflow:hidden; margin-bottom:20px; }
+  .dep-summary-card { background:var(--surface); padding:20px; }
+  .dep-summary-label { font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+  .dep-summary-value { font-family:'Space Mono',monospace; font-size:24px; font-weight:700; color:var(--blue); }
+  .dep-summary-sub { font-size:11px; color:var(--muted); margin-top:4px; }
+  .dep-timeline { display:flex; flex-direction:column; gap:2px; }
+  .dep-year-group { background:var(--surface); border-radius:10px; overflow:hidden; border:1px solid var(--border); }
+  .dep-year-header { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; background:var(--surface2); border-bottom:1px solid var(--border); cursor:pointer; user-select:none; }
+  .dep-year-label { font-family:'Space Mono',monospace; font-size:12px; font-weight:700; letter-spacing:0.1em; color:var(--text); }
+  .dep-year-total { font-family:'Space Mono',monospace; font-size:13px; font-weight:700; color:var(--blue); }
+  .dep-year-count { font-size:11px; color:var(--muted); margin-left:8px; }
+  .dep-rows-wrap { overflow:hidden; transition:max-height 0.25s ease; }
+  table.dep-table { width:100%; border-collapse:collapse; font-size:12px; }
+  table.dep-table thead th { font-family:'Space Mono',monospace; font-size:9px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--border); padding:8px 16px; text-align:left; white-space:nowrap; }
+  table.dep-table thead th:last-child { text-align:right; }
+  table.dep-table tbody tr { border-bottom:1px solid rgba(128,128,128,0.06); transition:background 0.1s; }
+  table.dep-table tbody tr:hover { background:var(--surface2); }
+  table.dep-table tbody td { padding:10px 16px; font-family:'Space Mono',monospace; font-size:12px; }
+  table.dep-table tbody td.dep-amount { text-align:right; font-weight:700; }
+  table.dep-table tbody td.dep-amount.pos { color:var(--green); }
+  table.dep-table tbody td.dep-amount.neg { color:var(--red); }
+  table.dep-table tbody td.dep-date { color:var(--muted); font-size:11px; }
+  table.dep-table tbody td.dep-desc { color:var(--text); }
+  table.dep-table tfoot td { padding:10px 16px; border-top:1px solid var(--border); font-weight:700; background:var(--surface2); font-family:'Space Mono',monospace; font-size:12px; }
+  table.dep-table tfoot td.dep-amount { text-align:right; color:var(--blue); }
+  .dep-bar-wrap { background:var(--surface2); border-radius:10px; padding:16px; margin-bottom:20px; }
+  .dep-bar-title { font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:12px; }
+  .dep-bar-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .dep-bar-label { font-family:'Space Mono',monospace; font-size:11px; color:var(--muted); width:60px; text-align:right; flex-shrink:0; }
+  .dep-bar-track { flex:1; height:18px; background:rgba(128,128,128,0.1); border-radius:4px; overflow:hidden; position:relative; }
+  .dep-bar-fill { height:100%; border-radius:4px; background:var(--blue); opacity:0.8; transition:width 0.4s ease; }
+  .dep-bar-val { font-family:'Space Mono',monospace; font-size:11px; color:var(--blue); width:70px; flex-shrink:0; }
+
   /* ── CHART CARD ── */
   .chart-card { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:20px; }
   .chart-card-title { font-size:12px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); margin-bottom:14px; }
@@ -382,7 +436,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.0</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.1</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -401,6 +455,7 @@
     <button class="tab-btn" onclick="switchTab(event,'tab-closed')">Closed P&amp;L</button>
     <button class="tab-btn" onclick="switchTab(event,'tab-stocks')">Stocks</button>
     <button class="tab-btn" onclick="switchTab(event,'tab-cash')">Cash &amp; Income</button>
+    <button class="tab-btn" onclick="switchTab(event,'tab-deposits')">Deposits &amp; Withdrawals</button>
     <button class="tab-btn" onclick="switchTab(event,'tab-charts')">Charts</button>
   </div>
 
@@ -565,6 +620,19 @@
       <div class="earn-grid" id="earn-grid"></div>
     </div>
   </div><!-- /tab-cash -->
+
+  <!-- ───── TAB: DEPOSITS & WITHDRAWALS ───── -->
+  <div id="tab-deposits" class="tab-pane">
+    <div class="section">
+      <div class="section-title">Deposits &amp; Withdrawals summary</div>
+      <div class="dep-summary-grid" id="dep-summary-grid"></div>
+      <div class="dep-bar-wrap" id="dep-bar-wrap">
+        <div class="dep-bar-title">Monthly deposits</div>
+        <div id="dep-bar-chart"></div>
+      </div>
+      <div class="dep-timeline" id="dep-timeline"></div>
+    </div>
+  </div><!-- /tab-deposits -->
 
   <!-- ───── TAB: CHARTS ───── -->
   <div id="tab-charts" class="tab-pane">
@@ -739,10 +807,15 @@ function processIBKR(sections) {
   const iOpCloseP = ci(opCols,'close price',10);
   const iOpVal    = ci(opCols,'value',11);
   const iOpUnrPL  = ci(opCols,'unrealized p/l',12);
+  // Normalize symbol: IBKR appends exchange suffixes (e.g. 'l' for LSE) in Open Positions
+  // but uses the base symbol everywhere else. Strip trailing lowercase letters for matching.
+  function normSym(s) { return (s||'').trim().replace(/[a-z]+$/, ''); }
+
   const opData = getData(sections,'Open Positions').filter(r => r[2]==='Summary');
   const openStocks = [], openOptions = [];
   for (const r of opData) {
-    const obj = { cat:r[3], ccy:r[4], sym:r[iOpSym], qty:num(r[iOpQty]), mult:num(r[iOpMult])||100,
+    const rawSym = (r[iOpSym]||'').trim();
+    const obj = { cat:r[3], ccy:r[4], sym:rawSym, normSym:normSym(rawSym), qty:num(r[iOpQty]), mult:num(r[iOpMult])||100,
       costPrice:num(r[iOpCostP]), costBasis:num(r[iOpCostB]), closePrice:num(r[iOpCloseP]),
       value:num(r[iOpVal]), unrPL:num(r[iOpUnrPL]) };
     if (r[3]==='Stocks') openStocks.push(obj);
@@ -954,6 +1027,23 @@ function processIBKR(sections) {
   const keyToNum = k => { const mo=monthOrder.indexOf(k.substring(0,3)); const yr=parseInt(k.substring(4))||0; return yr*12+mo; };
   const sortedMonths = Object.keys(optByMonth).sort((a,b)=>keyToNum(a)-keyToNum(b));
 
+  // ── STOCK TRADE MAP (for transaction drill-down) ──
+  const stockTradeMap = {};
+  for (const r of getData(sections,'Trades').filter(r2 => r2[2]==='Order' && r2[3]==='Stocks')) {
+    const sym = (r[itSym]||'').trim();
+    if (!sym) continue;
+    if (!stockTradeMap[sym]) stockTradeMap[sym] = [];
+    stockTradeMap[sym].push({
+      date: r[itDate] || '',
+      qty: num(r[itQty]),
+      price: num(r[ci(tCols,'t. price',8)]),
+      proceeds: num(r[itProc]),
+      comm: num(r[itComm]),
+      realPL: num(r[itRealPL]),
+      code: (r[itCode]||'').trim()
+    });
+  }
+
   return {
     period, acctName, acctId, generated, twr,
     navStart, navEnd, navMap,
@@ -967,6 +1057,7 @@ function processIBKR(sections) {
     fxEURcash, fxUSDinEUR, deposits, totalDeposits, totalFees, totalComm,
     divEur, intEur, accrualEur, whtVal, lendVal, totalInflow, totalDeductions,
     instrMap,
+    stockTradeMap,
     organicPL: navEnd - navStart - totalDeposits,
     optByMonth, sortedMonths,
     optionsRU, optTradeMap, openOptPosMap
@@ -1139,6 +1230,9 @@ function renderDashboard(data, fileName) {
 
   // ── CASH & INCOME ──
   renderCashIncome(data);
+
+  // ── DEPOSITS & WITHDRAWALS ──
+  renderDeposits(data);
 
   // ── CHARTS ──
   renderCharts(data);
@@ -1423,24 +1517,35 @@ function renderMatrix(filterYear) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// STOCKS TABLE
+// STOCKS TABLE (with expandable transaction history)
 // ═══════════════════════════════════════════════════════════════════
 function renderStocksTable(data) {
   const tbody = document.getElementById('stock-tbody');
   const openStockMap = {};
-  for (const p of data.openStocks) openStockMap[p.sym] = p;
-  const rows = data.stocks.map(s => {
-    const op = openStockMap[s.sym];
+  for (const p of data.openStocks) {
+    openStockMap[p.sym] = p;           // exact key (e.g. COPAl)
+    if (p.normSym && p.normSym !== p.sym) openStockMap[p.normSym] = p; // normalized key (e.g. COPA)
+  }
+
+  tbody.innerHTML = '';
+  data.stocks.forEach(s => {
+    const op  = openStockMap[s.sym];
     const ccy = op ? op.ccy : 'USD';
-    const cs  = ccy==='EUR' ? '€' : '$';
+    const cs  = ccy === 'EUR' ? '€' : '$';
     const qty = op ? op.qty.toLocaleString() : '<span style="color:var(--muted)">sold</span>';
-    const costP  = op ? cs+op.costPrice.toFixed(2) : '—';
-    const lastP  = op ? cs+op.closePrice.toFixed(2) : '—';
-    const mktV   = op ? cs+Math.round(op.value).toLocaleString() : '—';
-    const rCls   = s.realTotal>=0?'pos':s.realTotal<0?'neg':'neu';
-    const uCls   = s.unrTotal>=0?'pos':s.unrTotal<0?'neg':'neu';
-    const tCls   = s.total>=0?'pos':s.total<0?'neg':'neu';
-    return `<tr>
+    const costP = op ? cs + op.costPrice.toFixed(2) : '—';
+    const lastP = op ? cs + op.closePrice.toFixed(2) : '—';
+    const mktV  = op ? cs + Math.round(op.value).toLocaleString() : '—';
+    const rCls  = s.realTotal >= 0 ? 'pos' : s.realTotal < 0 ? 'neg' : 'neu';
+    const uCls  = s.unrTotal >= 0 ? 'pos' : s.unrTotal < 0 ? 'neg' : 'neu';
+    const tCls  = s.total >= 0 ? 'pos' : s.total < 0 ? 'neg' : 'neu';
+    const trades = (data.stockTradeMap || {})[s.sym] || [];
+    const hasTrades = trades.length > 0;
+
+    const tr = document.createElement('tr');
+    tr.className = hasTrades ? 'stock-row-expandable' : '';
+    tr.title = hasTrades ? 'Click to show transactions' : '';
+    tr.innerHTML = `
       <td>${escHtml(s.sym)}</td>
       <td style="text-align:left;color:var(--muted);font-family:'Syne',sans-serif;font-size:12px;">${escHtml(data.instrMap[s.sym]||'')}</td>
       <td class="neu">${ccy}</td>
@@ -1448,18 +1553,203 @@ function renderStocksTable(data) {
       <td class="neu">${costP}</td>
       <td class="neu">${lastP}</td>
       <td class="neu">${mktV}</td>
-      <td class="${rCls}">${s.realTotal!==0?(s.realTotal>0?'+':'')+cs+Math.abs(s.realTotal).toFixed(2):'—'}</td>
-      <td class="${uCls}">${s.unrTotal!==0?(s.unrTotal>0?'+':'')+cs+Math.abs(s.unrTotal).toFixed(2):'—'}</td>
-      <td class="${tCls}">${(s.total>=0?'+':'')+cs+Math.abs(s.total).toFixed(2)}</td>
-    </tr>`;
-  }).join('');
+      <td class="${rCls}">${s.realTotal !== 0 ? (s.realTotal > 0 ? '+' : '') + cs + Math.abs(s.realTotal).toFixed(2) : '—'}</td>
+      <td class="${uCls}">${s.unrTotal !== 0 ? (s.unrTotal > 0 ? '+' : '') + cs + Math.abs(s.unrTotal).toFixed(2) : '—'}</td>
+      <td class="${tCls}">${(s.total >= 0 ? '+' : '') + cs + Math.abs(s.total).toFixed(2)}</td>`;
+
+    const txRow = document.createElement('tr');
+    txRow.className = 'stock-tx-row';
+    txRow.style.display = 'none';
+
+    if (hasTrades) {
+      const txRows = trades.map(t => {
+        const isBuy = t.qty > 0;
+        const isOpen = t.code.includes('O');
+        const isClose = t.code.includes('C');
+        const dateStr = t.date.substring(0, 10);
+        const qtyStr = (isBuy ? '+' : '') + t.qty.toLocaleString();
+        const realStr = t.realPL !== 0 ? ((t.realPL > 0 ? '+' : '') + cs + Math.abs(t.realPL).toFixed(2)) : '—';
+        const realCls = t.realPL > 0 ? 'style="color:var(--green)"' : t.realPL < 0 ? 'style="color:var(--red)"' : 'style="color:var(--muted)"';
+        const badge = isOpen ? '<span class="tx-open-badge">OPEN</span>' : isClose ? '<span class="tx-close-badge">CLOSE</span>' : '';
+        return `<tr>
+          <td class="dep-date">${dateStr}</td>
+          <td class="${isBuy ? 'tx-buy' : 'tx-sell'}">${qtyStr} sh</td>
+          <td>${cs}${Math.abs(t.price).toFixed(3)}</td>
+          <td>${cs}${Math.abs(t.proceeds).toFixed(2)}</td>
+          <td style="color:var(--red)">${t.comm !== 0 ? cs + t.comm.toFixed(2) : '—'}</td>
+          <td ${realCls}>${realStr}</td>
+          <td>${badge}</td>
+        </tr>`;
+      }).join('');
+
+      txRow.innerHTML = `<td colspan="10">
+        <div class="stock-tx-inner">
+          <div class="stock-tx-title">Transaction history — ${escHtml(s.sym)} (${trades.length} trade${trades.length !== 1 ? 's' : ''})</div>
+          <table class="tx-table">
+            <thead><tr>
+              <th>Date</th><th>Qty</th><th>Price</th><th>Proceeds</th><th>Commission</th><th>Realized P&L</th><th>Code</th>
+            </tr></thead>
+            <tbody>${txRows}</tbody>
+          </table>
+        </div>
+      </td>`;
+
+      tr.addEventListener('click', () => {
+        const isExpanded = tr.classList.toggle('expanded');
+        txRow.style.display = isExpanded ? 'table-row' : 'none';
+      });
+    } else {
+      txRow.innerHTML = `<td colspan="10"><div class="stock-tx-inner"><div class="tx-empty">No individual trade records found for ${escHtml(s.sym)}.</div></div></td>`;
+    }
+
+    tbody.appendChild(tr);
+    tbody.appendChild(txRow);
+  });
+
   const totR = data.stockRealNet, totU = data.stockUnrNet, totT = data.stockTotal;
-  tbody.innerHTML = rows + `<tr class="summary-row">
+  const summaryRow = document.createElement('tr');
+  summaryRow.className = 'summary-row';
+  summaryRow.innerHTML = `
     <td colspan="7">TOTAL</td>
-    <td class="${totR>=0?'pos':'neg'}">${(totR>=0?'+':'−')}$${Math.abs(totR).toFixed(2)}</td>
-    <td class="${totU>=0?'pos':'neg'}">${(totU>=0?'+':'−')}$${Math.abs(totU).toFixed(2)}</td>
-    <td class="${totT>=0?'pos':'neg'}">${(totT>=0?'+':'−')}$${Math.abs(totT).toFixed(2)}</td>
-  </tr>`;
+    <td class="${totR >= 0 ? 'pos' : 'neg'}">${(totR >= 0 ? '+' : '−')}$${Math.abs(totR).toFixed(2)}</td>
+    <td class="${totU >= 0 ? 'pos' : 'neg'}">${(totU >= 0 ? '+' : '−')}$${Math.abs(totU).toFixed(2)}</td>
+    <td class="${totT >= 0 ? 'pos' : 'neg'}">${(totT >= 0 ? '+' : '−')}$${Math.abs(totT).toFixed(2)}</td>`;
+  tbody.appendChild(summaryRow);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DEPOSITS & WITHDRAWALS
+// ═══════════════════════════════════════════════════════════════════
+function renderDeposits(data) {
+  const depCols = { currency: 2, date: 3, description: 4, amount: 5 };
+  const deps = data.deposits || [];
+
+  // Summary cards
+  const totalIn  = deps.filter(r => parseFloat(String(r[depCols.amount]).replace(/,/g,'')) > 0)
+                       .reduce((s,r) => s + parseFloat(String(r[depCols.amount]).replace(/,/g,'')), 0);
+  const totalOut = deps.filter(r => parseFloat(String(r[depCols.amount]).replace(/,/g,'')) < 0)
+                       .reduce((s,r) => s + parseFloat(String(r[depCols.amount]).replace(/,/g,'')), 0);
+  const netTotal = totalIn + totalOut;
+
+  document.getElementById('dep-summary-grid').innerHTML = `
+    <div class="dep-summary-card">
+      <div class="dep-summary-label">Total deposited</div>
+      <div class="dep-summary-value" style="color:var(--green);">+€${totalIn.toLocaleString(undefined,{minimumFractionDigits:2})}</div>
+      <div class="dep-summary-sub">${deps.filter(r=>parseFloat(String(r[depCols.amount]).replace(/,/g,''))>0).length} transfers</div>
+    </div>
+    <div class="dep-summary-card">
+      <div class="dep-summary-label">Total withdrawn</div>
+      <div class="dep-summary-value" style="color:${totalOut<0?'var(--red)':'var(--muted)'};">${totalOut<0?'−€'+Math.abs(totalOut).toLocaleString(undefined,{minimumFractionDigits:2}):'€0.00'}</div>
+      <div class="dep-summary-sub">${deps.filter(r=>parseFloat(String(r[depCols.amount]).replace(/,/g,''))<0).length} transfers</div>
+    </div>
+    <div class="dep-summary-card">
+      <div class="dep-summary-label">Net cash added</div>
+      <div class="dep-summary-value" style="color:${netTotal>=0?'var(--blue)':'var(--red)'};">${netTotal>=0?'+':''}€${netTotal.toLocaleString(undefined,{minimumFractionDigits:2})}</div>
+      <div class="dep-summary-sub">${deps.length} transactions total</div>
+    </div>
+    <div class="dep-summary-card">
+      <div class="dep-summary-label">Avg deposit size</div>
+      <div class="dep-summary-value" style="font-size:20px;">€${deps.length?Math.round(totalIn/deps.filter(r=>parseFloat(String(r[depCols.amount]).replace(/,/g,''))>0).length).toLocaleString():'0'}</div>
+      <div class="dep-summary-sub">per transfer</div>
+    </div>`;
+
+  // Monthly bar chart
+  const monthlyTotals = {};
+  deps.forEach(r => {
+    const amt = parseFloat(String(r[depCols.amount]).replace(/,/g,''));
+    const date = r[depCols.date] || '';
+    const m = date.substring(0, 7); // YYYY-MM
+    if (!m) return;
+    if (!monthlyTotals[m]) monthlyTotals[m] = 0;
+    monthlyTotals[m] += amt;
+  });
+  const sortedMonths = Object.keys(monthlyTotals).sort();
+  const maxMonth = Math.max(...sortedMonths.map(m => Math.abs(monthlyTotals[m])), 1);
+  const barWrap = document.getElementById('dep-bar-chart');
+  barWrap.innerHTML = sortedMonths.map(m => {
+    const val = monthlyTotals[m];
+    const pct = Math.round((Math.abs(val) / maxMonth) * 100);
+    const d = new Date(m + '-01');
+    const lbl = d.toLocaleString('en-US', {month:'short', year:'2-digit'});
+    const color = val >= 0 ? 'var(--blue)' : 'var(--red)';
+    const valStr = val >= 0 ? '+€'+val.toLocaleString(undefined,{minimumFractionDigits:0}) : '−€'+Math.abs(val).toLocaleString(undefined,{minimumFractionDigits:0});
+    return `<div class="dep-bar-row">
+      <div class="dep-bar-label">${lbl}</div>
+      <div class="dep-bar-track"><div class="dep-bar-fill" style="width:${pct}%;background:${color};"></div></div>
+      <div class="dep-bar-val" style="color:${color};">${valStr}</div>
+    </div>`;
+  }).join('');
+
+  // Group by year
+  const yearGroups = {};
+  deps.forEach(r => {
+    const date = r[depCols.date] || '';
+    const year = date.substring(0, 4) || 'Unknown';
+    if (!yearGroups[year]) yearGroups[year] = [];
+    yearGroups[year].push(r);
+  });
+
+  const timeline = document.getElementById('dep-timeline');
+  timeline.innerHTML = '';
+
+  Object.keys(yearGroups).sort().reverse().forEach(year => {
+    const rows = yearGroups[year];
+    const yearTotal = rows.reduce((s,r) => s + parseFloat(String(r[depCols.amount]).replace(/,/g,'')), 0);
+
+    const group = document.createElement('div');
+    group.className = 'dep-year-group';
+
+    const header = document.createElement('div');
+    header.className = 'dep-year-header';
+    header.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span class="dep-year-label">${year}</span>
+        <span class="dep-year-count">${rows.length} transaction${rows.length!==1?'s':''}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="dep-year-total" style="color:${yearTotal>=0?'var(--blue)':'var(--red)'};">${yearTotal>=0?'+':''}€${yearTotal.toLocaleString(undefined,{minimumFractionDigits:2})}</span>
+        <span style="color:var(--muted);font-size:12px;" class="dep-chevron">▼</span>
+      </div>`;
+
+    const rowsWrap = document.createElement('div');
+    rowsWrap.className = 'dep-rows-wrap';
+
+    const tableRows = rows.slice().sort((a,b) => b[depCols.date].localeCompare(a[depCols.date])).map(r => {
+      const amt = parseFloat(String(r[depCols.amount]).replace(/,/g,''));
+      const isDeposit = amt >= 0;
+      const amtStr = isDeposit ? '+€'+amt.toLocaleString(undefined,{minimumFractionDigits:2}) : '−€'+Math.abs(amt).toLocaleString(undefined,{minimumFractionDigits:2});
+      return `<tr>
+        <td class="dep-date">${r[depCols.date]||'—'}</td>
+        <td class="dep-desc">${escHtml(r[depCols.description]||'—')}</td>
+        <td class="dep-date">${r[depCols.currency]||'EUR'}</td>
+        <td class="dep-amount ${isDeposit?'pos':'neg'}">${amtStr}</td>
+      </tr>`;
+    }).join('');
+
+    const yearRowTotal = yearTotal>=0?'+€'+yearTotal.toLocaleString(undefined,{minimumFractionDigits:2}):'−€'+Math.abs(yearTotal).toLocaleString(undefined,{minimumFractionDigits:2});
+
+    rowsWrap.innerHTML = `<table class="dep-table">
+      <thead><tr><th>Date</th><th>Description</th><th>Currency</th><th>Amount</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+      <tfoot><tr><td colspan="3">Year total</td><td class="dep-amount">${yearRowTotal}</td></tr></tfoot>
+    </table>`;
+
+    let isOpen = true;
+    header.addEventListener('click', () => {
+      isOpen = !isOpen;
+      rowsWrap.style.maxHeight = isOpen ? rowsWrap.scrollHeight + 'px' : '0';
+      rowsWrap.style.overflow = isOpen ? 'visible' : 'hidden';
+      header.querySelector('.dep-chevron').style.transform = isOpen ? '' : 'rotate(-90deg)';
+    });
+    rowsWrap.style.maxHeight = rowsWrap.scrollHeight + 'px';
+
+    group.appendChild(header);
+    group.appendChild(rowsWrap);
+    timeline.appendChild(group);
+
+    // Trigger height after DOM append
+    setTimeout(() => { rowsWrap.style.maxHeight = isOpen ? rowsWrap.scrollHeight + 'px' : '0'; }, 0);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
