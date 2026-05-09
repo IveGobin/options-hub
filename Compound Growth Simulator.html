@@ -1032,6 +1032,47 @@
 </script>
 <script>
   window._onHubTheme = function(t){ document.documentElement.setAttribute('data-theme',t); };
+
+  // Listen for postMessage from parent (index.html) to switch tabs
+  window.addEventListener('message', function(ev) {
+    if (!ev.data) return;
+    if (ev.data.type === 'hub-page') {
+      showPage(ev.data.page);
+    }
+    if (ev.data.type === 'hub-theme') {
+      document.documentElement.setAttribute('data-theme', ev.data.theme);
+    }
+  });
+
+  // Auto-switch tab based on URL hash: Compound Growth Simulator.html#pf
+  (function() {
+    function applyHash() {
+      var hash = window.location.hash.replace('#', '');
+      if (hash === 'pf') showPage('pf');
+      else if (hash === 'sim') showPage('sim');
+    }
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+  })();
+
+  // When loaded inside an iframe, make nav fixed so it's always visible
+  (function() {
+    var inIframe = (function() {
+      try { return window.self !== window.top; } catch(e) { return true; }
+    })();
+    if (inIframe) {
+      var nav = document.querySelector('.page-nav');
+      if (nav) {
+        nav.style.position = 'fixed';
+        nav.style.top = '0';
+        nav.style.left = '0';
+        nav.style.right = '0';
+        nav.style.zIndex = '9999';
+        // Add top padding to body so content doesn't hide under fixed nav
+        document.body.style.paddingTop = (nav.offsetHeight + 28) + 'px';
+      }
+    }
+  })();
 </script>
 <script>
   (function(){
