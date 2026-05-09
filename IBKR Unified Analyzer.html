@@ -672,48 +672,6 @@
       </div>
     </div>
 
-    <div class="section">
-      <div class="section-title" id="ua-section-winrate">Win Rate &amp; Premium by Month</div>
-      <div class="chart-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-          <div class="chart-card-title" style="margin:0;" id="ua-chart-winrate-sub">Premium collected vs realized P&amp;L (bars, grouped by close month) and win rate % (line)</div>
-          <div class="chart-legend">
-            <span class="chart-legend-item"><span class="chart-legend-dot" style="background:rgba(0,180,216,0.6);border:1px solid rgba(0,180,216,0.8);"></span><span id="ua-chart-winrate-prem">Premium collected</span></span>
-            <span class="chart-legend-item"><span class="chart-legend-dot" style="background:rgba(0,200,83,0.7);"></span><span id="ua-chart-winrate-real">Realized P&amp;L</span></span>
-            <span class="chart-legend-item"><span class="chart-legend-dot" style="background:#c8ff00;"></span><span id="ua-chart-winrate-wr">Win rate %</span></span>
-          </div>
-        </div>
-        <div style="position:relative;height:260px;"><canvas id="winrateChart"></canvas></div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title" id="ua-section-ticker">Premium &amp; P&amp;L per Ticker</div>
-      <div class="chart-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-          <div class="chart-card-title" style="margin:0;" id="ua-chart-ticker-sub">Total premium collected vs realized P&amp;L — sorted by premium</div>
-          <div class="chart-legend">
-            <span class="chart-legend-item"><span class="chart-legend-dot" style="background:rgba(0,180,216,0.6);"></span><span id="ua-chart-ticker-prem">Premium collected</span></span>
-            <span class="chart-legend-item"><span class="chart-legend-dot" style="background:#00c853;"></span><span id="ua-chart-ticker-pl">Realized P&amp;L</span></span>
-          </div>
-        </div>
-        <div style="position:relative;height:280px;"><canvas id="tickerChart"></canvas></div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title" id="ua-section-dte">DTE at Open — Distribution</div>
-      <div class="chart-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-          <div class="chart-card-title" style="margin:0;" id="ua-chart-dte-sub">Days to expiry when position was opened — number of trades per bucket</div>
-          <div class="chart-legend">
-            <span class="chart-legend-item"><span class="chart-legend-dot" style="background:#a78bfa;"></span><span id="ua-chart-dte-trades">Trades</span></span>
-          </div>
-        </div>
-        <div style="position:relative;height:220px;"><canvas id="dteChart"></canvas></div>
-      </div>
-    </div>
-
     <!-- ── EXPOSURE ───────────────────────────────────────────── -->
     <div class="section-title" style="font-size:10px;font-weight:700;color:#888;letter-spacing:0.1em;text-transform:uppercase;padding:1.5rem 0 0.5rem;">Exposure</div>
 
@@ -1210,7 +1168,7 @@ function loadFile(file) {
 // ═══════════════════════════════════════════════════════════════════
 // RENDER DASHBOARD
 // ═══════════════════════════════════════════════════════════════════
-let _chartOpt = null, _chartStock = null, _chartPortPie = null, _chartIncomePie = null, _chartExp = null, _chartExpTotal = null, _chartWinrate = null, _chartTicker = null, _chartDte = null;
+let _chartOpt = null, _chartStock = null, _chartPortPie = null, _chartIncomePie = null, _chartExp = null, _chartExpTotal = null;
 
 function renderDashboard(data, fileName) {
   document.getElementById('drop-screen').style.display = 'none';
@@ -1921,9 +1879,6 @@ function renderCharts(data) {
   if (_chartStock)    { _chartStock.destroy();    _chartStock=null; }
   if (_chartExp)      { _chartExp.destroy();      _chartExp=null; }
   if (_chartExpTotal) { _chartExpTotal.destroy(); _chartExpTotal=null; }
-  if (_chartWinrate)  { _chartWinrate.destroy();  _chartWinrate=null; }
-  if (_chartTicker)   { _chartTicker.destroy();   _chartTicker=null; }
-  if (_chartDte)      { _chartDte.destroy();      _chartDte=null; }
   const optMonthClosed = data.sortedMonths.map(k => +data.optByMonth[k].closedPL.toFixed(2));
   const optMonthOpen   = data.sortedMonths.map(k => +data.optByMonth[k].premiumCollected.toFixed(2));
   const optColors = optMonthClosed.map(v => v>=0?'#00c853':'#ff4757');
@@ -2117,6 +2072,8 @@ function renderCharts(data) {
       afterDraw(chart) {
         const { ctx, chartArea, scales } = chart;
         if (!chartArea) return;
+
+        // Horizontal NAV threshold lines
         const thresholds = [
           { val: navUSD,     color: 'rgba(234,179,8,0.6)',   label: '1× NAV' },
           { val: navUSD * 2, color: 'rgba(234,88,12,0.6)',   label: '2× NAV' },
@@ -2140,6 +2097,39 @@ function renderCharts(data) {
           ctx.fillText(label, chartArea.right - 4, y - 3);
           ctx.restore();
         });
+
+        // Vertical "Today" line — interpolated between month points
+        const MONTH_ABBR_T = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        const now = new Date();
+        const todayLabel = MONTH_ABBR_T[now.getMonth()] + "'" + String(now.getFullYear()).slice(2);
+        const todayIdx = labels.indexOf(todayLabel);
+        if (todayIdx === -1) return;
+        const meta = chart.getDatasetMeta(0);
+        if (!meta.data[todayIdx]) return;
+
+        // Interpolate: how far through the current month are we?
+        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const dayFraction = (now.getDate() - 1) / daysInMonth; // 0 = start, 1 = end
+
+        // Interpolate between PREVIOUS month point and CURRENT month point
+        const xCur  = meta.data[todayIdx].x;
+        const xPrev = meta.data[todayIdx - 1] ? meta.data[todayIdx - 1].x : xCur;
+        const x = xPrev + (xCur - xPrev) * dayFraction;
+
+        ctx.save();
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x, chartArea.top);
+        ctx.lineTo(x, chartArea.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.font = "bold 10px 'Space Mono', monospace";
+        ctx.textAlign = 'center';
+        ctx.fillText('TODAY', x, chartArea.top + 10);
+        ctx.restore();
       }
     };
 
@@ -2302,180 +2292,7 @@ function renderCharts(data) {
       }
     });
   })(); } catch(e) { console.error('Total exposure chart error:', e); }
-
-  // ── WIN RATE + PREMIUM BY MONTH ──
-  try { (function() {
-    // Build per-month stats using close month (date of last trade = when position closed)
-    // This matches what user sees in Closed P&L tab
-    const optRU = data.optionsRU || [];
-    const monthStats = {}; // key: 'YYYY-MM'
-
-    const allSyms = new Set([
-      ...(data.openPositions||[]).map(p=>p.sym),
-      ...optRU.map(o=>o.sym)
-    ]);
-
-    allSyms.forEach(rawSym => {
-      const sym = (rawSym||'').trim();
-      const parsed = parseOptSym(sym);
-      if (!parsed) return;
-      const ti = data.optTradeMap && data.optTradeMap[sym];
-      if (!ti || !ti.firstDate) return;
-
-      // Group by CLOSE month (lastDate) — matches Closed P&L tab
-      const mo = (ti.lastDate || ti.firstDate).substring(0,7);
-      if (!monthStats[mo]) monthStats[mo] = { premium:0, realPL:0, wins:0, losses:0, total:0 };
-
-      // Premium = absolute proceeds from sell legs
-      const sellTrades = (data.tradesBySym && data.tradesBySym[sym] || []).filter(t => t.qty < 0);
-      const prem = sellTrades.reduce((s,t) => s + Math.abs(t.proceeds), 0);
-
-      // Realized P/L from SubTotal col13 — same as Closed P&L tab
-      const realPL = ti.subRealPL !== undefined ? ti.subRealPL : 0;
-
-      // Only count closed positions for P&L stats (open ones have no realPL yet)
-      const isClosed = Math.abs(ti.netQty || 0) < 0.01;
-
-      monthStats[mo].premium += prem;
-      if (isClosed) {
-        monthStats[mo].realPL += realPL;
-        monthStats[mo].total  += 1;
-        if (realPL > 0) monthStats[mo].wins   += 1;
-        else            monthStats[mo].losses  += 1;
-      }
-    });
-
-    const sortedMo = Object.keys(monthStats).sort();
-    if (!sortedMo.length) return;
-
-    const MABBR = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-    const labels   = sortedMo.map(k => { const [y,m]=k.split('-'); return MABBR[+m-1]+"'"+y.slice(2); });
-    const premData = sortedMo.map(k => +monthStats[k].premium.toFixed(0));
-    const realData = sortedMo.map(k => +monthStats[k].realPL.toFixed(0));
-    const wrData   = sortedMo.map(k => monthStats[k].total ? +(monthStats[k].wins/monthStats[k].total*100).toFixed(1) : 0);
-
-    _chartWinrate = new Chart(document.getElementById('winrateChart'), {
-      type: 'bar',
-      data: { labels, datasets: [
-        { label:'Premium collected', data:premData, backgroundColor:'rgba(0,180,216,0.35)', borderColor:'rgba(0,180,216,0.8)', borderWidth:1, borderRadius:6, barPercentage:0.6, categoryPercentage:0.75, yAxisID:'yPrem' },
-        { label:'Realized P&L',      data:realData, backgroundColor:realData.map(v=>v>=0?'rgba(0,200,83,0.75)':'rgba(255,71,87,0.75)'), borderRadius:6, barPercentage:0.6, categoryPercentage:0.75, yAxisID:'yPrem' },
-        { label:'Win rate %', data:wrData, type:'line', borderColor:'#c8ff00', backgroundColor:'transparent', pointBackgroundColor:'#c8ff00', pointRadius:4, pointHoverRadius:6, borderWidth:2, tension:0.3, yAxisID:'yWR' }
-      ]},
-      options: { responsive:true, maintainAspectRatio:false,
-        plugins: {
-          legend:{ display:true, position:'bottom', labels:{ color:'#5a6473', font:{size:11}, boxWidth:12, padding:16,
-            generateLabels: chart => [
-              { text:'Premium collected', fillStyle:'rgba(0,180,216,0.6)', strokeStyle:'rgba(0,180,216,0.8)', lineWidth:1 },
-              { text:'Realized P&L',      fillStyle:'rgba(0,200,83,0.7)',  strokeStyle:'transparent' },
-              { text:'Win rate %',        fillStyle:'#c8ff00',              strokeStyle:'#c8ff00', lineDash:[] },
-            ]
-          }},
-          tooltip:{ callbacks:{
-            label: ctx => {
-              if (ctx.datasetIndex === 0) return ' Collected: $'+ctx.parsed.y.toLocaleString();
-              if (ctx.datasetIndex === 1) {
-                const prem = premData[ctx.dataIndex];
-                const pct  = prem > 0 ? (ctx.parsed.y/prem*100).toFixed(0) : 0;
-                return ' Realized: $'+ctx.parsed.y.toLocaleString()+' ('+pct+'% kept)';
-              }
-              return ' Win rate: '+ctx.parsed.y+'%';
-            }
-          }}
-        },
-        scales: {
-          x:     { ticks:{color:'#5a6473',font:{size:12,family:'Space Mono'}}, grid:{display:false} },
-          yPrem: { position:'left',  ticks:{color:'#5a6473',font:{size:11},callback:v=>'$'+v.toLocaleString()}, grid:{color:'rgba(128,128,128,0.07)'}, border:{display:false} },
-          yWR:   { position:'right', min:0, max:100, ticks:{color:'#5a6473',font:{size:11},callback:v=>v+'%'}, grid:{display:false}, border:{display:false} }
-        }
-      }
-    });
-  })(); } catch(e) { console.error('Winrate chart error:', e); }
-
-  // ── PREMIUM & P&L PER TICKER ──
-  try { (function() {
-    const tickerMap = {};
-    const optRU = data.optionsRU || [];
-
-    // Walk all option symbols
-    [...(data.openPositions||[]).map(p=>({sym:p.sym})), ...optRU.map(o=>({sym:o.sym}))].forEach(({sym:rawSym}) => {
-      const sym = (rawSym||'').trim();
-      const parsed = parseOptSym(sym);
-      if (!parsed || parsed.type !== 'P') return;
-      const ti = data.optTradeMap && data.optTradeMap[sym];
-      if (!ti) return;
-      const sellTrades = (data.tradesBySym && data.tradesBySym[sym] || []).filter(t => t.qty < 0);
-      const prem = sellTrades.reduce((s,t) => s + Math.abs(t.proceeds), 0);
-      // Use SubTotal col13 Realized P/L — matches Closed P&L tab
-      const realPL = ti.subRealPL !== undefined ? ti.subRealPL : 0;
-      if (!tickerMap[parsed.ticker]) tickerMap[parsed.ticker] = { prem:0, pl:0 };
-      tickerMap[parsed.ticker].prem += prem;
-      tickerMap[parsed.ticker].pl   += realPL;
-    });
-
-    const sorted = Object.entries(tickerMap).sort((a,b) => b[1].prem - a[1].prem);
-    if (!sorted.length) return;
-    const labels   = sorted.map(([t])=>t);
-    const premData = sorted.map(([,v]) => +v.prem.toFixed(0));
-    const plData   = sorted.map(([,v]) => +v.pl.toFixed(0));
-    const plColors = plData.map(v => v >= 0 ? '#00c853' : '#ff4757');
-
-    _chartTicker = new Chart(document.getElementById('tickerChart'), {
-      type: 'bar',
-      data: { labels, datasets: [
-        { label:'Premium collected', data:premData, backgroundColor:'rgba(0,180,216,0.55)', borderRadius:4, barPercentage:0.4, categoryPercentage:0.8 },
-        { label:'Realized P&L',     data:plData,   backgroundColor:plColors,                borderRadius:4, barPercentage:0.4, categoryPercentage:0.8 }
-      ]},
-      options: { responsive:true, maintainAspectRatio:false,
-        plugins: { legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ' $'+ctx.parsed.y.toLocaleString() }}},
-        scales: {
-          x: { ticks:{color:'#5a6473',font:{size:11,family:'Space Mono'}}, grid:{display:false} },
-          y: { ticks:{color:'#5a6473',font:{size:11},callback:v=>'$'+v.toLocaleString()}, grid:{color:'rgba(128,128,128,0.07)'}, border:{display:false} }
-        }
-      }
-    });
-  })(); } catch(e) { console.error('Ticker chart error:', e); }
-
-  // ── DTE DISTRIBUTION ──
-  try { (function() {
-    const buckets = {'8-14':0,'15-30':0,'31-60':0,'60+':0,'0-7':0};
-    const bucketOrder = ['0-7','8-14','15-30','31-60','60+'];
-    const bucketColors = ['#00c853','#00b4d8','#a78bfa','#ffd32a','#ff4757'];
-
-    const optRU = data.optionsRU || [];
-    [...(data.openPositions||[]).map(p=>p.sym), ...optRU.map(o=>o.sym)].forEach(rawSym => {
-      const sym = (rawSym||'').trim();
-      const parsed = parseOptSym(sym);
-      if (!parsed) return;
-      const ti = data.optTradeMap && data.optTradeMap[sym];
-      if (!ti || !ti.firstDate || !parsed.expiry) return;
-      const openDate = new Date(ti.firstDate+'T00:00:00');
-      const dte = Math.round((parsed.expiry - openDate) / 86400000);
-      const b = dte<=7?'0-7':dte<=14?'8-14':dte<=30?'15-30':dte<=60?'31-60':'60+';
-      buckets[b] = (buckets[b]||0) + 1;
-    });
-
-    const labels = bucketOrder;
-    const counts = bucketOrder.map(b => buckets[b]||0);
-
-    _chartDte = new Chart(document.getElementById('dteChart'), {
-      type: 'bar',
-      data: { labels, datasets: [{
-        label:'Trades', data:counts,
-        backgroundColor: bucketColors,
-        borderRadius:8, barPercentage:0.55
-      }]},
-      options: { responsive:true, maintainAspectRatio:false,
-        plugins: { legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ' '+ctx.parsed.y+' trades' }}},
-        scales: {
-          x: { ticks:{color:'#5a6473',font:{size:12,family:'Space Mono'}}, grid:{display:false},
-               title:{display:true,text:'Days to expiry at open',color:'#5a6473',font:{size:11}} },
-          y: { ticks:{color:'#5a6473',font:{size:11},stepSize:1}, grid:{color:'rgba(128,128,128,0.07)'}, border:{display:false} }
-        }
-      }
-    });
-  })(); } catch(e) { console.error('DTE chart error:', e); }
 }
-
 // ═══════════════════════════════════════════════════════════════════
 // PORTFOLIO PIE CHARTS (Chart.js)
 // ═══════════════════════════════════════════════════════════════════
@@ -2705,10 +2522,6 @@ function applyUAI18n() {
   if (elExpTotalLeg)   elExpTotalLeg.textContent   = uaT('chart_exptotal_legend');
   // New charts
   const ids = [
-    ['ua-section-winrate','section_winrate'],['ua-chart-winrate-sub','chart_winrate_sub'],
-    ['ua-chart-winrate-prem','chart_winrate_prem'],['ua-chart-winrate-real','chart_winrate_real'],['ua-chart-winrate-wr','chart_winrate_wr'],
-    ['ua-section-ticker','section_ticker'],['ua-chart-ticker-sub','chart_ticker_sub'],
-    ['ua-chart-ticker-prem','chart_ticker_prem'],['ua-chart-ticker-pl','chart_ticker_pl'],
     ['ua-section-dte','section_dte'],['ua-chart-dte-sub','chart_dte_sub'],['ua-chart-dte-trades','chart_dte_trades'],
   ];
   ids.forEach(([id,key]) => { const el=document.getElementById(id); if(el) el.textContent=uaT(key); });
