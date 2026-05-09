@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Compound Growth Simulator</title>
-<script src="hub_shared.js"></script>
+
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
@@ -117,6 +117,245 @@
 </style>
 </head>
 <body>
+<!-- ── PAGE TAB NAVIGATION ── -->
+<style>
+  .page-nav {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin: -28px -28px 28px -28px;
+    padding: 0 28px;
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 200;
+  }
+  .page-nav-title {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--txt2);
+    padding: 16px 20px 16px 0;
+    border-right: 1px solid var(--border);
+    margin-right: 16px;
+    white-space: nowrap;
+  }
+  .page-nav-btn {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 18px 18px 16px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--txt2);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .2s;
+    margin-bottom: -1px;
+  }
+  .page-nav-btn:hover { color: var(--txt); }
+  .page-nav-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .lang-toggle {
+    font-family: var(--mono); font-size: 0.55rem; font-weight: 700;
+    letter-spacing: 1px; text-transform: uppercase;
+    padding: 4px 9px; border-radius: 14px;
+    border: 1.5px solid var(--border); background: var(--surface2);
+    color: var(--txt2); cursor: pointer; transition: all .2s;
+  }
+  .lang-toggle.active { border-color: var(--green); color: var(--green); background: rgba(0,201,141,0.08); }
+  .lang-toggle:hover { border-color: var(--txt2); }
+
+  /* Portfolio tab wrapper — isolated styles via scoped class */
+  #pf-page { display: none; }
+  #pf-page.active { display: block; }
+  #sim-page { display: block; }
+  #sim-page.hidden { display: none; }
+
+  /* ── Portfolio Kalkulator styles (self-contained, prefixed pf-) ── */
+  .pf-wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 0 80px;
+    font-family: 'DM Mono', monospace;
+  }
+  .pf-header { margin-bottom: 36px; }
+  .pf-header-label {
+    font-size: 11px; letter-spacing: 6px; color: #4ade80;
+    text-transform: uppercase; margin-bottom: 10px;
+    font-family: 'DM Mono', monospace;
+  }
+  .pf-header h1 {
+    font-family: 'Bebas Neue', cursive;
+    font-size: clamp(40px, 7vw, 80px);
+    letter-spacing: 4px; line-height: 1; color: #f0fdf4;
+  }
+  .pf-header h1 span { color: #4ade80; }
+  .pf-header p { margin-top: 10px; font-size: 12px; color: #5a7560; letter-spacing: 1px; }
+
+  .pf-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin-bottom: 32px;
+    padding: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .pf-field { display: flex; flex-direction: column; gap: 6px; }
+  .pf-field label {
+    font-size: 10px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--txt2); font-family: var(--mono);
+  }
+  .pf-field input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: #4ade80;
+    font-family: 'DM Mono', monospace;
+    font-size: 17px; font-weight: 500;
+    padding: 9px 13px; outline: none;
+    transition: border-color .2s, box-shadow .2s;
+    width: 100%;
+  }
+  .pf-field input:focus {
+    border-color: #4ade80;
+    box-shadow: 0 0 0 3px rgba(74,222,128,0.08);
+  }
+  .pf-btn {
+    align-self: flex-end;
+    padding: 9px 24px;
+    background: #16a34a;
+    border: none; border-radius: 6px;
+    color: #f0fdf4;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 3px; text-transform: uppercase;
+    cursor: pointer;
+    transition: background .2s, transform .1s;
+    height: 42px;
+  }
+  .pf-btn:hover { background: #22c55e; }
+  .pf-btn:active { transform: scale(0.97); }
+
+  .pf-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  .pf-chip {
+    padding: 5px 13px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 11px; color: var(--txt2);
+    font-family: var(--mono);
+  }
+  .pf-chip strong { color: #4ade80; }
+
+  .pf-error {
+    display: none; padding: 10px 14px;
+    background: rgba(255,92,92,0.08);
+    border: 1px solid rgba(255,92,92,0.25);
+    border-radius: 6px; color: #ff5c5c;
+    font-size: 12px; margin-bottom: 16px;
+    font-family: var(--mono);
+  }
+  .pf-error.show { display: block; }
+
+  .pf-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .pf-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+
+  .pf-th-year {
+    padding: 13px 8px; text-align: center;
+    background: var(--surface); color: var(--txt2);
+    font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+    border-bottom: 2px solid var(--border);
+    font-family: var(--mono); white-space: nowrap;
+  }
+  .pf-th-year.pf-rate-col {
+    text-align: left; padding-left: 18px;
+    position: sticky; left: 0; z-index: 2;
+    background: var(--surface);
+  }
+  .pf-th-sub {
+    padding: 4px 8px; text-align: center;
+    background: var(--bg);
+    font-size: 8px; letter-spacing: 1px; color: var(--border);
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase; white-space: nowrap;
+    font-family: var(--mono);
+  }
+  .pf-th-sub.pf-rate-col {
+    position: sticky; left: 0; z-index: 2; background: var(--bg);
+  }
+
+  tr.pf-data-row { cursor: default; transition: background .15s; }
+  tr.pf-data-row:hover td { background: var(--surface2) !important; }
+  tr.pf-data-row:hover .pf-rate-badge { border-color: var(--accent) !important; color: var(--accent) !important; }
+
+  .pf-table td {
+    padding: 12px 8px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle; white-space: nowrap;
+    transition: background .15s;
+  }
+  td.pf-rate-col {
+    padding-left: 18px; position: sticky; left: 0; z-index: 1;
+    background: var(--surface);
+  }
+  tr:nth-child(odd) td.pf-rate-col { background: var(--bg); }
+
+  .pf-rate-badge {
+    display: inline-block; padding: 2px 9px;
+    border-radius: 4px; border: 1px solid var(--border);
+    font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+    color: var(--txt2); font-family: var(--mono);
+    transition: border-color .2s, color .2s;
+  }
+  td.pf-val-cell {
+    text-align: right; color: var(--txt);
+    font-family: var(--mono); font-size: 11px; padding-right: 4px;
+  }
+  td.pf-mj-cell {
+    text-align: right; color: var(--txt2);
+    font-family: var(--mono); font-size: 10px;
+    padding-right: 12px;
+    border-right: 1px solid var(--border);
+  }
+  td.pf-mj-cell span { font-size: 8px; opacity: 0.5; }
+  td.pf-mj-cell:last-child { border-right: none; }
+
+  .pf-table tr:nth-child(odd) td { background: var(--bg); }
+  .pf-table tr:nth-child(even) td { background: var(--surface); }
+
+  .pf-footer {
+    margin-top: 16px; font-size: 10px; color: var(--txt2);
+    opacity: 0.4; font-family: var(--mono);
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
+
+<div class="page-nav">
+  <div class="page-nav-title">📐 CGS</div>
+  <button class="page-nav-btn active" id="nav-sim" onclick="showPage('sim')">📈 Simulator</button>
+  <button class="page-nav-btn" id="nav-pf" onclick="showPage('pf')" id="nav-pf-btn">
+    <span class="t" data-en="📊 Rate Table" data-hr="📊 Tablica Stopa">📊 Rate Table</span>
+  </button>
+  <div style="margin-left:auto;display:flex;gap:6px;align-items:center;padding-left:16px;border-left:1px solid var(--border)">
+    <button class="lang-toggle active" id="lt-en" onclick="setLang('en')">EN</button>
+    <button class="lang-toggle" id="lt-hr" onclick="setLang('hr')">HR</button>
+  </div>
+</div>
+
+<div id="sim-page">
+
   <div class="gs-section-title">📐 Compound Growth Simulator <span style="opacity:0.45;font-size:0.6rem">v1.1</span></div>
 
   <!-- Scenario Presets -->
@@ -805,6 +1044,148 @@
       new MutationObserver(reportHeight).observe(document.body,{childList:true,subtree:true,attributes:true});
     }
   })();
+</script>
+
+</div><!-- /sim-page -->
+
+<div id="pf-page">
+<div class="pf-wrap">
+  <div class="pf-header">
+    <div class="pf-header-label"><span class="t" data-en="Financial Calculator" data-hr="Financijski Kalkulator">Financial Calculator</span></div>
+    <h1 style="font-family:'Bebas Neue',cursive;font-size:clamp(40px,7vw,80px);letter-spacing:4px;line-height:1;color:#f0fdf4">
+      <span class="t" data-en="PORTFOLIO" data-hr="PORTFOLIO">PORTFOLIO</span><br>
+      <span style="color:#4ade80"><span class="t" data-en="GROWTH" data-hr="RAST">GROWTH</span></span>
+    </h1>
+    <p style="margin-top:10px;font-size:12px;color:var(--txt2);letter-spacing:1px">
+      <span class="t" data-en="Enter parameters · Generates value and monthly return table" data-hr="Unesite parametre · Generira tablicu vrijednosti i mjesečnog prinosa">Enter parameters · Generates value and monthly return table</span>
+    </p>
+  </div>
+
+  <div class="pf-controls">
+    <div class="pf-field">
+      <label><span class="t" data-en="Starting Value ($)" data-hr="Početna vrijednost ($)">Starting Value ($)</span></label>
+      <input type="number" id="pf-initial" value="68000" min="1">
+    </div>
+    <div class="pf-field">
+      <label><span class="t" data-en="Number of Years" data-hr="Broj godina">Number of Years</span></label>
+      <input type="number" id="pf-years" value="5" min="1" max="50">
+    </div>
+    <div class="pf-field">
+      <label><span class="t" data-en="Step (%)" data-hr="Korak (%)">Step (%)</span></label>
+      <input type="number" id="pf-step" value="5" min="1" max="100">
+    </div>
+    <div class="pf-field">
+      <label><span class="t" data-en="Number of Steps" data-hr="Broj koraka">Number of Steps</span></label>
+      <input type="number" id="pf-steps" value="20" min="1" max="60">
+    </div>
+    <div class="pf-field">
+      <button class="pf-btn" onclick="pfGenerate()" id="pf-generate-btn">GENERATE</button>
+    </div>
+  </div>
+
+  <div class="pf-error" id="pf-error"></div>
+  <div class="pf-summary" id="pf-summary"></div>
+  <div class="pf-table-wrap" id="pf-table-wrap"></div>
+  <div class="pf-footer" id="pf-footer"></div>
+</div>
+</div><!-- /pf-page -->
+
+<script>
+  // ── Language ──────────────────────────────
+  var currentLang = 'en';
+
+  function setLang(lang) {
+    currentLang = lang;
+    document.getElementById('lt-en').classList.toggle('active', lang === 'en');
+    document.getElementById('lt-hr').classList.toggle('active', lang === 'hr');
+    document.querySelectorAll('.t[data-' + lang + ']').forEach(function(el) {
+      el.textContent = el.getAttribute('data-' + lang);
+    });
+    // Update generate button
+    document.getElementById('pf-generate-btn').textContent = lang === 'hr' ? 'GENERIRAJ' : 'GENERATE';
+    // Re-render table if visible
+    if (document.getElementById('pf-table-wrap').innerHTML) pfGenerate();
+  }
+
+  // ── Page switching ─────────────────────────
+  function showPage(p) {
+    document.getElementById('sim-page').classList.toggle('hidden', p !== 'sim');
+    document.getElementById('pf-page').classList.toggle('active', p === 'pf');
+    document.getElementById('nav-sim').classList.toggle('active', p === 'sim');
+    document.getElementById('nav-pf').classList.toggle('active', p === 'pf');
+    if (p === 'pf' && !document.getElementById('pf-table-wrap').innerHTML) pfGenerate();
+  }
+
+  // ── Portfolio calculator ───────────────────
+  function pfRateColor(rate, maxRate) {
+    var t = Math.min(rate / maxRate, 1);
+    var stops = [[74,222,128],[234,179,8],[249,115,22],[239,68,68],[236,72,153]];
+    var seg = (stops.length - 1) * t;
+    var i = Math.min(Math.floor(seg), stops.length - 2);
+    var f = seg - i;
+    var c = stops[i].map(function(v,k){ return Math.round(v + (stops[i+1][k] - v) * f); });
+    return 'rgb(' + c.join(',') + ')';
+  }
+
+  function pfFmt(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
+
+  function pfGenerate() {
+    var initial  = parseFloat(document.getElementById('pf-initial').value);
+    var numYears = parseInt(document.getElementById('pf-years').value);
+    var step     = parseFloat(document.getElementById('pf-step').value);
+    var numSteps = parseInt(document.getElementById('pf-steps').value);
+    var errEl    = document.getElementById('pf-error');
+    var hr = currentLang === 'hr';
+
+    if (!initial || initial <= 0 || !numYears || numYears < 1 || !step || step <= 0 || !numSteps || numSteps < 1) {
+      errEl.textContent = hr
+        ? 'Molimo unesite valjane pozitivne vrijednosti za sva polja.'
+        : 'Please enter valid positive values for all fields.';
+      errEl.classList.add('show'); return;
+    }
+    errEl.classList.remove('show');
+
+    var rates = Array.from({length: numSteps}, function(_, i) { return +(step * (i + 1)).toFixed(4); });
+    var years = Array.from({length: numYears}, function(_, i) { return i + 1; });
+    var maxRate = rates[rates.length - 1];
+
+    document.getElementById('pf-summary').innerHTML =
+      '<div class="pf-chip">' + (hr ? 'Početak' : 'Start') + ' <strong>' + pfFmt(initial) + '</strong></div>' +
+      '<div class="pf-chip">' + (hr ? 'Godine' : 'Years') + ' <strong>' + numYears + '</strong></div>' +
+      '<div class="pf-chip">' + (hr ? 'Korak' : 'Step') + ' <strong>' + step + '%</strong></div>' +
+      '<div class="pf-chip">' + (hr ? 'Stope' : 'Rates') + ' <strong>' + rates[0] + '% → ' + maxRate + '%</strong></div>' +
+      '<div class="pf-chip">Max <strong>' + pfFmt(initial * Math.pow(1 + maxRate/100, numYears)) + '</strong></div>';
+
+    var tbl = '<table class="pf-table"><thead><tr>';
+    tbl += '<th class="pf-th-year pf-rate-col">' + (hr ? 'Stopa' : 'Rate') + '</th>';
+    years.forEach(function(y) { tbl += '<th class="pf-th-year" colspan="2">' + (hr ? 'Godina ' : 'Year ') + y + '</th>'; });
+    tbl += '</tr><tr><th class="pf-th-sub pf-rate-col"></th>';
+    years.forEach(function() {
+      tbl += '<th class="pf-th-sub">' + (hr ? 'Vrijednost' : 'Value') + '</th>';
+      tbl += '<th class="pf-th-sub">' + (hr ? 'Mj. prinos' : 'Mo. return') + '</th>';
+    });
+    tbl += '</tr></thead><tbody>';
+
+    rates.forEach(function(rate) {
+      var color = pfRateColor(rate, maxRate);
+      tbl += '<tr class="pf-data-row">';
+      tbl += '<td class="pf-rate-col"><span class="pf-rate-badge" style="color:' + color + ';border-color:' + color + '44">' + rate + '%</span></td>';
+      years.forEach(function(y) {
+        var val     = initial * Math.pow(1 + rate/100, y);
+        var prevVal = initial * Math.pow(1 + rate/100, y - 1);
+        var monthly = (val - prevVal) / 12;
+        tbl += '<td class="pf-val-cell">' + pfFmt(val) + '</td>';
+        tbl += '<td class="pf-mj-cell">' + pfFmt(monthly) + '<span>' + (hr ? '/mj' : '/mo') + '</span></td>';
+      });
+      tbl += '</tr>';
+    });
+
+    tbl += '</tbody></table>';
+    document.getElementById('pf-table-wrap').innerHTML = tbl;
+    document.getElementById('pf-footer').textContent = hr
+      ? 'Složeni kamatni račun · ' + rates.length + ' stopa × ' + numYears + ' godina · ' + pfFmt(initial) + ' početni kapital'
+      : 'Compound interest · ' + rates.length + ' rates × ' + numYears + ' years · ' + pfFmt(initial) + ' starting capital';
+  }
 </script>
 </body>
 </html>
