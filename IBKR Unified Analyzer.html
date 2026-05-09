@@ -1960,22 +1960,26 @@ function renderCharts(data) {
     const MONTH_ABBR_E = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
     const labels = months.map(m => MONTH_ABBR_E[m.getMonth()] + "'" + String(m.getFullYear()).slice(2));
 
-    // For each month, find the PEAK simultaneous exposure on any single day.
-    // We use an event-based approach: collect all open/close events, then
-    // sweep through each day in the month to find max concurrent exposure.
+    // For each month: PEAK simultaneous exposure on any event day
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    // Current exposure right now (for annotation)
+    let currentExposure = 0;
+    allPuts.forEach(p => {
+      if (p.openDate <= today && p.expiry >= today) currentExposure += p.exposure;
+    });
+
     const exposureData = months.map(m => {
       const monthStart = m;
       const monthEnd   = new Date(m.getFullYear(), m.getMonth() + 1, 0);
-      // Collect all unique dates within this month where exposure could change
       const eventDates = new Set();
       eventDates.add(monthStart.getTime());
+      eventDates.add(monthEnd.getTime());
       allPuts.forEach(p => {
         if (p.openDate >= monthStart && p.openDate <= monthEnd) eventDates.add(p.openDate.getTime());
         if (p.expiry  >= monthStart && p.expiry  <= monthEnd) eventDates.add(p.expiry.getTime());
       });
-      // Also check start and end of month
-      eventDates.add(monthEnd.getTime());
-      // For each event date, compute simultaneous exposure
       let peak = 0;
       eventDates.forEach(ts => {
         const day = new Date(ts);
@@ -2116,6 +2120,7 @@ function renderCharts(data) {
         const xPrev = meta.data[todayIdx - 1] ? meta.data[todayIdx - 1].x : xCur;
         const x = xPrev + (xCur - xPrev) * dayFraction;
 
+        // TODAY vertical line
         ctx.save();
         ctx.setLineDash([5, 4]);
         ctx.strokeStyle = 'rgba(255,255,255,0.55)';
@@ -2130,6 +2135,43 @@ function renderCharts(data) {
         ctx.textAlign = 'center';
         ctx.fillText('TODAY', x, chartArea.top + 10);
         ctx.restore();
+
+        // Current exposure annotation — dot + horizontal dashed line + label
+        const xCurExp  = meta.data[todayIdx].x;
+        const xPrevExp = meta.data[todayIdx - 1] ? meta.data[todayIdx - 1].x : xCurExp;
+        const daysInMonthCur = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const dayFracCur = (now.getDate() - 1) / daysInMonthCur;
+        const xToday = xPrevExp + (xCurExp - xPrevExp) * dayFracCur;
+        const yCurExp = scales.y.getPixelForValue(currentExposure);
+
+        if (yCurExp >= chartArea.top && yCurExp <= chartArea.bottom) {
+          ctx.save();
+          // Horizontal dashed line from left edge to TODAY position
+          ctx.setLineDash([4, 3]);
+          ctx.strokeStyle = 'rgba(200,255,0,0.6)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(chartArea.left, yCurExp);
+          ctx.lineTo(xToday, yCurExp);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // Dot at intersection of TODAY line and current exposure
+          ctx.beginPath();
+          ctx.arc(xToday, yCurExp, 6, 0, Math.PI * 2);
+          ctx.fillStyle = '#c8ff00';
+          ctx.fill();
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          // Label
+          ctx.fillStyle = '#c8ff00';
+          ctx.font = "bold 11px 'Space Mono', monospace";
+          ctx.textAlign = 'left';
+          const label = 'NOW $' + currentExposure.toLocaleString(undefined, {maximumFractionDigits:0});
+          ctx.fillText(label, chartArea.left + 6, yCurExp - 7);
+          ctx.restore();
+        }
+
       }
     };
 
