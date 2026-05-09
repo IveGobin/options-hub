@@ -684,7 +684,7 @@
             <span class="chart-legend-item"><span class="chart-legend-dot" style="background:#a78bfa;"></span><span id="ua-chart-exp-legend">Put exposure</span></span>
           </div>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:12px;" id="ua-chart-exp-sub">Peak simultaneous put exposure on any single day within each month</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px;" id="ua-chart-exp-sub">Peak simultaneous put exposure on any single day within each month · NAV thresholds use EUR/USD rate from statement</div>
         <div style="position:relative;height:280px;"><canvas id="expChart"></canvas></div>
         <div id="exp-chart-empty" style="display:none;text-align:center;padding:40px;color:var(--muted);font-size:13px;"></div>
       </div>
@@ -1013,10 +1013,14 @@ function processIBKR(sections) {
   const collateralBase = num((getData(sections,'Cash Report').find(r=>r[3]==='Base Currency Summary'&&r[2]==='Ending Collateral Value')||[])[4]||0);
   const fxRows   = getData(sections,'Forex Balances');
   const fxCols   = colMap(sections,'Forex Balances');
-  const iFxVal   = ci(fxCols,'value in base',9);
-  const fxUSDinEUR = num((fxRows.find(r=>r[4]==='USD')||[])[iFxVal]||0);
-  const fxEURcash  = num((fxRows.find(r=>r[4]==='EUR')||[])[iFxVal]||0);
+  const iFxVal      = ci(fxCols,'value in base',9);
+  const iFxClose    = ci(fxCols,'close price',8);
+  const fxUSDinEUR  = num((fxRows.find(r=>r[4]==='USD')||[])[iFxVal]||0);
+  const fxEURcash   = num((fxRows.find(r=>r[4]==='EUR')||[])[iFxVal]||0);
   const totalCashEUR = fxEURcash + fxUSDinEUR;
+  // EUR/USD rate: Close Price for USD row = how many EUR per 1 USD → invert for USD per EUR
+  const usdClosePrice = num((fxRows.find(r=>r[4]==='USD')||[])[iFxClose]||0);
+  const eurUsdRate = usdClosePrice > 0 ? 1 / usdClosePrice : 1.10; // fallback 1.10
 
   // ── DEPOSITS & FEES ──
   const depCols = colMap(sections,'Deposits & Withdrawals');
@@ -1122,7 +1126,7 @@ function processIBKR(sections) {
     openPremiumCollected, openBuybackCost, openUnrPL, totalExposure,
     stockRealNet, stockUnrNet, stockTotal,
     endCashEUR, endCashUSD, settledCashEUR, settledCashUSD, collateralUSD, collateralBase, totalCashEUR,
-    fxEURcash, fxUSDinEUR, deposits, totalDeposits, totalFees, totalComm,
+    fxEURcash, fxUSDinEUR, eurUsdRate, deposits, totalDeposits, totalFees, totalComm,
     divEur, intEur, accrualEur, whtVal, lendVal, totalInflow, totalDeductions,
     instrMap,
     stockTradeMap,
@@ -2004,29 +2008,42 @@ function renderCharts(data) {
     // We colour the fill by ratio: exposure / navEnd
     // <1x = green, 1-2x = yellow, 2-3x = orange, >3x = red
     const navEUR = data.navEnd || 1;
-    // Approximate USD NAV (IBKR reports options in USD, portfolio in EUR)
-    // Use navEnd directly as the threshold baseline — user understands this is approximate
-    const navUSD = navEUR * 1.08; // rough EUR→USD, good enough for colour thresholds
+    // Convert NAV to USD using actual EUR/USD rate from Forex Balances
+    const eurUsdRate = data.eurUsdRate || 1.10;
+    const navUSD = navEUR * eurUsdRate;
+    console.log('NAV EUR:', navEUR, '| EUR/USD rate:', eurUsdRate, '| NAV USD:', navUSD, '| thresholds: 1x=$'+navUSD.toFixed(0)+' 2x=$'+(navUSD*2).toFixed(0)+' 3x=$'+(navUSD*3).toFixed(0));
 
     // Build a gradient based on the data range
-    function makeExposureGradient(ctx, chartArea, exposureData, navUSD) {
+    function makeExposureGradient(ctx, chartArea, scales, navUSD) {
       const { top, bottom } = chartArea;
-      const maxVal = Math.max(...exposureData, navUSD * 3.5);
       const grad = ctx.createLinearGradient(0, top, 0, bottom);
-      // Map NAV multiples to gradient stops (0 = top of chart = maxVal, 1 = bottom = 0)
-      const stopFor = val => 1 - Math.min(1, Math.max(0, val / maxVal));
-      const s3 = stopFor(navUSD * 3); // >3x → red starts here
-      const s2 = stopFor(navUSD * 2); // >2x → orange
-      const s1 = stopFor(navUSD * 1); // >1x → yellow
-      // Add stops top→bottom
-      grad.addColorStop(0,            'rgba(220,38,38,0.55)');   // red (top / >3x)
-      grad.addColorStop(Math.max(0, s3 - 0.001), 'rgba(220,38,38,0.55)');
-      grad.addColorStop(s3,           'rgba(234,88,12,0.50)');   // orange (2-3x)
-      grad.addColorStop(Math.max(0, s2 - 0.001), 'rgba(234,88,12,0.50)');
-      grad.addColorStop(s2,           'rgba(234,179,8,0.45)');   // yellow (1-2x)
-      grad.addColorStop(Math.max(0, s1 - 0.001), 'rgba(234,179,8,0.45)');
-      grad.addColorStop(s1,           'rgba(34,197,94,0.35)');   // green (<1x)
-      grad.addColorStop(1,            'rgba(34,197,94,0.10)');
+
+      // Convert NAV threshold values to gradient stop positions using actual Y scale
+      const yToStop = val => {
+        const px = scales.y.getPixelForValue(val);
+        return Math.min(1, Math.max(0, (px - top) / (bottom - top)));
+      };
+
+      const s3 = yToStop(navUSD * 3); // pixel position of 3× NAV
+      const s2 = yToStop(navUSD * 2);
+      const s1 = yToStop(navUSD * 1);
+      const s0 = yToStop(0);           // bottom of chart (= 1.0 if Y min is 0)
+
+      // Build stops top → bottom
+      grad.addColorStop(0,                        'rgba(220,38,38,0.6)');  // above 3× = red
+      if (s3 < 1) {
+        grad.addColorStop(Math.max(0, s3),        'rgba(220,38,38,0.6)');
+        grad.addColorStop(Math.min(1, s3 + 0.001),'rgba(234,88,12,0.55)'); // 2–3× = orange
+      }
+      if (s2 < 1) {
+        grad.addColorStop(Math.max(0, s2),        'rgba(234,88,12,0.55)');
+        grad.addColorStop(Math.min(1, s2 + 0.001),'rgba(234,179,8,0.5)'); // 1–2× = yellow
+      }
+      if (s1 < 1) {
+        grad.addColorStop(Math.max(0, s1),        'rgba(234,179,8,0.5)');
+        grad.addColorStop(Math.min(1, s1 + 0.001),'rgba(34,197,94,0.4)'); // <1× = green
+      }
+      grad.addColorStop(1, 'rgba(34,197,94,0.1)');
       return grad;
     }
 
@@ -2040,7 +2057,7 @@ function renderCharts(data) {
         const meta = chart.getDatasetMeta(0);
         if (!meta.data.length) return;
 
-        const grad = makeExposureGradient(ctx, chartArea, exposureData, navUSD);
+        const grad = makeExposureGradient(ctx, chartArea, scales, navUSD);
 
         ctx.save();
         ctx.beginPath();
@@ -2203,7 +2220,7 @@ function renderCharts(data) {
               label: ctx => {
                 const v = ctx.parsed.y;
                 const ratio = (v / navUSD).toFixed(1);
-                return ' $' + v.toLocaleString(undefined, {maximumFractionDigits:0}) + '  (' + ratio + '× NAV)';
+                return ' $' + v.toLocaleString(undefined, {maximumFractionDigits:0}) + '  (' + ratio + '× NAV  |  EUR/USD ' + eurUsdRate.toFixed(4) + ')';
               }
             }
           }
