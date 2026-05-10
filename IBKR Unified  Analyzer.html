@@ -411,6 +411,57 @@
   .chart-legend { display:flex; gap:14px; font-size:12px; color:var(--muted); flex-wrap:wrap; }
   .chart-legend-item { display:flex; align-items:center; gap:5px; }
   .chart-legend-dot { width:10px; height:10px; border-radius:2px; display:inline-block; }
+
+  /* ── PROJECTION TAB ── */
+  .proj-hero { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:2px; background:var(--border); margin-bottom:20px; border-radius:10px; overflow:hidden; }
+  .proj-kpi { background:var(--surface); padding:18px 20px; position:relative; overflow:hidden; }
+  .proj-kpi::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+  .proj-kpi.accent::before { background:var(--accent); }
+  .proj-kpi.blue::before   { background:var(--blue); }
+  .proj-kpi.green::before  { background:var(--green); }
+  .proj-kpi.yellow::before { background:var(--yellow); }
+  .proj-kpi-label { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+  .proj-kpi-value { font-family:'Space Mono',monospace; font-size:22px; font-weight:700; }
+  .proj-kpi-value.accent { color:var(--accent); }
+  .proj-kpi-value.blue   { color:var(--blue); }
+  .proj-kpi-value.green  { color:var(--green); }
+  .proj-kpi-value.yellow { color:var(--yellow); }
+  .proj-kpi-sub { font-size:11px; color:var(--muted); margin-top:4px; }
+
+  .proj-params { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; margin-bottom:20px; }
+  .proj-params-title { font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); margin-bottom:20px; display:flex; align-items:center; gap:10px; }
+  .proj-params-title::after { content:''; flex:1; height:1px; background:var(--border); }
+  .proj-params-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:20px; }
+  .proj-param { display:flex; flex-direction:column; gap:8px; }
+  .proj-param label { font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); }
+  .proj-param-row { display:flex; align-items:center; gap:12px; }
+  .proj-param-display { font-family:'Space Mono',monospace; font-size:16px; font-weight:700; color:var(--accent); min-width:88px; text-align:right; }
+
+  input[type="range"].proj-slider { -webkit-appearance:none; flex:1; height:3px; background:var(--border); border-radius:2px; outline:none; cursor:pointer; }
+  input[type="range"].proj-slider::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--accent); box-shadow:0 0 6px rgba(200,255,0,0.5); cursor:pointer; }
+
+  .proj-scenario-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:20px; }
+  .proj-scenario-btn { background:transparent; border:1px solid var(--border); border-radius:6px; padding:6px 14px; font-family:'Space Mono',monospace; font-size:11px; color:var(--muted); cursor:pointer; transition:all 0.15s; letter-spacing:0.04em; }
+  .proj-scenario-btn:hover { border-color:var(--accent); color:var(--text); }
+  .proj-scenario-btn.active { background:rgba(200,255,0,0.08); border-color:var(--accent); color:var(--accent); }
+
+  .proj-legend { display:flex; gap:18px; margin-bottom:12px; flex-wrap:wrap; }
+  .proj-legend-item { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); font-family:'Space Mono',monospace; }
+  .proj-legend-dot { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+
+  table.proj-table { width:100%; border-collapse:collapse; font-size:12px; }
+  table.proj-table thead th { font-family:'Space Mono',monospace; font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--border); padding:0 14px 10px; text-align:right; white-space:nowrap; }
+  table.proj-table thead th:first-child { text-align:left; }
+  table.proj-table tbody tr { border-bottom:1px solid rgba(128,128,128,0.07); transition:background 0.1s; }
+  table.proj-table tbody tr:hover { background:var(--surface2); }
+  table.proj-table tbody tr.proj-milestone { background:rgba(200,255,0,0.04); border-color:rgba(200,255,0,0.1); }
+  table.proj-table tbody td { padding:13px 14px; font-family:'Space Mono',monospace; font-size:12px; text-align:right; }
+  table.proj-table tbody td:first-child { text-align:left; font-family:'Syne',sans-serif; font-size:14px; font-weight:700; }
+  table.proj-table tbody td.accent { color:var(--accent); font-size:13px; font-weight:700; }
+  table.proj-table tbody td.green  { color:var(--green); }
+  table.proj-table tbody td.muted  { color:var(--muted); }
+  .proj-year-tag { display:inline-block; font-size:9px; font-family:'Space Mono',monospace; padding:2px 5px; border-radius:3px; background:rgba(200,255,0,0.1); color:var(--accent); margin-left:6px; vertical-align:middle; }
+  .proj-footnote { font-size:11px; color:var(--muted); line-height:1.7; padding:16px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; margin-top:16px; }
 </style>
 </head>
 <body>
@@ -436,7 +487,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.1</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.2</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -457,6 +508,7 @@
     <button class="tab-btn" onclick="switchTab(event,'tab-cash')">Cash &amp; Income</button>
     <button class="tab-btn" onclick="switchTab(event,'tab-deposits')">Deposits &amp; Withdrawals</button>
     <button class="tab-btn" onclick="switchTab(event,'tab-charts')">Charts</button>
+    <button class="tab-btn" onclick="switchTab(event,'tab-projection')" id="tab-btn-projection" style="color:var(--accent);border-bottom-color:transparent;">⭐ Projection</button>
   </div>
 
   <!-- ───── TAB: PORTFOLIO ───── -->
@@ -706,6 +758,102 @@
     </div>
 
   </div><!-- /tab-charts -->
+
+  <!-- ───── TAB: PROJECTION ───── -->
+  <div id="tab-projection" class="tab-pane">
+    <div class="section">
+      <div class="section-title" id="proj-section-title">Portfolio Projection — Long-Term Growth Forecast</div>
+
+      <!-- KPI hero strip (populated by renderProjection) -->
+      <div class="proj-hero" id="proj-hero"></div>
+
+      <!-- Parameters -->
+      <div class="proj-params">
+        <div class="proj-params-title" id="proj-params-title">⚙ Projection Parameters</div>
+        <div class="proj-params-grid">
+          <div class="proj-param">
+            <label id="proj-label-cagr">Annual Growth (CAGR)</label>
+            <div class="proj-param-row">
+              <input type="range" class="proj-slider" id="proj-cagr" min="3" max="60" step="0.5" value="47.7" oninput="projSliderChange()">
+              <div class="proj-param-display"><span id="proj-cagr-val">47.7</span>%</div>
+            </div>
+          </div>
+          <div class="proj-param">
+            <label id="proj-label-deposit">Annual Deposit (EUR)</label>
+            <div class="proj-param-row">
+              <input type="range" class="proj-slider" id="proj-deposit" min="0" max="80000" step="500" value="20000" oninput="projSliderChange()">
+              <div class="proj-param-display">€<span id="proj-deposit-val">20,000</span></div>
+            </div>
+          </div>
+          <div class="proj-param">
+            <label id="proj-label-start">Starting Value (EUR)</label>
+            <div class="proj-param-row">
+              <input type="range" class="proj-slider" id="proj-start" min="1000" max="500000" step="1000" value="57149" oninput="projSliderChange()">
+              <div class="proj-param-display">€<span id="proj-start-val">57,149</span></div>
+            </div>
+          </div>
+          <div class="proj-param">
+            <label id="proj-label-inflation">Inflation Rate</label>
+            <div class="proj-param-row">
+              <input type="range" class="proj-slider" id="proj-inflation" min="0" max="8" step="0.5" value="2.5" oninput="projSliderChange()">
+              <div class="proj-param-display"><span id="proj-inflation-val">2.5</span>%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario buttons -->
+      <div class="proj-scenario-row" id="proj-scenario-row">
+        <button class="proj-scenario-btn" onclick="projSetScenario('bear',this)" id="proj-sc-bear">🐻 Conservative (10%)</button>
+        <button class="proj-scenario-btn" onclick="projSetScenario('moderate',this)" id="proj-sc-moderate">📊 Moderate (25%)</button>
+        <button class="proj-scenario-btn active" onclick="projSetScenario('twr',this)" id="proj-sc-twr">⭐ TWR Current (47.7%)</button>
+        <button class="proj-scenario-btn" onclick="projSetScenario('custom',this)" id="proj-sc-custom">⚙ Custom</button>
+      </div>
+
+      <!-- Legend -->
+      <div class="proj-legend">
+        <div class="proj-legend-item"><div class="proj-legend-dot" style="background:var(--accent)"></div><span id="proj-leg-nominal">Nominal value</span></div>
+        <div class="proj-legend-item"><div class="proj-legend-dot" style="background:#3a5a10; border:1px solid var(--border)"></div><span id="proj-leg-real">Real value (inflation adj.)</span></div>
+        <div class="proj-legend-item"><div class="proj-legend-dot" style="background:var(--border)"></div><span id="proj-leg-deposited">Total deposited</span></div>
+      </div>
+
+      <!-- Chart -->
+      <div class="chart-card" style="margin-bottom:20px;">
+        <div style="position:relative;height:360px;"><canvas id="proj-chart"></canvas></div>
+      </div>
+
+      <!-- Table -->
+      <div class="proj-params" style="padding:0;overflow:hidden;">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface2);">
+          <div class="proj-params-title" style="margin:0;" id="proj-table-title">Annual Breakdown</div>
+        </div>
+        <div class="table-wrapper">
+          <table class="proj-table">
+            <thead>
+              <tr>
+                <th id="proj-th-year">Year</th>
+                <th id="proj-th-n">Yr #</th>
+                <th id="proj-th-nominal">Nominal Value</th>
+                <th id="proj-th-real">Real Value</th>
+                <th id="proj-th-deposited">Total Deposited</th>
+                <th id="proj-th-profit">Net Profit</th>
+                <th id="proj-th-roi">ROI on Deposited</th>
+                <th id="proj-th-mult">Multiplier</th>
+              </tr>
+            </thead>
+            <tbody id="proj-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Footnote -->
+      <div class="proj-footnote" id="proj-footnote">
+        ★ <strong>Default CAGR 47.7%</strong> is derived from your IBKR Time-Weighted Return of 42.73% annualised over 333 days (Jun 2025 – May 2026): (1 + 0.4273)^(365/333) − 1 = 47.69%.
+        Starting value is pre-filled from the last loaded statement's Ending NAV.
+        ⚠ This projection is illustrative only and does not constitute financial advice. Past returns do not guarantee future results. Compound interest model with annual deposits added at the start of each year.
+      </div>
+    </div>
+  </div><!-- /tab-projection -->
 
 </div><!-- /dashboard -->
 
@@ -1314,6 +1462,9 @@ function renderDashboard(data, fileName) {
 
   // Apply i18n for current language
   applyUAI18n();
+
+  // Init projection tab with live data
+  projInitFromData(data);
 
   window.scrollTo(0,0);
 }
@@ -2441,6 +2592,149 @@ function renderPieChart(containerId,tickerData,palette,isPositive) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// PROJECTION TAB
+// ═══════════════════════════════════════════════════════════════════
+let _projChart = null;
+let _projParams = { cagr: 47.7, deposit: 20000, startVal: 57149, inflation: 2.5 };
+
+const PROJ_MILESTONES = [5, 10, 15, 20, 25, 30];
+
+function projCalc(cagr, annualDeposit, startVal, inflationRate, years) {
+  const r = cagr / 100, inf = inflationRate / 100;
+  const currentYear = new Date().getFullYear();
+  const results = [];
+  let portfolio = startVal, totalDeposited = startVal;
+  for (let y = 1; y <= years; y++) {
+    portfolio = (portfolio + annualDeposit) * (1 + r);
+    totalDeposited += annualDeposit;
+    results.push({
+      year: currentYear + y, n: y,
+      nominal: portfolio,
+      real: portfolio / Math.pow(1 + inf, y),
+      totalDeposited,
+      netProfit: portfolio - totalDeposited,
+      multiplier: portfolio / startVal,
+      isMilestone: PROJ_MILESTONES.includes(y)
+    });
+  }
+  return results;
+}
+
+function projFmtK(n) { if (Math.abs(n) >= 1e6) return '€'+(n/1e6).toFixed(2)+'M'; if (Math.abs(n) >= 1e3) return '€'+(Math.abs(n)/1e3).toFixed(0)+'K'; return '€'+Math.round(n); }
+function projFmtEur(n) { return (n<0?'-€':'€')+Math.abs(Math.round(n)).toLocaleString(); }
+
+function renderProjection() {
+  const { cagr, deposit, startVal, inflation } = _projParams;
+  const data = projCalc(cagr, deposit, startVal, inflation, 30);
+
+  // Hero KPIs
+  const hero = document.getElementById('proj-hero');
+  if (hero) {
+    hero.innerHTML = [
+      { label: uaT('proj_kpi_start'),   value: projFmtEur(startVal),        cls: 'blue',   bar: 'blue',   sub: uaT('proj_kpi_start_sub') },
+      { label: uaT('proj_kpi_cagr'),    value: cagr.toFixed(1) + '%',       cls: 'accent', bar: 'accent', sub: uaT('proj_kpi_cagr_sub') },
+      { label: uaT('proj_kpi_deposit'), value: projFmtEur(deposit) + '/yr', cls: 'blue',   bar: 'blue',   sub: uaT('proj_kpi_deposit_sub') },
+      { label: uaT('proj_kpi_at10'),    value: projFmtK(data[9].nominal),   cls: 'green',  bar: 'green',  sub: uaT('proj_kpi_at10_sub') },
+      { label: uaT('proj_kpi_at20'),    value: projFmtK(data[19].nominal),  cls: 'green',  bar: 'green',  sub: uaT('proj_kpi_at20_sub') },
+      { label: uaT('proj_kpi_at30'),    value: projFmtK(data[29].nominal),  cls: 'yellow', bar: 'yellow', sub: uaT('proj_kpi_at30_sub') },
+    ].map(k => `<div class="proj-kpi ${k.bar}"><div class="proj-kpi-label">${k.label}</div><div class="proj-kpi-value ${k.cls}">${k.value}</div><div class="proj-kpi-sub">${k.sub}</div></div>`).join('');
+  }
+
+  // Chart
+  if (_projChart) { _projChart.destroy(); _projChart = null; }
+  const ctx = document.getElementById('proj-chart');
+  if (!ctx) return;
+  _projChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.map(d => d.year),
+      datasets: [
+        { label: uaT('proj_leg_nominal'),   data: data.map(d=>d.nominal),      borderColor:'#c8ff00', backgroundColor:'rgba(200,255,0,0.07)', borderWidth:2.5, fill:true, tension:0.4, pointRadius:data.map(d=>d.isMilestone?5:0), pointBackgroundColor:'#c8ff00', pointBorderColor:'#0a0c0f', pointBorderWidth:2 },
+        { label: uaT('proj_leg_real'),      data: data.map(d=>d.real),         borderColor:'#3a5a10', backgroundColor:'transparent', borderWidth:1.5, borderDash:[4,4], fill:false, tension:0.4, pointRadius:0 },
+        { label: uaT('proj_leg_deposited'), data: data.map(d=>d.totalDeposited), borderColor:'#222831', backgroundColor:'transparent', borderWidth:1, borderDash:[2,6], fill:false, tension:0.1, pointRadius:0 }
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display:false },
+        tooltip: { backgroundColor:'#111419', borderColor:'#222831', borderWidth:1, titleColor:'#5a6473', bodyColor:'#e8ecf0', padding:12,
+          callbacks: { title: items => uaT('proj_year')+' '+items[0].label, label: item => ' '+item.dataset.label+': '+projFmtK(item.raw) }
+        }
+      },
+      scales: {
+        x: { grid:{color:'rgba(128,128,128,0.07)'}, ticks:{color:'#5a6473', font:{family:"'Space Mono',monospace", size:11}, maxTicksLimit:10} },
+        y: { grid:{color:'rgba(128,128,128,0.05)'}, ticks:{color:'#5a6473', font:{family:"'Space Mono',monospace", size:11}, callback:v=>projFmtK(v)} }
+      }
+    }
+  });
+
+  // Table — milestone rows only
+  const tbody = document.getElementById('proj-tbody');
+  if (tbody) {
+    tbody.innerHTML = data.filter(d => d.isMilestone).map(d => `
+      <tr class="proj-milestone">
+        <td>${d.year}<span class="proj-year-tag">+${d.n}yr</span></td>
+        <td class="muted">${d.n}</td>
+        <td class="accent">${projFmtEur(d.nominal)}</td>
+        <td class="muted">${projFmtEur(d.real)}</td>
+        <td class="muted">${projFmtEur(d.totalDeposited)}</td>
+        <td class="${d.netProfit>=0?'green':''}">${d.netProfit>=0?'+':''}${projFmtEur(d.netProfit)}</td>
+        <td class="muted">${((d.netProfit/d.totalDeposited)*100).toFixed(0)}%</td>
+        <td class="accent" style="font-weight:700;">${d.multiplier.toFixed(1)}×</td>
+      </tr>
+    `).join('');
+  }
+}
+
+function projSliderChange() {
+  _projParams.cagr      = parseFloat(document.getElementById('proj-cagr').value);
+  _projParams.deposit   = parseFloat(document.getElementById('proj-deposit').value);
+  _projParams.startVal  = parseFloat(document.getElementById('proj-start').value);
+  _projParams.inflation = parseFloat(document.getElementById('proj-inflation').value);
+  document.getElementById('proj-cagr-val').textContent      = _projParams.cagr.toFixed(1);
+  document.getElementById('proj-deposit-val').textContent   = Math.round(_projParams.deposit).toLocaleString();
+  document.getElementById('proj-start-val').textContent     = Math.round(_projParams.startVal).toLocaleString();
+  document.getElementById('proj-inflation-val').textContent = _projParams.inflation.toFixed(1);
+  renderProjection();
+}
+
+function projSetScenario(s, btn) {
+  document.querySelectorAll('.proj-scenario-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const scenarios = { bear:10, moderate:25, twr:47.7 };
+  if (s !== 'custom' && scenarios[s] !== undefined) {
+    _projParams.cagr = scenarios[s];
+    document.getElementById('proj-cagr').value = _projParams.cagr;
+    document.getElementById('proj-cagr-val').textContent = _projParams.cagr.toFixed(1);
+    renderProjection();
+  }
+}
+
+function projInitFromData(data) {
+  if (data && data.navEnd > 0) {
+    _projParams.startVal = Math.round(data.navEnd);
+    const sl = document.getElementById('proj-start');
+    if (sl) { sl.max = Math.max(500000, _projParams.startVal * 3); sl.value = _projParams.startVal; document.getElementById('proj-start-val').textContent = _projParams.startVal.toLocaleString(); }
+  }
+  if (data && data.twr) {
+    const twrV = parseFloat(data.twr);
+    if (!isNaN(twrV)) {
+      const annualised = parseFloat(((Math.pow(1 + twrV/100, 365/333) - 1)*100).toFixed(1));
+      if (annualised > 0 && annualised <= 60) {
+        _projParams.cagr = annualised;
+        const sl = document.getElementById('proj-cagr');
+        if (sl) { sl.value = annualised; document.getElementById('proj-cagr-val').textContent = annualised.toFixed(1); }
+        const twrBtn = document.getElementById('proj-sc-twr');
+        if (twrBtn) twrBtn.textContent = `⭐ TWR ${uaT('proj_sc_twr')} (${annualised.toFixed(1)}%)`;
+      }
+    }
+  }
+  renderProjection();
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // UI HELPERS
 // ═══════════════════════════════════════════════════════════════════
 function switchTab(e, id) {
@@ -2461,7 +2755,7 @@ function toggleTheme() {
 const UA_I18N = {
   en: {
     tab_portfolio: 'Portfolio', tab_open: 'Open Options', tab_closed: 'Closed P&L',
-    tab_stocks: 'Stocks', tab_cash: 'Cash & Income', tab_deposits: 'Deposits & Withdrawals', tab_charts: 'Charts',
+    tab_stocks: 'Stocks', tab_cash: 'Cash & Income', tab_deposits: 'Deposits & Withdrawals', tab_charts: 'Charts', tab_projection: '⭐ Projection',
     chart_opt_title: 'Options P&L by month',
     chart_opt_sub: 'Options P&L grouped by close/expiry month',
     chart_opt_profit: 'Profit', chart_opt_loss: 'Loss', chart_opt_open: 'Open (premium)',
@@ -2488,10 +2782,23 @@ const UA_I18N = {
     section_dte: 'DTE at Open — Distribution',
     chart_dte_sub: 'Days to expiry when position was opened — number of trades per bucket',
     chart_dte_trades: 'Trades',
+    // Projection tab
+    proj_kpi_start: 'Starting Value', proj_kpi_start_sub: 'from statement NAV',
+    proj_kpi_cagr: 'Annual CAGR', proj_kpi_cagr_sub: 'annualised TWR default',
+    proj_kpi_deposit: 'Annual Deposit', proj_kpi_deposit_sub: 'added each year',
+    proj_kpi_at10: 'Value at 10 yrs', proj_kpi_at10_sub: 'nominal',
+    proj_kpi_at20: 'Value at 20 yrs', proj_kpi_at20_sub: 'nominal',
+    proj_kpi_at30: 'Value at 30 yrs', proj_kpi_at30_sub: 'nominal',
+    proj_leg_nominal: 'Nominal value', proj_leg_real: 'Real value (inflation adj.)', proj_leg_deposited: 'Total deposited',
+    proj_year: 'Year',
+    proj_sc_twr: 'TWR Current',
+    proj_th_year: 'Year', proj_th_n: 'Yr #', proj_th_nominal: 'Nominal Value', proj_th_real: 'Real Value',
+    proj_th_deposited: 'Total Deposited', proj_th_profit: 'Net Profit', proj_th_roi: 'ROI on Deposited', proj_th_mult: 'Multiplier',
+    proj_sc_bear: 'Conservative (10%)', proj_sc_moderate: 'Moderate (25%)', proj_sc_twr: 'TWR Current', proj_sc_custom: 'Custom',
   },
   hr: {
     tab_portfolio: 'Portfolio', tab_open: 'Otvorene opcije', tab_closed: 'Zatvoreni P&L',
-    tab_stocks: 'Dionice', tab_cash: 'Gotovina i prihodi', tab_deposits: 'Depoziti i povlačenja', tab_charts: 'Grafikoni',
+    tab_stocks: 'Dionice', tab_cash: 'Gotovina i prihodi', tab_deposits: 'Depoziti i povlačenja', tab_charts: 'Grafikoni', tab_projection: '⭐ Projekcija',
     chart_opt_title: 'P&L opcija po mjesecu',
     chart_opt_sub: 'P&L opcija grupiran po mjesecu zatvaranja/isteka',
     chart_opt_profit: 'Profit', chart_opt_loss: 'Gubitak', chart_opt_open: 'Otvoreno (premija)',
@@ -2518,6 +2825,19 @@ const UA_I18N = {
     section_dte: 'DTE pri otvaranju — distribucija',
     chart_dte_sub: 'Dani do isteka pri otvaranju pozicije — broj tradova po skupini',
     chart_dte_trades: 'Tradovi',
+    // Projection tab
+    proj_kpi_start: 'Početna vrijednost', proj_kpi_start_sub: 'iz izvještaja (NAV)',
+    proj_kpi_cagr: 'Godišnji CAGR', proj_kpi_cagr_sub: 'anualizirani TWR (default)',
+    proj_kpi_deposit: 'Godišnji depozit', proj_kpi_deposit_sub: 'dodaje se svake godine',
+    proj_kpi_at10: 'Vrijednost za 10 g.', proj_kpi_at10_sub: 'nominalno',
+    proj_kpi_at20: 'Vrijednost za 20 g.', proj_kpi_at20_sub: 'nominalno',
+    proj_kpi_at30: 'Vrijednost za 30 g.', proj_kpi_at30_sub: 'nominalno',
+    proj_leg_nominal: 'Nominalna vrijednost', proj_leg_real: 'Realna vrijednost (inflacija)', proj_leg_deposited: 'Ukupno uloženo',
+    proj_year: 'Godina',
+    proj_sc_twr: 'TWR dosadašnji',
+    proj_th_year: 'Godina', proj_th_n: 'Br.', proj_th_nominal: 'Nominalna vrijednost', proj_th_real: 'Realna vrijednost',
+    proj_th_deposited: 'Ukupno uloženo', proj_th_profit: 'Neto profit', proj_th_roi: 'ROI na uloženo', proj_th_mult: 'Multiplikator',
+    proj_sc_bear: 'Konzervativno (10%)', proj_sc_moderate: 'Umjereno (25%)', proj_sc_twr: 'TWR dosadašnji', proj_sc_custom: 'Prilagođeni',
   }
 };
 
@@ -2536,6 +2856,7 @@ function applyUAI18n() {
     ['tab-cash',      'tab_cash'],
     ['tab-deposits',  'tab_deposits'],
     ['tab-charts',    'tab_charts'],
+    ['tab-projection','tab_projection'],
   ];
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
     if (tabMap[i]) btn.textContent = uaT(tabMap[i][1]);
@@ -2584,6 +2905,25 @@ function applyUAI18n() {
     ['ua-section-dte','section_dte'],['ua-chart-dte-sub','chart_dte_sub'],['ua-chart-dte-trades','chart_dte_trades'],
   ];
   ids.forEach(([id,key]) => { const el=document.getElementById(id); if(el) el.textContent=uaT(key); });
+
+  // Projection tab i18n
+  const projIds = [
+    ['proj-label-cagr','proj_kpi_cagr'], ['proj-label-deposit','proj_kpi_deposit'],
+    ['proj-label-start','proj_kpi_start'], ['proj-label-inflation','proj_kpi_cagr'],
+    ['proj-th-year','proj_th_year'], ['proj-th-n','proj_th_n'],
+    ['proj-th-nominal','proj_th_nominal'], ['proj-th-real','proj_th_real'],
+    ['proj-th-deposited','proj_th_deposited'], ['proj-th-profit','proj_th_profit'],
+    ['proj-th-roi','proj_th_roi'], ['proj-th-mult','proj_th_mult'],
+    ['proj-leg-nominal','proj_leg_nominal'], ['proj-leg-real','proj_leg_real'],
+    ['proj-leg-deposited','proj_leg_deposited'],
+  ];
+  projIds.forEach(([id,key]) => { const el=document.getElementById(id); if(el) el.textContent=uaT(key); });
+  const scBear = document.getElementById('proj-sc-bear');     if(scBear) scBear.textContent     = '🐻 ' + (uaT('proj_sc_bear')     || 'Conservative (10%)');
+  const scMod  = document.getElementById('proj-sc-moderate'); if(scMod)  scMod.textContent      = '📊 ' + (uaT('proj_sc_moderate') || 'Moderate (25%)');
+  const scTwr  = document.getElementById('proj-sc-twr');      if(scTwr)  scTwr.textContent      = '⭐ ' + uaT('proj_sc_twr') + ' (' + _projParams.cagr.toFixed(1) + '%)';
+  const scCust = document.getElementById('proj-sc-custom');   if(scCust) scCust.textContent     = '⚙ ' + (uaT('proj_sc_custom')  || 'Custom');
+  // Re-render projection with updated labels
+  if (document.getElementById('proj-chart')) renderProjection();
 }
 
 window.addEventListener('message', function(ev) {
