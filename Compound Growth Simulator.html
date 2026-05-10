@@ -20,7 +20,8 @@
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{font-family:var(--sans);background:var(--bg);color:var(--txt);min-height:100vh;transition:background 0.3s,color 0.3s;}
-  body{padding:28px 28px 48px;max-width:900px;margin:0 auto;}
+  body{padding:0;max-width:100%;margin:0;}
+  .page-content{padding:28px 28px 48px;max-width:900px;margin:0 auto;}
 
   .gs-section-title{font-family:var(--mono);font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt2);margin-bottom:20px;}
   .gs-sub-title{font-family:var(--mono);font-size:0.65rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt2);margin:24px 0 14px;padding-top:20px;border-top:1px solid var(--border);}
@@ -124,13 +125,15 @@
     align-items: center;
     gap: 0;
     border-bottom: 1px solid var(--border);
-    margin: -28px -28px 28px -28px;
+    margin: 0;
     padding: 0 28px;
     background: var(--surface);
-    position: sticky;
-    top: 0;
-    z-index: 200;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    width: 100%;
   }
+  .page-nav::-webkit-scrollbar { display: none; }
   .page-nav-title {
     font-family: var(--mono);
     font-size: 0.6rem;
@@ -142,6 +145,7 @@
     border-right: 1px solid var(--border);
     margin-right: 16px;
     white-space: nowrap;
+    flex-shrink: 0;
   }
   .page-nav-btn {
     font-family: var(--mono);
@@ -158,6 +162,7 @@
     white-space: nowrap;
     transition: all .2s;
     margin-bottom: -1px;
+    flex-shrink: 0;
   }
   .page-nav-btn:hover { color: var(--txt); }
   .page-nav-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
@@ -179,10 +184,8 @@
 
   /* ── Portfolio Kalkulator styles (self-contained, prefixed pf-) ── */
   .pf-wrap {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 32px 0 80px;
     font-family: 'DM Mono', monospace;
+    padding-bottom: 48px;
   }
   .pf-header { margin-bottom: 36px; }
   .pf-header-label {
@@ -268,7 +271,13 @@
     overflow-x: auto;
     border: 1px solid var(--border);
     border-radius: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--bg);
   }
+  .pf-table-wrap::-webkit-scrollbar { height: 6px; }
+  .pf-table-wrap::-webkit-scrollbar-track { background: var(--bg); border-radius: 0 0 8px 8px; }
+  .pf-table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .pf-table-wrap::-webkit-scrollbar-thumb:hover { background: var(--txt2); }
   .pf-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 
   .pf-th-year {
@@ -348,14 +357,14 @@
   <button class="page-nav-btn" id="nav-pf" onclick="showPage('pf')" id="nav-pf-btn">
     <span class="t" data-en="📊 Rate Table" data-hr="📊 Tablica Stopa">📊 Rate Table</span>
   </button>
-  <div style="margin-left:auto;display:flex;gap:6px;align-items:center;padding-left:16px;border-left:1px solid var(--border)">
+  <div style="margin-left:16px;display:flex;gap:6px;align-items:center;padding-left:16px;border-left:1px solid var(--border);flex-shrink:0;">
     <button class="lang-toggle active" id="lt-en" onclick="setLang('en')">EN</button>
     <button class="lang-toggle" id="lt-hr" onclick="setLang('hr')">HR</button>
   </div>
 </div>
 
 <div id="sim-page">
-
+<div class="page-content">
   <div class="gs-section-title">📐 Compound Growth Simulator <span style="opacity:0.45;font-size:0.6rem">v1.1</span></div>
 
   <!-- Scenario Presets -->
@@ -1087,9 +1096,11 @@
   })();
 </script>
 
+</div><!-- /page-content -->
 </div><!-- /sim-page -->
 
 <div id="pf-page">
+<div class="page-content">
 <div class="pf-wrap">
   <div class="pf-header">
     <div class="pf-header-label"><span class="t" data-en="Financial Calculator" data-hr="Financijski Kalkulator">Financial Calculator</span></div>
@@ -1129,6 +1140,7 @@
   <div class="pf-table-wrap" id="pf-table-wrap"></div>
   <div class="pf-footer" id="pf-footer"></div>
 </div>
+</div><!-- /page-content -->
 </div><!-- /pf-page -->
 
 <script>
