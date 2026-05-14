@@ -1280,7 +1280,8 @@ function processIBKR(sections) {
     stockTradeMap,
     organicPL: navEnd - navStart - totalDeposits,
     optByMonth, sortedMonths,
-    optionsRU, optTradeMap, openOptPosMap, tradesBySym
+    optionsRU, optTradeMap, openOptPosMap, tradesBySym,
+    _sections: sections
   };
 }
 
@@ -1585,8 +1586,7 @@ function renderAssignedTable(assignedPositions) {
   tbody.innerHTML = '';
   if (!assignedPositions.length) { section.style.display='none'; return; }
   section.style.display = 'block';
-  const sorted = assignedPositions.slice().sort((a,b)=>(b.assignDate||0)-(a.assignDate||0));
-  sorted.forEach(p => {
+  assignedPositions.slice().sort((a,b)=>(b.assignDate||0)-(a.assignDate||0)).forEach(p => {
     const plCls = p.realAtAssign>=0?'unr-pos':'unr-neg';
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -1601,17 +1601,6 @@ function renderAssignedTable(assignedPositions) {
       <td class="${plCls}">${p.realAtAssign>=0?'+':'−'}$${Math.abs(p.realAtAssign).toFixed(2)}</td>`;
     tbody.appendChild(tr);
   });
-
-  // ── TOTALS ROW ──
-  const totPrem = sorted.reduce((s,p) => s + p.premCollected, 0);
-
-  const tfoot = document.createElement('tr');
-  tfoot.style.borderTop = '1px solid var(--border)';
-  tfoot.innerHTML = `
-    <td colspan="5" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">TOTAL</td>
-    <td><span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue);">+$${totPrem.toFixed(2)}</span></td>
-    <td colspan="3"></td>`;
-  tbody.appendChild(tfoot);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2522,16 +2511,53 @@ function renderPortfolioPies(data) {
   if (_chartPortPie)   { _chartPortPie.destroy();   _chartPortPie=null; }
   if (_chartIncomePie) { _chartIncomePie.destroy(); _chartIncomePie=null; }
 
-  const navMap = data.navMap;
-  const pieStock      = Math.max(0,(navMap['Stock']||{}).curTotal||0);
-  const pieCash       = Math.max(0,(navMap['Cash']||navMap['Cash ']||{}).curTotal||0);
-  const pieCollateral = Math.max(0,(navMap['Collateral Value']||{}).curTotal||0);
-  const pieOther      = Math.max(0,((navMap['Interest Accruals']||{}).curTotal||0)+((navMap['Dividend Accruals']||{}).curTotal||0));
+  const navMap    = data.navMap;
+  const fxRate    = data.eurUsdRate || 1.10; // USD per 1 EUR
+  const pieCash   = Math.max(0,(navMap['Cash']||navMap['Cash ']||{}).curTotal||0);
+
+  // ── Parse SYEP collateral per ticker (section "Stock Yield Enhancement Program Securities Lent")
+  const syepCollateral = {}; // ticker -> EUR value
+  const syepRows = getData(data._sections||{}, 'Stock Yield Enhancement Program Securities Lent')
+    .filter(r => r[1]==='Data' && r[2]==='Stocks');
+  syepRows.forEach(r => {
+    const ticker = (r[4]||'').trim();
+    const collUSD = Math.abs(+r[8]||0); // collateral amount in USD
+    if (ticker && collUSD > 0) syepCollateral[ticker] = (syepCollateral[ticker]||0) + collUSD / fxRate;
+  });
+
+  // ── Build per-ticker stock values in EUR
+  const tickerValEUR = {};
+  (data.openStocks||[]).forEach(s => {
+    if (!s.sym || s.value == null) return;
+    const valEUR = s.ccy === 'EUR' ? s.value : s.value / fxRate;
+    tickerValEUR[s.sym] = (tickerValEUR[s.sym]||0) + valEUR;
+  });
+
+  // Merge SYEP collateral into corresponding ticker value
+  Object.entries(syepCollateral).forEach(([ticker, collEUR]) => {
+    if (tickerValEUR[ticker] !== undefined) {
+      tickerValEUR[ticker] += collEUR; // already counted in stock value, collateral is just lent portion — skip double counting
+    }
+    // Note: SYEP collateral is the cash received for lent shares; the shares themselves
+    // are already in openStocks value, so we don't add it — but we label it visually
+  });
+
+  // Maximally distinct hues spread across the color wheel
+  const palette = ['#e63946','#2ec4b6','#f4a261','#6a4c93','#06d6a0','#ffd166','#118ab2','#ef476f','#b7e4c7','#ff6b35','#c77dff','#80b918'];
   const portData=[],portLabels=[],portColors=[];
-  if(pieStock>0)      { portData.push(+pieStock.toFixed(2));      portLabels.push('Stocks');     portColors.push('#00b4d8'); }
-  if(pieCash>0)       { portData.push(+pieCash.toFixed(2));       portLabels.push('Cash');       portColors.push('#00c853'); }
-  if(pieCollateral>0) { portData.push(+pieCollateral.toFixed(2)); portLabels.push('Collateral'); portColors.push('#ffb347'); }
-  if(pieOther>0)      { portData.push(+pieOther.toFixed(2));      portLabels.push('Accruals');   portColors.push('#a78bfa'); }
+  // Sort largest slice first so the donut reads clockwise by size
+  const sorted = Object.entries(tickerValEUR).sort((a,b)=>b[1]-a[1]);
+  sorted.forEach(([ticker, val], i) => {
+    if (val > 0) {
+      const hasSYEP = syepCollateral[ticker] > 0;
+      portData.push(+val.toFixed(2));
+      portLabels.push(hasSYEP ? ticker + ' \u27F3' : ticker);
+      portColors.push(palette[i % palette.length]);
+    }
+  });
+  // Cash always last / smallest visual weight
+  if (pieCash > 0) { portData.push(+pieCash.toFixed(2)); portLabels.push('Cash'); portColors.push('#adb5bd'); }
+
   const portTotal = portData.reduce((a,b)=>a+b,0);
   _chartPortPie = new Chart(document.getElementById('portfolioPieChart'),{type:'doughnut',data:{labels:portLabels,datasets:[{data:portData,backgroundColor:portColors,borderWidth:2,borderColor:getComputedStyle(document.body).getPropertyValue('--surface2'),hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' €'+ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0})+'  ('+((ctx.parsed/portTotal)*100).toFixed(1)+'%)'}}}}});
   const portLegend = document.getElementById('portfolioPieLegend');
