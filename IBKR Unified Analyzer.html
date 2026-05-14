@@ -1585,7 +1585,8 @@ function renderAssignedTable(assignedPositions) {
   tbody.innerHTML = '';
   if (!assignedPositions.length) { section.style.display='none'; return; }
   section.style.display = 'block';
-  assignedPositions.slice().sort((a,b)=>(b.assignDate||0)-(a.assignDate||0)).forEach(p => {
+  const sorted = assignedPositions.slice().sort((a,b)=>(b.assignDate||0)-(a.assignDate||0));
+  sorted.forEach(p => {
     const plCls = p.realAtAssign>=0?'unr-pos':'unr-neg';
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -1600,6 +1601,26 @@ function renderAssignedTable(assignedPositions) {
       <td class="${plCls}">${p.realAtAssign>=0?'+':'−'}$${Math.abs(p.realAtAssign).toFixed(2)}</td>`;
     tbody.appendChild(tr);
   });
+
+  // ── TOTALS ROW ──
+  const totShares    = sorted.reduce((s,p) => s + p.sharesAssigned, 0);
+  const totContracts = sorted.reduce((s,p) => s + p.qtyContracts, 0);
+  const totPrem      = sorted.reduce((s,p) => s + p.premCollected, 0);
+  const totRealPL    = sorted.reduce((s,p) => s + p.realAtAssign, 0);
+  const totPlCls     = totRealPL >= 0 ? 'unr-pos' : 'unr-neg';
+  const totPlStr     = `${totRealPL>=0?'+':'−'}$${Math.abs(totRealPL).toFixed(2)}`;
+
+  const tfoot = document.createElement('tr');
+  tfoot.style.borderTop = '1px solid var(--border)';
+  tfoot.innerHTML = `
+    <td colspan="3" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">TOTAL</td>
+    <td class="mono">${totShares} sh <span style="color:var(--muted);font-size:11px;">(${totContracts} contracts)</span></td>
+    <td></td>
+    <td><span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue);">+$${totPrem.toFixed(2)}</span></td>
+    <td></td>
+    <td></td>
+    <td class="${totPlCls}">${totPlStr}</td>`;
+  tbody.appendChild(tfoot);
 }
 
 // ═══════════════════════════════════════════════════════════════════
