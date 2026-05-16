@@ -1345,7 +1345,7 @@ function renderDashboard(data, fileName) {
     { label:'Premium at risk',  value:fmt(data.openPremiumCollected), cls:'neutral', bar:'accent' },
     { label:'Put exposure',     value:fmtK(data.totalExposure), cls:'neutral', bar:'yellow' },
     { label:'Stock P&L',        value:fmt(data.stockTotal), cls:data.stockTotal>=0?'pos':'neg', bar:data.stockTotal>=0?'green':'red' },
-    { label:'Cash (EUR equiv)', value:'€'+(data.totalCashEUR+data.collateralBase).toLocaleString(undefined,{minimumFractionDigits:0}), cls:'neutral', bar:'blue' },
+    { label:'Cash (EUR equiv)', value:'€'+data.totalCashEUR.toLocaleString(undefined,{minimumFractionDigits:0}), cls:'neutral', bar:'blue' },
     { label:'Win rate',         value:(data.closedWinRate||0)+'%', cls:data.closedWinRate>=50?'pos':'neg', bar:data.closedWinRate>=50?'green':'red' },
   ];
   kpis.forEach(k => {
@@ -1376,7 +1376,7 @@ function renderDashboard(data, fileName) {
     { label:'Options income', val:(data.closedNet>=0?'+':'')+'$'+Math.abs(data.closedNet).toLocaleString(undefined,{minimumFractionDigits:2}), color:data.closedNet>=0?'var(--green)':'var(--red)', sub:`${data.closedOptions.length} closed` },
     { label:'Stock P&L', val:(data.stockTotal>=0?'+':'')+'$'+Math.abs(data.stockTotal).toLocaleString(undefined,{minimumFractionDigits:2}), color:data.stockTotal>=0?'var(--green)':'var(--red)', sub:'realized + unr.' },
     { label:'Commissions', val:'€'+Math.abs(data.totalComm).toLocaleString(undefined,{minimumFractionDigits:2}), color:'var(--red)', sub:'total paid' },
-    { label:'Cash on account', val:'€'+(data.totalCashEUR+data.collateralBase).toLocaleString(undefined,{minimumFractionDigits:0}), color:'var(--text)', sub:'EUR+USD equiv.', wide:true },
+    { label:'Cash on account', val:'€'+data.totalCashEUR.toLocaleString(undefined,{minimumFractionDigits:0}), color:'var(--text)', sub:'EUR+USD equiv.', wide:true },
   ];
   snapStats.innerHTML = statItems.map(s =>
     `<div class="snap-stat" style="${s.wide?'grid-column:1/-1;':''}">
@@ -1994,15 +1994,15 @@ function renderCashIncome(d) {
       <div class="cash-card-title">USD account</div>
       <div class="cash-row"><span>Ending cash</span><span>$${d.endCashUSD.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
       <div class="cash-row"><span>Settled cash</span><span>$${d.settledCashUSD.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
-      <div class="cash-row collateral"><span>Collateral (lent stocks)</span><span>$${d.collateralUSD.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
-      <div class="cash-row"><span>Net cash</span><span>$${(d.endCashUSD+d.collateralUSD).toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
+      <div class="cash-row collateral"><span>Collateral (lent stocks) ⚠ nije slobodan</span><span>$${d.collateralUSD.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
+      <div class="cash-row"><span>Net cash (bez kolaterala)</span><span>$${d.endCashUSD.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
     </div>
     <div class="cash-card highlight">
       <div class="cash-card-title blue">Total (EUR equivalent)</div>
       <div class="cash-row"><span>EUR cash</span><span>€${d.fxEURcash.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
       <div class="cash-row"><span>USD cash (in EUR)</span><span>€${d.fxUSDinEUR.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
-      <div class="cash-row collateral"><span>Collateral (in EUR)</span><span>€${d.collateralBase.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
-      <div class="cash-row total"><span>Total cash</span><span>€${(d.totalCashEUR+d.collateralBase).toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
+      <div class="cash-row collateral"><span>Collateral (in EUR) ⚠ nije slobodan</span><span>€${d.collateralBase.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
+      <div class="cash-row total"><span>Slobodan cash</span><span>€${d.totalCashEUR.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
     </div>`;
 
   const earnGrid = document.getElementById('earn-grid');
@@ -2533,14 +2533,9 @@ function renderPortfolioPies(data) {
     tickerValEUR[s.sym] = (tickerValEUR[s.sym]||0) + valEUR;
   });
 
-  // Merge SYEP collateral into corresponding ticker value
-  Object.entries(syepCollateral).forEach(([ticker, collEUR]) => {
-    if (tickerValEUR[ticker] !== undefined) {
-      tickerValEUR[ticker] += collEUR; // already counted in stock value, collateral is just lent portion — skip double counting
-    }
-    // Note: SYEP collateral is the cash received for lent shares; the shares themselves
-    // are already in openStocks value, so we don't add it — but we label it visually
-  });
+  // SYEP collateral: dionice su već uračunate u openStocks.value — ne dodajemo kolateral ponovo.
+  // Samo koristimo syepCollateral za oznaku ⟳ na legendi (ticker je lendovan).
+  // Object.entries(syepCollateral) se već koristi ispod za hasSYEP provjeru — ništa dodatno ne trebamo raditi.
 
   // Maximally distinct hues spread across the color wheel
   const palette = ['#e63946','#2ec4b6','#f4a261','#6a4c93','#06d6a0','#ffd166','#118ab2','#ef476f','#b7e4c7','#ff6b35','#c77dff','#80b918'];
