@@ -487,7 +487,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.2</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.3</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -567,20 +567,6 @@
       </div>
     </div>
 
-    <div class="section" id="assigned-section" style="display:none;">
-      <div class="section-title">Options Assigned</div>
-      <div class="table-wrapper">
-        <table class="open-table">
-          <thead><tr>
-            <th>Ticker</th><th>Type</th><th>Strike</th><th>Qty assigned</th>
-            <th>Assign date</th><th>Premium collected</th><th>Per share</th>
-            <th>Effective cost</th><th>P&amp;L at assign</th>
-          </tr></thead>
-          <tbody id="assigned-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-
     <div class="section">
       <div class="section-title">Premium at risk — share by ticker</div>
       <div class="pie-grid">
@@ -625,6 +611,20 @@
             <tbody id="closed-matrix-body"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <div class="section" id="assigned-section" style="display:none;">
+      <div class="section-title">Options Assigned</div>
+      <div class="table-wrapper">
+        <table class="open-table">
+          <thead><tr>
+            <th>Ticker</th><th>Type</th><th>Strike</th><th>Qty assigned</th>
+            <th>Assign date</th><th>Premium collected</th><th>Per share</th>
+            <th>Effective cost</th><th>P&amp;L at assign</th>
+          </tr></thead>
+          <tbody id="assigned-tbody"></tbody>
+        </table>
       </div>
     </div>
 
@@ -1601,6 +1601,20 @@ function renderAssignedTable(assignedPositions) {
       <td class="${plCls}">${p.realAtAssign>=0?'+':'−'}$${Math.abs(p.realAtAssign).toFixed(2)}</td>`;
     tbody.appendChild(tr);
   });
+  // Total row
+  const totPrem  = assignedPositions.reduce((s,p)=>s+p.premCollected,0);
+  const totPL    = assignedPositions.reduce((s,p)=>s+p.realAtAssign,0);
+  const totContr = assignedPositions.reduce((s,p)=>s+p.qtyContracts,0);
+  const totShares= assignedPositions.reduce((s,p)=>s+p.sharesAssigned,0);
+  const totPlCls = totPL>=0?'unr-pos':'unr-neg';
+  const tfoot = document.createElement('tr');
+  tfoot.style.borderTop = '1px solid var(--border)';
+  tfoot.innerHTML = `
+    <td colspan="4" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">TOTAL</td>
+    <td></td>
+    <td><span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$${totPrem.toFixed(2)}</span></td>
+    <td></td><td></td><td></td>`;
+  tbody.appendChild(tfoot);
 }
 
 // ═══════════════════════════════════════════════════════════════════
