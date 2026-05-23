@@ -1132,9 +1132,13 @@ function processIBKR(sections) {
   const closedPL = [];
   for (const r of tradeSubTotals) {
     const sym = r[itSym]?r[itSym].trim():'';
-    if (!sym || num(r[itQty]) !== 0) continue;
-    if (openSyms.has(sym)) continue;
+    if (!sym) continue;
+    const netQty = num(r[itQty]);
     const realTotal = num(r[itRealPL]);
+    // include: fully closed (qty=0) OR partially closed (qty!=0 but has realized P/L)
+    if (netQty !== 0 && realTotal === 0) continue;
+    // skip fully open positions with no realized P/L
+    if (openSyms.has(sym) && netQty !== 0 && realTotal === 0) continue;
     const parsed = parseOptSym(sym);
     if (!parsed) continue;
     const symTrades = (tradesBySym[sym]||[]).slice().sort((a,b)=>a.date-b.date);
@@ -1146,7 +1150,8 @@ function processIBKR(sections) {
       monthKey   = `${y}-${String(m+1).padStart(2,'0')}`;
       monthLabel = closeDate.toLocaleString('en-US',{month:'short'}) + " '" + String(y).slice(2);
     }
-    closedPL.push({ sym, ticker:parsed.ticker, expiry:parsed.expiry, strike:parsed.strike, type:parsed.type, realTotal, closeDate, monthKey, monthLabel });
+    const isPartial = num(r[itQty]) !== 0;
+    closedPL.push({ sym, ticker:parsed.ticker, expiry:parsed.expiry, strike:parsed.strike, type:parsed.type, realTotal, closeDate, monthKey, monthLabel, isPartial });
   }
 
   // ── CASH ──
@@ -1405,9 +1410,10 @@ function renderDashboard(data, fileName) {
   // ── CLOSED P&L MATRIX ──
   const tickerMap = {}, monthSet = {};
   data.closedPL.forEach(c => {
-    if (!tickerMap[c.ticker]) tickerMap[c.ticker] = { monthData:{}, total:0 };
+    if (!tickerMap[c.ticker]) tickerMap[c.ticker] = { monthData:{}, total:0, hasPartial:false };
     tickerMap[c.ticker].total += c.realTotal;
     tickerMap[c.ticker].monthData[c.monthKey] = (tickerMap[c.ticker].monthData[c.monthKey]||0) + c.realTotal;
+    if (c.isPartial) tickerMap[c.ticker].hasPartial = true;
     if (!monthSet[c.monthKey]) monthSet[c.monthKey] = c.monthLabel;
   });
   window._matrixTickerMap = tickerMap;
@@ -1730,7 +1736,7 @@ function renderMatrix(filterYear) {
     filteredMonths.forEach(mk => {
       const val=data.monthData[mk]||0; if(!val) return;
       const qk=`${mk.slice(0,4)}-${monthToQ(mk)}`;
-      if(!qTickerMap[ticker]) qTickerMap[ticker]={qData:{},total:0};
+      if(!qTickerMap[ticker]) qTickerMap[ticker]={qData:{},total:0,hasPartial:data.hasPartial};
       qTickerMap[ticker].qData[qk]=(qTickerMap[ticker].qData[qk]||0)+val;
       qTickerMap[ticker].total+=val;
     });
@@ -1745,7 +1751,8 @@ function renderMatrix(filterYear) {
   head.appendChild(headRow);
   sortedTickers.forEach(([ticker,data]) => {
     const tr=document.createElement('tr');
-    let cells=`<td class="col-ticker">${escHtml(ticker)}</td>`;
+    const partialTag = data.hasPartial ? ` <span title="Partially closed — position still open" style="font-size:10px;color:var(--muted);border:1px solid var(--muted);border-radius:3px;padding:1px 4px;vertical-align:middle;">partial</span>` : '';
+    let cells=`<td class="col-ticker">${escHtml(ticker)}${partialTag}</td>`;
     sortedQ.forEach(qk => { const val=data.qData[qk]; cells+=val?`<td class="${val>=0?'cell-pos':'cell-neg'}">${fmt(val)}</td>`:`<td class="cell-empty">—</td>`; });
     cells+=`<td class="col-total ${data.total>=0?'cell-pos':'cell-neg'}">${fmt(data.total)}</td>`;
     tr.innerHTML=cells; body.appendChild(tr);
