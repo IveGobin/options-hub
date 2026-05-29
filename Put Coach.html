@@ -231,6 +231,7 @@ input[type="range"]::-moz-range-thumb {
                 <input type="number" id="fx-rate" min="0.5" max="2" step="0.001" value="1.17"
                        oninput="render()"
                        style="font-family:var(--mono);font-size:12px;font-weight:700;padding:4px 8px;width:66px;border-radius:7px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);outline:none;-moz-appearance:textfield;text-align:center;">
+                <span id="fx-date" style="font-family:var(--mono);font-size:9px;color:var(--muted);"></span>
                 <div class="cur-toggle" id="nlv-cur-toggle">
                     <button class="cur-btn active" onclick="setCur('nlv','EUR')">EUR</button>
                     <button class="cur-btn" onclick="setCur('nlv','USD')">USD</button>
@@ -613,7 +614,28 @@ input[type="range"]::-moz-range-thumb {
         }
     }
 
-    // Init
+    // Init — load FX rate from local JSON, fall back to default
+    (function loadFX() {
+        fetch('tecajna_lista_usd.json')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                // Find the latest date key
+                var dates = Object.keys(data).sort();
+                var latest = dates[dates.length - 1];
+                // Values use comma as decimal separator — replace with dot
+                var rate = parseFloat(data[latest].replace(',', '.'));
+                if (!isNaN(rate) && rate > 0) {
+                    el('fx-rate').value = rate.toFixed(4);
+                    // Show date as hint
+                    el('fx-date').textContent = latest.slice(5); // MM-DD
+                    render();
+                }
+            })
+            .catch(function() {
+                // File not found or error — keep default value, no message
+            });
+    })();
+
     onVix();
 </script>
 <script>
