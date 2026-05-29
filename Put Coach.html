@@ -194,7 +194,18 @@ input[type="range"]::-moz-range-thumb {
             <span class="eyebrow">Risk manager</span>
             <span class="title">Put Coach</span>
         </div>
-        <button class="btn-sm" onclick="toggleTheme()">Theme</button>
+        <div style="display:flex;gap:6px;align-items:center;">
+            <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV">📂 Import</label>
+            <input type="file" id="ibkr-file" accept=".csv" style="display:none;" onchange="importIBKR(this)">
+            <button class="btn-sm" onclick="toggleTheme()">Theme</button>
+        </div>
+    </div>
+
+    <!-- Import status banner -->
+    <div id="import-banner" style="display:none;align-items:center;gap:10px;padding:9px 14px;border-radius:9px;margin-bottom:14px;font-size:12px;background:rgba(58,173,114,0.08);border:1px solid rgba(58,173,114,0.25);">
+        <span style="font-size:16px;">✅</span>
+        <div style="flex:1;font-family:var(--mono);font-size:11px;color:var(--muted);" id="import-msg">—</div>
+        <button onclick="clearImport()" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 4px;">✕</button>
     </div>
 
     <!-- Mode -->
@@ -614,7 +625,130 @@ input[type="range"]::-moz-range-thumb {
         }
     }
 
-    // Init — load FX rate from local JSON, fall back to default
+    // ── IBKR CSV IMPORT ───────────────────────────────────────────────────
+    function clearImport() {
+        el('import-banner').style.display = 'none';
+        el('ibkr-file').value = '';
+    }
+
+    function importIBKR(input) {
+        var file = input.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                parseIBKR(e.target.result);
+            } catch(err) {
+                showImportBanner('⚠️ Could not parse file: ' + err.message, true);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function showImportBanner(msg, isError) {
+        var banner = el('import-banner');
+        banner.style.display = 'flex';
+        banner.style.background = isError ? 'rgba(232,96,96,0.08)' : 'rgba(58,173,114,0.08)';
+        banner.style.borderColor = isError ? 'rgba(232,96,96,0.25)' : 'rgba(58,173,114,0.25)';
+        banner.querySelector('span').textContent = isError ? '⚠️' : '✅';
+        el('import-msg').textContent = msg;
+    }
+
+    function parseIBKR(csv) {
+        var lines = csv.split('\n').map(function(l) { return l.trim(); });
+
+        // 1. NET LIQUIDATION — "Net Asset Value,Data,Total,..."
+        //    columns: section,type,asset class,prior,current long,current short,current total,change
+        var nlvEUR = null;
+        lines.forEach(function(line) {
+            if (line.startsWith('Net Asset Value,Data,Total,')) {
+                var cols = splitCSV(line);
+                // current total = index 6
+                var val = parseFloat(cols[6]);
+                if (!isNaN(val)) nlvEUR = val;
+            }
+        });
+
+        // 2. CASH (used as proxy for excess liq)
+        //    "Net Asset Value,Data,Cash ,..." current total = index 6
+        var cashEUR = null;
+        lines.forEach(function(line) {
+            if (line.startsWith('Net Asset Value,Data,Cash')) {
+                var cols = splitCSV(line);
+                var val = parseFloat(cols[6]);
+                if (!isNaN(val)) cashEUR = val;
+            }
+        });
+
+        // 3. OPEN SHORT PUTS — notional = |quantity| * multiplier * strike (USD)
+        //    "Open Positions,Data,Summary,Equity and Index Options,USD,SYMBOL P,-qty,mult,..."
+        var notionalUSD = 0;
+        lines.forEach(function(line) {
+            if (!line.startsWith('Open Positions,Data,Summary,Equity and Index Options')) return;
+            var cols = splitCSV(line);
+            // cols: [0]section [1]Data [2]Summary [3]asset [4]currency [5]symbol [6]qty [7]mult
+            var symbol = cols[5] || '';
+            var qty    = parseFloat(cols[6]);
+            var mult   = parseFloat(cols[7]);
+            // Short put: qty < 0 and symbol ends with ' P'
+            if (qty < 0 && symbol.trim().endsWith(' P')) {
+                // Extract strike from symbol — last token before ' P'
+                var parts = symbol.trim().split(' ');
+                var strike = parseFloat(parts[parts.length - 2]);
+                if (!isNaN(strike) && !isNaN(mult)) {
+                    notionalUSD += Math.abs(qty) * mult * strike;
+                }
+            }
+        });
+
+        // Apply what we found
+        var messages = [];
+        var fxRate = getFX();
+
+        if (nlvEUR !== null) {
+            el('nlv').value = Math.round(nlvEUR);
+            setCur('nlv', 'EUR');
+            messages.push('NLV: ' + fmt(nlvEUR) + ' EUR');
+        }
+
+        if (cashEUR !== null) {
+            // Set excess slider — cash is a reasonable proxy (not perfect but useful)
+            el('exc-slider').max = Math.max(el('exc-slider').max, Math.round(nlvEUR || cashEUR));
+            el('exc-slider').value = Math.max(0, Math.round(cashEUR));
+            setCur('exc', 'EUR');
+            messages.push('Excess (cash): ' + fmt(cashEUR) + ' EUR');
+        }
+
+        if (notionalUSD > 0) {
+            var orangeNotional = EXP[currentMode].o * (nlvEUR || 0);
+            el('not-slider').max = Math.max(el('not-slider').max, Math.round(notionalUSD * 1.5));
+            el('not-slider').value = Math.round(notionalUSD);
+            setCur('not', 'USD');
+            messages.push('Put notional: ' + fmt(notionalUSD) + ' USD');
+        }
+
+        if (messages.length === 0) {
+            showImportBanner('No recognisable data found in this file', true);
+            return;
+        }
+
+        render();
+        showImportBanner(messages.join(' · '), false);
+    }
+
+    // Simple CSV split that handles quoted fields
+    function splitCSV(line) {
+        var cols = [], cur = '', inQ = false;
+        for (var i = 0; i < line.length; i++) {
+            var c = line[i];
+            if (c === '"') { inQ = !inQ; }
+            else if (c === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+            else { cur += c; }
+        }
+        cols.push(cur.trim());
+        return cols;
+    }
+    // ─────────────────────────────────────────────────────────────────────
     (function loadFX() {
         fetch('tecajna_lista_usd.json')
             .then(function(r) { return r.json(); })
