@@ -226,22 +226,20 @@ input[type="range"]::-moz-range-thumb {
     <div class="nlv-wrap">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
             <label class="nlv-label" for="nlv" style="margin-bottom:0;">Net liquidation value</label>
-            <div class="cur-toggle" id="nlv-cur-toggle">
-                <button class="cur-btn active" onclick="setCur('nlv','EUR')">EUR</button>
-                <button class="cur-btn" onclick="setCur('nlv','USD')">USD</button>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-family:var(--mono);font-size:9px;color:var(--muted);">EUR/USD</span>
+                <input type="number" id="fx-rate" min="0.5" max="2" step="0.001" value="1.17"
+                       oninput="render()"
+                       style="font-family:var(--mono);font-size:12px;font-weight:700;padding:4px 8px;width:66px;border-radius:7px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);outline:none;-moz-appearance:textfield;text-align:center;">
+                <div class="cur-toggle" id="nlv-cur-toggle">
+                    <button class="cur-btn active" onclick="setCur('nlv','EUR')">EUR</button>
+                    <button class="cur-btn" onclick="setCur('nlv','USD')">USD</button>
+                </div>
             </div>
         </div>
-        <div style="display:flex; gap:10px; align-items:stretch;">
-            <input class="nlv-input" type="number" id="nlv" min="0" step="1000"
-                   placeholder="e.g. 100 000" oninput="render()" style="flex:1;">
-            <div style="display:flex; flex-direction:column; gap:4px; min-width:90px;">
-                <label class="nlv-label" for="fx-rate" style="font-size:9px; margin-bottom:0;">EUR/USD</label>
-                <input class="nlv-input" type="number" id="fx-rate" min="0.5" max="2" step="0.001"
-                       value="1.08" oninput="render()"
-                       style="font-size:15px; padding:13px 10px; min-width:0;">
-            </div>
-        </div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px;" id="nlv-converted" style="display:none;"></div>
+        <input class="nlv-input" type="number" id="nlv" min="0" step="1000"
+               placeholder="e.g. 100 000" oninput="render()" style="width:100%;">
+        <div id="nlv-converted" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px;display:none;"></div>
     </div>
 
     <!-- Radar chart -->
@@ -249,7 +247,7 @@ input[type="range"]::-moz-range-thumb {
         <div class="div" style="margin-top:0;"></div>
 
         <div class="radar-wrap">
-            <svg id="radar-svg" viewBox="0 0 380 310" xmlns="http://www.w3.org/2000/svg"></svg>
+            <svg id="radar-svg" viewBox="0 0 380 340" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:100%;"></svg>
             <div class="radar-legend">
                 <div class="radar-leg-item"><div class="radar-leg-dot" style="background:#4a9d6e;opacity:.5;height:8px;width:8px;border-radius:50%;"></div>Target zone</div>
                 <div class="radar-leg-item"><div class="radar-leg-dot" style="background:#e8753a;height:2px;width:12px;"></div>Your position</div>
@@ -403,9 +401,8 @@ input[type="range"]::-moz-range-thumb {
         var nlvConv = el('nlv-converted');
         if (curNLV === 'USD') {
             nlvConv.textContent = '≈ ' + fmt(nlvEUR) + ' EUR';
-            nlvConv.style.display = 'block';
         } else {
-            nlvConv.style.display = 'none';
+            nlvConv.textContent = '';
         }
 
         var cfg = MODES[currentMode];
@@ -424,7 +421,7 @@ input[type="range"]::-moz-range-thumb {
     // ── RADAR CHART ───────────────────────────────────────────────────────
     var AXES = ['Liquidity', 'VIX Buffer', 'Exposure Safety', 'Margin Safety'];
     var N = AXES.length;
-    var CX = 190, CY = 152, R = 100;
+    var CX = 210, CY = 178, R = 120;
 
     function axisPoint(i, r) {
         // Start from top, go clockwise
@@ -482,7 +479,7 @@ input[type="range"]::-moz-range-thumb {
 
         // Axis labels — split into two lines
         AXES.forEach(function(label, i) {
-            var p = axisPoint(i, R + 22);
+            var p = axisPoint(i, R + 26);
             var anchor = p.x < CX - 8 ? 'end' : p.x > CX + 8 ? 'start' : 'middle';
             var words = label.toUpperCase().split(' ');
             var line1 = words[0];
