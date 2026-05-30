@@ -1119,8 +1119,11 @@ function processIBKR(sections) {
     const qty = Math.abs(num(r[itQty]));
     const assignDate = parseTradeDate(r[itDate]);
     const sellTrades = (tradesBySym[sym]||[]).filter(t=>t.qty<0);
-    let premCollected = 0;
-    sellTrades.forEach(t => { premCollected += Math.abs(t.proceeds); });
+    // Sum total sell qty and total premium collected across all sell trades
+    let totalSellQty = 0, totalPremCollected = 0;
+    sellTrades.forEach(t => { totalSellQty += Math.abs(t.qty); totalPremCollected += Math.abs(t.proceeds); });
+    // Only attribute the proportion of premium that corresponds to the assigned contracts
+    const premCollected = totalSellQty > 0 ? (qty / totalSellQty) * totalPremCollected : 0;
     const perShare = qty > 0 ? premCollected/(qty*100) : 0;
     const effectiveCost = parsed.type==='P' ? parsed.strike-perShare : parsed.strike+perShare;
     assignedPositions.push({ sym, ticker:parsed.ticker, type:parsed.type, strike:parsed.strike,
@@ -2599,50 +2602,116 @@ function renderPortfolioPies(data) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// CANVAS DONUT PIE (for options premium breakdown)
+// PIE CHART (Chart.js doughnut)
 // ═══════════════════════════════════════════════════════════════════
-function buildSliceAngles(slices) {
-  const total=slices.reduce((s,sl)=>s+sl.value,0), gap=0.025; let angle=-Math.PI/2;
-  return slices.map(sl=>{ const sweep=(sl.value/total)*Math.PI*2-gap, start=angle+gap/2, end=start+sweep; angle+=sweep+gap; return{...sl,startAngle:start,endAngle:end,pct:(sl.value/total*100).toFixed(1)}; });
-}
-function drawDonut(ctx,size,slices,hoveredIdx) {
-  const cx=size/2,cy=size/2,outerR=72,innerR=40,dpr=window.devicePixelRatio||1;
-  ctx.clearRect(0,0,size*dpr,size*dpr);
-  slices.forEach((sl,i)=>{ const isHov=i===hoveredIdx,r=isHov?outerR+6:outerR; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,sl.startAngle,sl.endAngle); ctx.closePath(); ctx.fillStyle=isHov?sl.color:sl.color+'cc'; ctx.fill(); });
-  ctx.beginPath(); ctx.arc(cx,cy,innerR,0,Math.PI*2); ctx.fillStyle=getComputedStyle(document.body).getPropertyValue('--donut-hole').trim()||'#111419'; ctx.fill();
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  if (hoveredIdx!==null&&hoveredIdx!==undefined&&slices[hoveredIdx]) {
-    const sl=slices[hoveredIdx]; ctx.fillStyle=sl.color; ctx.font=`bold 13px 'Space Mono',monospace`; ctx.fillText(sl.ticker,cx,cy-9);
-    ctx.fillStyle=getComputedStyle(document.body).getPropertyValue('--text').trim()||'#e8ecf0'; ctx.font=`bold 11px 'Space Mono',monospace`; ctx.fillText(sl.pct+'%',cx,cy+8);
-  } else {
-    const tot=slices.reduce((s,sl)=>s+sl.rawVal,0);
-    ctx.fillStyle=getComputedStyle(document.body).getPropertyValue('--text').trim()||'#e8ecf0'; ctx.font=`bold 12px 'Space Mono',monospace`; ctx.fillText(fmtAbs(tot),cx,cy);
+const _pieChartInstances = {};
+function renderPieChart(containerId, tickerData, palette, isPositive) {
+  const container = document.getElementById(containerId);
+  if (!tickerData.length) { container.innerHTML = '<div class="pie-empty">No data</div>'; return; }
+
+  const labels  = tickerData.map(d => d[0]);
+  const values  = tickerData.map(d => Math.abs(d[1]));
+  const colors  = tickerData.map((d, i) => palette[i % palette.length]);
+  const total   = values.reduce((a, b) => a + b, 0);
+  const maxVal  = Math.max(...values);
+
+  // Destroy previous chart instance if exists
+  if (_pieChartInstances[containerId]) {
+    _pieChartInstances[containerId].destroy();
+    delete _pieChartInstances[containerId];
   }
-}
-function getHoveredSlice(mx,my,slices) {
-  const size=160,cx=size/2,cy=size/2,dx=mx-cx,dy=my-cy,dist=Math.sqrt(dx*dx+dy*dy);
-  if(dist<40||dist>78) return null; let angle=Math.atan2(dy,dx);
-  for(let i=0;i<slices.length;i++) { let{startAngle:s,endAngle:e}=slices[i],a=angle; if(s<-Math.PI)s+=Math.PI*2; if(e<-Math.PI)e+=Math.PI*2; if(a<s-0.01)a+=Math.PI*2; if(a>=s&&a<=e)return i; } return null;
-}
-function renderPieChart(containerId,tickerData,palette,isPositive) {
-  const container=document.getElementById(containerId);
-  const slices=tickerData.map((d,i)=>({ticker:d[0],rawVal:Math.abs(d[1]),value:Math.abs(d[1]),color:palette[i%palette.length]}));
-  if(!slices.length){container.innerHTML='<div class="pie-empty">No data</div>';return;}
-  const slicesWA=buildSliceAngles(slices), maxVal=Math.max(...slices.map(s=>s.value)), size=160, dpr=window.devicePixelRatio||1;
-  const canvas=document.createElement('canvas'); canvas.width=size*dpr; canvas.height=size*dpr; canvas.style.width=size+'px'; canvas.style.height=size+'px'; canvas.style.cursor='crosshair';
-  const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
-  const canvasSide=document.createElement('div'); canvasSide.className='pie-canvas-side';
-  const wrap=document.createElement('div'); wrap.className='pie-canvas-wrap'; wrap.appendChild(canvas); canvasSide.appendChild(wrap);
-  const legendSide=document.createElement('div'); legendSide.className='pie-legend-side';
-  const legend=document.createElement('div'); legend.className='pie-legend';
-  slicesWA.forEach((sl,i)=>{ const barPct=Math.round((sl.value/maxVal)*100); const row=document.createElement('div'); row.className='legend-row'; row.dataset.idx=i; row.innerHTML=`<div class="legend-left"><span class="legend-dot" style="background:${sl.color}"></span><span class="legend-ticker">${escHtml(sl.ticker)}</span></div><div class="legend-bar-wrap"><div class="legend-bar-fill" style="width:${barPct}%;background:${sl.color};opacity:0.6"></div></div><span class="legend-pct">${sl.pct}%</span><span class="legend-val" style="color:${isPositive?'var(--green)':'var(--red)'}">${isPositive?'+':'-'}$${sl.rawVal.toFixed(0)}</span>`; legend.appendChild(row); });
-  legendSide.appendChild(legend); container.innerHTML=''; container.appendChild(canvasSide); container.appendChild(legendSide);
-  let hoveredIdx=null;
-  function redraw(idx) { ctx.save(); ctx.setTransform(dpr,0,0,dpr,0,0); drawDonut(ctx,size,slicesWA,idx); ctx.restore(); legend.querySelectorAll('.legend-row').forEach((r,i)=>{r.style.opacity=(idx===null||i===idx)?'1':'0.3';r.style.background=i===idx?'rgba(255,255,255,0.04)':'';}); }
-  canvas.addEventListener('mousemove',e=>{const rect=canvas.getBoundingClientRect(),idx=getHoveredSlice(e.clientX-rect.left,e.clientY-rect.top,slicesWA);if(idx!==hoveredIdx){hoveredIdx=idx;redraw(idx);}});
-  canvas.addEventListener('mouseleave',()=>{hoveredIdx=null;redraw(null);});
-  legend.querySelectorAll('.legend-row').forEach((row,i)=>{row.addEventListener('mouseenter',()=>{hoveredIdx=i;redraw(i);});row.addEventListener('mouseleave',()=>{hoveredIdx=null;redraw(null);});});
-  canvas._redraw=()=>redraw(hoveredIdx); redraw(null);
+
+  // Build DOM
+  const canvasSide = document.createElement('div'); canvasSide.className = 'pie-canvas-side';
+  const wrap       = document.createElement('div'); wrap.className = 'pie-canvas-wrap';
+  const canvas     = document.createElement('canvas');
+  canvas.style.width = '160px'; canvas.style.height = '160px';
+  wrap.appendChild(canvas); canvasSide.appendChild(wrap);
+
+  const legendSide = document.createElement('div'); legendSide.className = 'pie-legend-side';
+  const legend     = document.createElement('div'); legend.className = 'pie-legend';
+
+  labels.forEach((lbl, i) => {
+    const barPct = Math.round((values[i] / maxVal) * 100);
+    const pct    = (values[i] / total * 100).toFixed(1);
+    const row    = document.createElement('div');
+    row.className = 'legend-row'; row.dataset.idx = i;
+    row.innerHTML = `<div class="legend-left"><span class="legend-dot" style="background:${colors[i]}"></span><span class="legend-ticker">${escHtml(lbl)}</span></div><div class="legend-bar-wrap"><div class="legend-bar-fill" style="width:${barPct}%;background:${colors[i]};opacity:0.6"></div></div><span class="legend-pct">${pct}%</span><span class="legend-val" style="color:${isPositive ? 'var(--green)' : 'var(--red)'}">${isPositive ? '+' : '-'}$${values[i].toFixed(0)}</span>`;
+    legend.appendChild(row);
+  });
+
+  legendSide.appendChild(legend);
+  container.innerHTML = '';
+  container.appendChild(canvasSide);
+  container.appendChild(legendSide);
+
+  const surfaceColor = getComputedStyle(document.body).getPropertyValue('--surface').trim() || '#111419';
+
+  const chart = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderColor: surfaceColor,
+        borderWidth: 2,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: false,
+      cutout: '52%',
+      animation: { duration: 400 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#111419',
+          borderColor: '#222831',
+          borderWidth: 1,
+          titleColor: '#5a6473',
+          bodyColor: '#e8ecf0',
+          padding: 10,
+          callbacks: {
+            label: ctx => {
+              const pct = (ctx.parsed / total * 100).toFixed(1);
+              return ` ${ctx.label}: ${isPositive ? '+' : '-'}$${ctx.parsed.toFixed(0)} (${pct}%)`;
+            }
+          }
+        }
+      }
+    },
+    plugins: [{
+      id: 'centerText',
+      afterDraw(chart) {
+        const { ctx, chartArea: { width, height, left, top } } = chart;
+        const cx = left + width / 2, cy = top + height / 2;
+        ctx.save();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text').trim() || '#e8ecf0';
+        ctx.font = "bold 12px 'Space Mono',monospace";
+        ctx.fillText(fmtAbs(total), cx, cy);
+        ctx.restore();
+      }
+    }]
+  });
+
+  _pieChartInstances[containerId] = chart;
+
+  // Sync legend hover with chart highlight
+  legend.querySelectorAll('.legend-row').forEach((row, i) => {
+    row.addEventListener('mouseenter', () => {
+      legend.querySelectorAll('.legend-row').forEach((r, j) => { r.style.opacity = j === i ? '1' : '0.3'; });
+      chart.setDatasetVisibility(0, true);
+      chart.tooltip.setActiveElements([{ datasetIndex: 0, index: i }], { x: 0, y: 0 });
+      chart.update('none');
+    });
+    row.addEventListener('mouseleave', () => {
+      legend.querySelectorAll('.legend-row').forEach(r => { r.style.opacity = '1'; });
+      chart.tooltip.setActiveElements([], {});
+      chart.update('none');
+    });
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
