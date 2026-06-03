@@ -487,7 +487,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.3</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.4</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -1045,7 +1045,7 @@ function processIBKR(sections) {
     optTradeMap[sym].netQty += num(r[itQty]);
     optTradeMap[sym]._trades.push({ d, qty: num(r[itQty]) });
   }
-  // For each symbol, compute peak net short position (negative qty = sold = short put)
+  // For each symbol, compute peak net short position AND time-segmented exposure intervals
   for (const sym of Object.keys(optTradeMap)) {
     const entry = optTradeMap[sym];
     const sorted = entry._trades.slice().sort((a,b) => (a.d||'') < (b.d||'') ? -1 : 1);
@@ -1057,6 +1057,35 @@ function processIBKR(sections) {
     }
     if (peakShort === 0) peakShort = Math.max(...sorted.map(t => Math.abs(t.qty)), 1);
     entry.maxQty = peakShort;
+
+    // Build segments: each is { openDate, closeDate, qty } where closeDate is EXCLUSIVE.
+    // This prevents double-counting when one lot closes and another opens on the same day.
+    const segments = [];
+    let runningQty = 0;
+    let segStart = null;
+    let segQty = 0;
+    for (const t of sorted) {
+      if (!t.d) continue;
+      const shortBefore = Math.abs(Math.min(runningQty, 0));
+      runningQty += t.qty;
+      const shortAfter = Math.abs(Math.min(runningQty, 0));
+      if (shortBefore > 0 && segStart !== null) {
+        // Close previous segment at this date (exclusive — position ended before this day)
+        segments.push({ openDate: segStart, closeDate: t.d, qty: shortBefore });
+      }
+      if (shortAfter > 0) {
+        segStart = t.d;
+        segQty = shortAfter;
+      } else {
+        segStart = null;
+        segQty = 0;
+      }
+    }
+    // Still short at end (open position)
+    if (runningQty < 0 && segStart) {
+      segments.push({ openDate: segStart, closeDate: null, qty: Math.abs(runningQty) });
+    }
+    entry.segments = segments;
     delete entry._trades;
   }
   // Pull the authoritative Realized P/L from SubTotal rows (col 13) into optTradeMap
@@ -2093,27 +2122,65 @@ function renderCharts(data) {
       openSymsInChart.add(p.sym);
     });
 
-    // Closed put options: reconstruct from optTradeMap + parseOptSym
-    // Skip any symbol already captured as open position (avoid double counting)
+    // Closed put options: use pre-computed segments from optTradeMap
+    // Each segment has { openDate, closeDate, qty } where closeDate is EXCLUSIVE.
+    // This correctly handles same-day close+open without double-counting.
     (data.optionsRU || []).filter(o => o.unrTotal === 0).forEach(o => {
       const sym = (o.sym || '').trim();
-      if (openSymsInChart.has(sym)) return; // already counted above
+      if (openSymsInChart.has(sym)) return;
       const parsed = parseOptSym(sym);
       if (!parsed || parsed.type !== 'P') return;
       const tradeInfo = data.optTradeMap && data.optTradeMap[sym];
-      if (!tradeInfo || !tradeInfo.firstDate || !parsed.expiry) return;
-      const openDate = new Date(tradeInfo.firstDate + 'T00:00:00');
-      const qty = tradeInfo.maxQty || 1;
-      const exposure = Math.abs(parsed.strike) * qty * 100;
-      if (exposure <= 0) return;
-      // For closed options: use lastDate as effective end (when it was bought back/expired)
-      // For still-open: use parsed.expiry
-      const isClosed = Math.abs(tradeInfo.netQty || 0) < 0.01;
-      const effectiveEnd = (isClosed && tradeInfo.lastDate)
-        ? new Date(tradeInfo.lastDate + 'T00:00:00')
-        : parsed.expiry;
-      allPuts.push({ sym, openDate, expiry: effectiveEnd, exposure, qty, strike: parsed.strike });
+      if (!tradeInfo) return;
+
+      const segs = tradeInfo.segments || [];
+      segs.forEach(seg => {
+        if (!seg.openDate) return;
+        const exposure = Math.abs(parsed.strike) * seg.qty * 100;
+        if (exposure <= 0) return;
+        const openDate = new Date(seg.openDate + 'T00:00:00');
+        let expiry;
+        if (seg.closeDate) {
+          // closeDate is exclusive: position was open up to but NOT including closeDate
+          // Subtract 1 day so the closing day is not counted
+          const cd = new Date(seg.closeDate + 'T00:00:00');
+          expiry = new Date(cd.getTime() - 86400000);
+        } else {
+          expiry = parsed.expiry;
+        }
+        if (!expiry || expiry < openDate) return;
+        allPuts.push({ sym, openDate, expiry, exposure, qty: seg.qty, strike: parsed.strike });
+      });
+
+      // Fallback: no segments (e.g. only SubTotal rows, no trade rows)
+      if (segs.length === 0 && tradeInfo.firstDate && parsed.expiry) {
+        const isClosed = Math.abs(tradeInfo.netQty || 0) < 0.01;
+        const qty = tradeInfo.maxQty || 1;
+        const exposure = Math.abs(parsed.strike) * qty * 100;
+        if (exposure <= 0) return;
+        const openDate = new Date(tradeInfo.firstDate + 'T00:00:00');
+        let expiry;
+        if (isClosed && tradeInfo.lastDate) {
+          const lastD = new Date(tradeInfo.lastDate + 'T00:00:00');
+          expiry = new Date(lastD.getTime() - 86400000);
+        } else {
+          expiry = parsed.expiry;
+        }
+        if (expiry >= openDate) {
+          allPuts.push({ sym, openDate, expiry, exposure, qty, strike: parsed.strike });
+        }
+      }
     });
+
+    // Remove zero-duration entries (openDate >= expiry) — these are options opened
+    // and closed on the same day and should not contribute to any day's exposure.
+    // Also remove any closed-position entries that somehow ended up in the future
+    // (data artifacts from maxQty reconstruction).
+    const today0 = new Date(); today0.setHours(0,0,0,0);
+    allPuts.forEach(p => { if (p.openDate) { p.openDate.setHours(0,0,0,0); } if (p.expiry) { p.expiry.setHours(0,0,0,0); } });
+    const allPutsFiltered = allPuts.filter(p => p.openDate && p.expiry && p.expiry > p.openDate);
+    allPuts.length = 0;
+    allPutsFiltered.forEach(p => allPuts.push(p));
 
     if (!allPuts.length) {
       expCanvas.style.display = 'none';
@@ -2153,12 +2220,32 @@ function renderCharts(data) {
     const exposureData = months.map(m => {
       const monthStart = m;
       const monthEnd   = new Date(m.getFullYear(), m.getMonth() + 1, 0);
+      const isFutureMonth = monthStart > todayMonth;
+
+      // For future months: only count currently-open positions (those open today)
+      // that will still be active during that month (expiry >= monthStart).
+      // This prevents closed positions or maxQty artifacts from inflating future bars,
+      // and ensures future bars can never exceed current exposure.
+      if (isFutureMonth) {
+        let fut = 0;
+        allPuts.forEach(p => {
+          if (p.openDate <= today && p.expiry >= today && p.expiry >= monthStart) {
+            fut += p.exposure;
+          }
+        });
+        return +fut.toFixed(0);
+      }
+
+      // Past / current month: find peak simultaneous exposure on any event day
+      // For the current month: only count up to today (not future event dates in this month)
+      const isCurrentMonth = monthStart.getTime() === todayMonth.getTime();
+      const monthCap = isCurrentMonth ? today : monthEnd;
       const eventDates = new Set();
       eventDates.add(monthStart.getTime());
-      eventDates.add(monthEnd.getTime());
+      eventDates.add(monthCap.getTime());
       allPuts.forEach(p => {
-        if (p.openDate >= monthStart && p.openDate <= monthEnd) eventDates.add(p.openDate.getTime());
-        if (p.expiry  >= monthStart && p.expiry  <= monthEnd) eventDates.add(p.expiry.getTime());
+        if (p.openDate >= monthStart && p.openDate <= monthCap) eventDates.add(p.openDate.getTime());
+        if (p.expiry  >= monthStart && p.expiry  <= monthCap)   eventDates.add(p.expiry.getTime());
       });
       let peak = 0;
       eventDates.forEach(ts => {
@@ -2255,9 +2342,12 @@ function renderCharts(data) {
     };
 
     // Point colour by ratio
-    const pointColors = exposureData.map(v => {
+    const pointColors = exposureData.map((v, i) => {
+      const monthDate = months[i];
+      const isFuture = monthDate > todayMonth;
+      // Future months: colour based on actual value but never redder than current exposure colour
       const r = v / navUSD;
-      if (r >= 3) return '#ef4444';
+      if (r >= 3) return isFuture ? '#f97316' : '#ef4444'; // cap future at orange
       if (r >= 2) return '#f97316';
       if (r >= 1) return '#eab308';
       return '#22c55e';
