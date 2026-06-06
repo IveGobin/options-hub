@@ -182,6 +182,28 @@ input[type="range"]::-moz-range-thumb {
 .cur-btn.active { background: var(--accent); color: #fff; }
 
 .empty-state { text-align: center; padding: 28px 0; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+
+/* Axis legend table */
+.ax-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    gap: 0 10px;
+    align-items: center;
+    padding: 7px 10px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+}
+.ax-row:last-child { margin-bottom: 0; }
+.ax-name { font-family: var(--mono); font-size: 9px; letter-spacing:.08em; text-transform:uppercase; color: var(--muted); }
+.ax-val  { font-family: var(--mono); font-size: 12px; font-weight: 700; text-align:right; min-width: 52px; }
+.ax-opt  { font-family: var(--mono); font-size: 9px; color: var(--muted); text-align:right; min-width: 52px; }
+.ax-bar-wrap { grid-column: 1 / -1; height: 4px; background: var(--border); border-radius: 2px; margin-top: 3px; position:relative; overflow:visible; }
+.ax-bar-fill { height: 100%; border-radius: 2px; transition: width .4s; }
+.ax-bar-tgt  { position:absolute; top:-2px; width:2px; height:8px; border-radius:1px; background: rgba(58,173,114,0.7); }
+.ax-zones    { grid-column: 1 / -1; display:flex; gap:4px; margin-top:4px; flex-wrap:wrap; }
+.ax-zone-pill { font-family:var(--mono); font-size:8px; padding: 1px 6px; border-radius:10px; white-space:nowrap; }
 </style>
 </head>
 <body data-theme="dark">
@@ -259,14 +281,18 @@ input[type="range"]::-moz-range-thumb {
         <div class="div" style="margin-top:0;"></div>
 
         <div class="radar-wrap">
-            <svg id="radar-svg" viewBox="0 0 380 340" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:100%;"></svg>
+            <svg id="radar-svg" viewBox="0 0 390 390" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:100%;"></svg>
             <div class="radar-legend">
                 <div class="radar-leg-item"><div class="radar-leg-dot" style="background:#4a9d6e;opacity:.5;height:8px;width:8px;border-radius:50%;"></div>Target zone</div>
                 <div class="radar-leg-item"><div class="radar-leg-dot" style="background:#e8753a;height:2px;width:12px;"></div>Your position</div>
             </div>
         </div>
 
-        <!-- Position sliders -->
+        <!-- Axis legend table -->
+        <div id="axis-legend" style="margin-top:14px;">
+            <div style="font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Axis breakdown</div>
+            <div id="axis-rows"></div>
+        </div>
         <div class="sliders-wrap">
             <div class="slider-field">
                 <div class="slider-header">
@@ -332,6 +358,10 @@ input[type="range"]::-moz-range-thumb {
     var curNLV = 'EUR';
     var curExc = 'EUR';
     var curNot = 'USD';
+
+    // Concentration data parsed from IBKR CSV
+    var gTickerConc = 0;  // 0..1, fraction of notional in biggest single ticker
+    var gDateConc   = 0;  // 0..1, fraction of notional expiring on busiest single date
 
     function getFX() { return parseFloat(el('fx-rate').value) || 1.08; }
 
@@ -431,18 +461,16 @@ input[type="range"]::-moz-range-thumb {
     }
 
     // ── RADAR CHART ───────────────────────────────────────────────────────
-    var AXES = ['Liquidity', 'VIX Buffer', 'Exposure Safety', 'Margin Safety'];
+    var AXES = ['Liquidity', 'VIX Buffer', 'Exposure Safety', 'Margin Safety', 'Ticker Conc.', 'Date Conc.'];
     var N = AXES.length;
-    var CX = 210, CY = 178, R = 120;
+    var CX = 195, CY = 190, R = 128;
 
     function axisPoint(i, r) {
-        // Start from top, go clockwise
         var angle = (Math.PI * 2 * i / N) - Math.PI / 2;
         return { x: CX + r * Math.cos(angle), y: CY + r * Math.sin(angle) };
     }
 
     function polyPoints(values) {
-        // values: array of 0..1 per axis
         return values.map(function(v, i) {
             var p = axisPoint(i, v * R);
             return p.x.toFixed(1) + ',' + p.y.toFixed(1);
@@ -451,63 +479,87 @@ input[type="range"]::-moz-range-thumb {
 
     function drawRadar(scores, targetScores, zone) {
         var isDark = document.body.getAttribute('data-theme') !== 'light';
-        var gridColor   = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)';
-        var axisColor   = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)';
-        var labelColor  = isDark ? '#b0a898' : '#5a5650';
-        var zoneColor   = zone === 'safe' ? '#3aad72' : zone === 'warn' ? '#e8a03a' : '#e86060';
-        var zoneAlpha   = zone === 'safe' ? '0.18' : zone === 'warn' ? '0.15' : '0.12';
+        var axisColor  = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)';
+        var labelColor = isDark ? '#c8c0b4' : '#5a5650';
+        var zoneColor  = zone === 'safe' ? '#3aad72' : zone === 'warn' ? '#e8a03a' : '#e86060';
+        var zoneAlpha  = zone === 'safe' ? '0.20' : zone === 'warn' ? '0.18' : '0.14';
+        var bgColor    = isDark ? '#16221a' : '#e8f2ec';
 
         var svg = '';
 
-        // Grid rings (5 levels)
-        [0.2, 0.4, 0.6, 0.8, 1.0].forEach(function(lvl) {
-            var pts = [0,1,2,3].map(function(i) {
-                var p = axisPoint(i, lvl * R);
-                return p.x.toFixed(1) + ',' + p.y.toFixed(1);
-            }).join(' ');
-            svg += '<polygon points="' + pts + '" fill="none" stroke="' + gridColor + '" stroke-width="1"/>';
+        // ── Dark circle background ────────────────────────────────────────
+        svg += '<circle cx="'+CX+'" cy="'+CY+'" r="'+R+'" fill="'+bgColor+'" opacity="0.55"/>';
+
+        // ── Circular grid rings ───────────────────────────────────────────
+        var rings = [
+            { r: 0.2, color: 'rgba(255,255,255,0.07)', w: '0.8' },
+            { r: 0.4, color: 'rgba(232,96,96,0.35)',   w: '1.2', dash: '4,3' },
+            { r: 0.6, color: 'rgba(255,255,255,0.07)', w: '0.8' },
+            { r: 0.7, color: 'rgba(232,160,58,0.35)',  w: '1.2', dash: '4,3' },
+            { r: 0.8, color: 'rgba(255,255,255,0.07)', w: '0.8' },
+            { r: 1.0, color: 'rgba(58,173,114,0.30)',  w: '1.2' },
+        ];
+        rings.forEach(function(ring) {
+            var attr = ' cx="'+CX+'" cy="'+CY+'" r="'+(ring.r*R).toFixed(1)+'" fill="none" stroke="'+ring.color+'" stroke-width="'+ring.w+'"';
+            if (ring.dash) attr += ' stroke-dasharray="'+ring.dash+'"';
+            svg += '<circle'+attr+'/>';
         });
 
-        // Axis lines
+        // ── % labels on rings (upper-right between top and right axis) ────
+        [
+            { r: 0.4, label: '40%', color: '#e86060' },
+            { r: 0.7, label: '70%', color: '#e8a03a' },
+            { r: 1.0, label: '100%', color: '#3aad72' },
+        ].forEach(function(m) {
+            // Place label at 45° angle (between top and right axes) outside the ring
+            var angle = -Math.PI / 2 + Math.PI * 2 / N * 0.5; // halfway between axis 0 and 1
+            var px = CX + m.r * R * Math.cos(angle);
+            var py = CY + m.r * R * Math.sin(angle);
+            svg += '<text x="'+(px+4).toFixed(1)+'" y="'+(py+4).toFixed(1)+'" font-family="Space Mono,monospace" font-size="8" fill="'+m.color+'" font-weight="700" opacity="0.85">'+m.label+'</text>';
+        });
+
+        // ── Axis lines ───────────────────────────────────────────────────
         for (var i = 0; i < N; i++) {
-            var p = axisPoint(i, R);
-            svg += '<line x1="' + CX + '" y1="' + CY + '" x2="' + p.x.toFixed(1) + '" y2="' + p.y.toFixed(1) + '" stroke="' + axisColor + '" stroke-width="1"/>';
+            var tip = axisPoint(i, R);
+            svg += '<line x1="'+CX+'" y1="'+CY+'" x2="'+tip.x.toFixed(1)+'" y2="'+tip.y.toFixed(1)+'" stroke="'+axisColor+'" stroke-width="1"/>';
         }
 
-        // Target polygon (green fill)
-        svg += '<polygon points="' + polyPoints(targetScores) + '" fill="rgba(58,173,114,0.15)" stroke="rgba(58,173,114,0.45)" stroke-width="1.5" stroke-dasharray="4,3"/>';
+        // ── Target polygon ───────────────────────────────────────────────
+        svg += '<polygon points="'+polyPoints(targetScores)+'" fill="rgba(58,173,114,0.08)" stroke="rgba(58,173,114,0.45)" stroke-width="1.5" stroke-dasharray="5,3"/>';
 
-        // Your position polygon
-        svg += '<polygon points="' + polyPoints(scores) + '" fill="' + zoneColor.replace('#', 'rgba(').replace('3aad72', '58,173,114,') + zoneAlpha + ')" fill="rgba(232,117,58,' + zoneAlpha + ')" stroke="' + zoneColor + '" stroke-width="2"/>';
-        // Redo with correct fill
-        svg = svg.replace(/fill="rgba\(232,117,58,[^"]+\)" fill="rgba\(232,117,58,[^"]+\)"/,
-            'fill="' + (zone === 'safe' ? 'rgba(58,173,114,' + zoneAlpha + ')' : zone === 'warn' ? 'rgba(232,160,58,' + zoneAlpha + ')' : 'rgba(232,96,96,' + zoneAlpha + ')') + '"');
+        // ── Your position polygon ────────────────────────────────────────
+        var fillRgb = zone==='safe' ? '58,173,114' : zone==='warn' ? '232,160,58' : '232,96,96';
+        svg += '<polygon points="'+polyPoints(scores)+'" fill="rgba('+fillRgb+','+zoneAlpha+')" stroke="'+zoneColor+'" stroke-width="2.5" stroke-linejoin="round"/>';
 
-        // Dots on your position
+        // ── Dots ─────────────────────────────────────────────────────────
         scores.forEach(function(v, i) {
-            var p = axisPoint(i, v * R);
-            svg += '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="4" fill="' + zoneColor + '" stroke="none"/>';
+            var p = axisPoint(i, v*R);
+            svg += '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="5" fill="'+zoneColor+'" stroke="'+bgColor+'" stroke-width="2"/>';
         });
 
-        // Axis labels — split into two lines
+        // ── Axis labels ──────────────────────────────────────────────────
         AXES.forEach(function(label, i) {
             var p = axisPoint(i, R + 26);
-            var anchor = p.x < CX - 8 ? 'end' : p.x > CX + 8 ? 'start' : 'middle';
+            // For 6 axes: 0=top, 1=upper-right, 2=lower-right, 3=bottom, 4=lower-left, 5=upper-left
+            var anchor = (i === 0 || i === 3) ? 'middle' : (i === 1 || i === 2) ? 'start' : 'end';
             var words = label.toUpperCase().split(' ');
-            var line1 = words[0];
-            var line2 = words.slice(1).join(' ');
+            var line1 = words[0], line2 = words.slice(1).join(' ');
             var dy1 = line2 ? '-5' : '4';
-            svg += '<text x="' + p.x.toFixed(1) + '" y="' + p.y.toFixed(1) + '" text-anchor="' + anchor + '" font-family="Space Mono,monospace" font-size="9.5" fill="' + labelColor + '" letter-spacing="0.07em">'
-                + '<tspan x="' + p.x.toFixed(1) + '" dy="' + dy1 + '">' + line1 + '</tspan>'
-                + (line2 ? '<tspan x="' + p.x.toFixed(1) + '" dy="13">' + line2 + '</tspan>' : '')
-                + '</text>';
+            svg += '<text x="'+p.x.toFixed(1)+'" y="'+p.y.toFixed(1)+'" text-anchor="'+anchor+'" font-family="Space Mono,monospace" font-size="10" font-weight="700" fill="'+labelColor+'" letter-spacing="0.06em">'
+                +'<tspan x="'+p.x.toFixed(1)+'" dy="'+dy1+'">'+line1+'</tspan>'
+                +(line2 ? '<tspan x="'+p.x.toFixed(1)+'" dy="14">'+line2+'</tspan>' : '')
+                +'</text>';
         });
 
-        // Score labels on dots
+        // ── Score pill near each dot ──────────────────────────────────────
         scores.forEach(function(v, i) {
-            var p = axisPoint(i, v * R - 14);
-            var pct = Math.round(v * 100);
-            svg += '<text x="' + p.x.toFixed(1) + '" y="' + (p.y + 4).toFixed(1) + '" text-anchor="middle" font-family="Space Mono,monospace" font-size="8" fill="' + zoneColor + '" font-weight="700">' + pct + '</text>';
+            // Offset label away from center
+            var offset = v > 0.12 ? -18 : 18;
+            var p = axisPoint(i, v*R + offset);
+            var pct = Math.round(v*100)+'%';
+            var sc = v>=0.7 ? '58,173,114' : v>=0.4 ? '232,160,58' : '232,96,96';
+            svg += '<rect x="'+(p.x-13).toFixed(1)+'" y="'+(p.y-7).toFixed(1)+'" width="26" height="14" rx="4" fill="rgba('+sc+',0.22)"/>';
+            svg += '<text x="'+p.x.toFixed(1)+'" y="'+(p.y+4.5).toFixed(1)+'" text-anchor="middle" font-family="Space Mono,monospace" font-size="9.5" fill="rgb('+sc+')" font-weight="700">'+pct+'</text>';
         });
 
         el('radar-svg').innerHTML = svg;
@@ -567,14 +619,24 @@ input[type="range"]::-moz-range-thumb {
         var marginUsed = notional * MARGIN;
         var marginScore = marginUsed <= 0 ? 1 : Math.min(1, excess / (marginUsed + stopExcess));
 
-        var scores = [liqScore, vixScore, expScore, marginScore];
+        // 5. TICKER CONCENTRATION: gTickerConc=0 means all in one ticker (bad), 1=diversified
+        //    Score: 1 if ≤20% in one ticker, 0 if 100% in one ticker
+        var tickerScore = Math.max(0, 1 - (gTickerConc / 0.6));
+
+        // 6. DATE CONCENTRATION: gDateConc=0 means spread out, 1=all same date
+        //    Score: 1 if ≤25% on one date, 0 if 100% on one date
+        var dateScore = Math.max(0, 1 - (gDateConc / 0.7));
+
+        var scores = [liqScore, vixScore, expScore, marginScore, tickerScore, dateScore];
 
         // Target scores (what "ideal" looks like given current mode/VIX)
         var targetScores = [
-            1.0,                             // full liquidity
-            vixScore,                        // same VIX (not controllable)
-            greenNotional > 0 ? Math.max(0, 1 - (greenNotional * 0.5 / orangeNotional)) : 1, // middle of green zone
-            1.0                              // full margin safety
+            1.0,
+            vixScore,
+            greenNotional > 0 ? Math.max(0, 1 - (greenNotional * 0.5 / orangeNotional)) : 1,
+            1.0,
+            0.67,  // target: no ticker > 40% (score=0.33 maps to ~40%)
+            0.64,  // target: no date  > 35%
         ];
 
         // Zone logic (same as before)
@@ -590,6 +652,15 @@ input[type="range"]::-moz-range-thumb {
 
         // Draw radar
         drawRadar(scores, targetScores, zone);
+
+        // Render axis legend table
+        renderAxisLegend({
+            nlv: nlv, excess: excess, notional: notional, vix: vix,
+            stopExcess: stopExcess, targetExcess: targetExcess,
+            greenNotional: greenNotional, orangeNotional: orangeNotional,
+            marginUsed: marginUsed,
+            scores: scores, targetScores: targetScores
+        });
 
         // Status message
         var status   = el('you-status');
@@ -623,6 +694,112 @@ input[type="range"]::-moz-range-thumb {
                 sub.textContent = 'Little room to add more at current levels';
             }
         }
+    }
+
+    // ── AXIS LEGEND TABLE ─────────────────────────────────────────────────
+    function renderAxisLegend(d) {
+        var fmtE = function(v) { return fmt(v) + ' EUR'; };
+        var fmtP = function(v) { return Math.round(v*100) + '%'; };
+
+        var axes = [
+            {
+                name: 'Liquidity (Excess)',
+                score: d.scores[0],
+                tgtScore: d.targetScores[0],
+                value: fmtE(d.excess),
+                optimal: '≥ ' + fmtE(d.targetExcess),
+                zones: [
+                    { label: '🔴 Danger: < ' + fmtE(d.stopExcess),   color: '#e86060' },
+                    { label: '🟡 Warn: ' + fmtE(d.stopExcess) + ' – ' + fmtE(d.targetExcess), color: '#e8a03a' },
+                    { label: '🟢 Green: ≥ ' + fmtE(d.targetExcess),  color: '#3aad72' },
+                ]
+            },
+            {
+                name: 'VIX Buffer',
+                score: d.scores[1],
+                tgtScore: d.targetScores[1],
+                value: 'VIX ' + d.vix.toFixed(1),
+                optimal: 'VIX < 20',
+                zones: [
+                    { label: '🔴 Danger: VIX ≥ 30',  color: '#e86060' },
+                    { label: '🟡 Warn: VIX 20–30',    color: '#e8a03a' },
+                    { label: '🟢 Green: VIX < 20',    color: '#3aad72' },
+                ]
+            },
+            {
+                name: 'Exposure Safety',
+                score: d.scores[2],
+                tgtScore: d.targetScores[2],
+                value: fmtE(d.notional),
+                optimal: '≤ ' + fmtE(d.greenNotional),
+                zones: [
+                    { label: '🔴 Danger: > ' + fmtE(d.orangeNotional), color: '#e86060' },
+                    { label: '🟡 Warn: ' + fmtE(d.greenNotional) + ' – ' + fmtE(d.orangeNotional), color: '#e8a03a' },
+                    { label: '🟢 Green: ≤ ' + fmtE(d.greenNotional),   color: '#3aad72' },
+                ]
+            },
+            {
+                name: 'Margin Safety',
+                score: d.scores[3],
+                tgtScore: d.targetScores[3],
+                value: fmtE(d.excess),
+                optimal: '> ' + fmtE(d.marginUsed + d.stopExcess),
+                zones: [
+                    { label: '🔴 Danger: Excess < Margin used + Hard stop', color: '#e86060' },
+                    { label: '🟢 Green: Excess covers margin + stop floor',  color: '#3aad72' },
+                ]
+            },
+            {
+                name: 'Ticker Conc.',
+                score: d.scores[4],
+                tgtScore: d.targetScores[4],
+                value: fmtP(gTickerConc) + ' in top ticker',
+                optimal: '< 40% in any ticker',
+                zones: [
+                    { label: '🔴 Danger: > 60% one ticker', color: '#e86060' },
+                    { label: '🟡 Warn: 40–60% one ticker',  color: '#e8a03a' },
+                    { label: '🟢 Green: < 40% one ticker',  color: '#3aad72' },
+                ]
+            },
+            {
+                name: 'Date Conc.',
+                score: d.scores[5],
+                tgtScore: d.targetScores[5],
+                value: fmtP(gDateConc) + ' one expiry',
+                optimal: '< 35% on any date',
+                zones: [
+                    { label: '🔴 Danger: > 70% one date', color: '#e86060' },
+                    { label: '🟡 Warn: 35–70% one date',  color: '#e8a03a' },
+                    { label: '🟢 Green: < 35% one date',  color: '#3aad72' },
+                ]
+            },
+        ];
+
+        var html = '';
+        axes.forEach(function(ax) {
+            var sc = ax.score;
+            var barColor = sc >= 0.7 ? '#3aad72' : sc >= 0.4 ? '#e8a03a' : '#e86060';
+            var valColor = sc >= 0.7 ? '#3aad72' : sc >= 0.4 ? '#e8a03a' : '#e86060';
+            var tgtPct   = Math.round(ax.tgtScore * 100);
+            var fillPct  = Math.round(sc * 100);
+
+            html += '<div class="ax-row">';
+            html +=   '<span class="ax-name">' + ax.name + '</span>';
+            html +=   '<span class="ax-val" style="color:' + valColor + '">' + ax.value + '</span>';
+            html +=   '<span class="ax-opt" style="color:var(--muted)">target: ' + ax.optimal + '</span>';
+            html +=   '<div class="ax-bar-wrap" style="grid-column:1/-1">';
+            html +=     '<div class="ax-bar-fill" style="width:' + fillPct + '%;background:' + barColor + '"></div>';
+            html +=     '<div class="ax-bar-tgt" style="left:' + tgtPct + '%"></div>';
+            html +=   '</div>';
+            html +=   '<div class="ax-zones">';
+            ax.zones.forEach(function(z) {
+                html += '<span class="ax-zone-pill" style="background:' + z.color + '18;color:' + z.color + '">' + z.label + '</span>';
+            });
+            html +=   '</div>';
+            html += '</div>';
+        });
+
+        el('axis-rows').innerHTML = html;
     }
 
     // ── IBKR CSV IMPORT ───────────────────────────────────────────────────
@@ -681,25 +858,42 @@ input[type="range"]::-moz-range-thumb {
         });
 
         // 3. OPEN SHORT PUTS — notional = |quantity| * multiplier * strike (USD)
-        //    "Open Positions,Data,Summary,Equity and Index Options,USD,SYMBOL P,-qty,mult,..."
+        //    Also track per-ticker and per-date notional for concentration scores
         var notionalUSD = 0;
+        var tickerMap = {};  // ticker -> notional
+        var dateMap   = {};  // expDate -> notional
         lines.forEach(function(line) {
             if (!line.startsWith('Open Positions,Data,Summary,Equity and Index Options')) return;
             var cols = splitCSV(line);
-            // cols: [0]section [1]Data [2]Summary [3]asset [4]currency [5]symbol [6]qty [7]mult
             var symbol = cols[5] || '';
             var qty    = parseFloat(cols[6]);
             var mult   = parseFloat(cols[7]);
             // Short put: qty < 0 and symbol ends with ' P'
             if (qty < 0 && symbol.trim().endsWith(' P')) {
-                // Extract strike from symbol — last token before ' P'
-                var parts = symbol.trim().split(' ');
-                var strike = parseFloat(parts[parts.length - 2]);
+                var parts  = symbol.trim().split(' ');
+                // Format: TICKER DDMMMYY STRIKE P
+                var ticker  = parts[0];
+                var expDate = parts[1] || 'unknown';
+                var strike  = parseFloat(parts[parts.length - 2]);
                 if (!isNaN(strike) && !isNaN(mult)) {
-                    notionalUSD += Math.abs(qty) * mult * strike;
+                    var n = Math.abs(qty) * mult * strike;
+                    notionalUSD += n;
+                    tickerMap[ticker] = (tickerMap[ticker] || 0) + n;
+                    dateMap[expDate]  = (dateMap[expDate]  || 0) + n;
                 }
             }
         });
+
+        // Compute concentration fractions (0=all in one, approaching 1=diversified)
+        if (notionalUSD > 0) {
+            var maxTicker = Math.max.apply(null, Object.keys(tickerMap).map(function(k){ return tickerMap[k]; }));
+            var maxDate   = Math.max.apply(null, Object.keys(dateMap).map(function(k){ return dateMap[k]; }));
+            gTickerConc = maxTicker / notionalUSD;  // fraction in biggest ticker
+            gDateConc   = maxDate   / notionalUSD;  // fraction on busiest expiry
+        } else {
+            gTickerConc = 0;
+            gDateConc   = 0;
+        }
 
         // Apply what we found
         var messages = [];
@@ -712,7 +906,6 @@ input[type="range"]::-moz-range-thumb {
         }
 
         if (cashEUR !== null) {
-            // Set excess slider — cash is a reasonable proxy (not perfect but useful)
             el('exc-slider').max = Math.max(el('exc-slider').max, Math.round(nlvEUR || cashEUR));
             el('exc-slider').value = Math.max(0, Math.round(cashEUR));
             setCur('exc', 'EUR');
@@ -724,7 +917,12 @@ input[type="range"]::-moz-range-thumb {
             el('not-slider').max = Math.max(el('not-slider').max, Math.round(notionalUSD * 1.5));
             el('not-slider').value = Math.round(notionalUSD);
             setCur('not', 'USD');
+            // Find biggest ticker and date for display
+            var bigTicker = Object.keys(tickerMap).reduce(function(a,b){ return tickerMap[a]>tickerMap[b]?a:b; });
+            var bigDate   = Object.keys(dateMap).reduce(function(a,b){ return dateMap[a]>dateMap[b]?a:b; });
             messages.push('Put notional: ' + fmt(notionalUSD) + ' USD');
+            messages.push('Top ticker: ' + bigTicker + ' ' + Math.round(gTickerConc*100) + '%');
+            messages.push('Top expiry: ' + bigDate + ' ' + Math.round(gDateConc*100) + '%');
         }
 
         if (messages.length === 0) {
