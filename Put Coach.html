@@ -204,6 +204,26 @@ input[type="range"]::-moz-range-thumb {
 .ax-bar-tgt  { position:absolute; top:-2px; width:2px; height:8px; border-radius:1px; background: rgba(58,173,114,0.7); }
 .ax-zones    { grid-column: 1 / -1; display:flex; gap:4px; margin-top:4px; flex-wrap:wrap; }
 .ax-zone-pill { font-family:var(--mono); font-size:8px; padding: 1px 6px; border-radius:10px; white-space:nowrap; }
+
+/* Sell section */
+.sell-card { background:var(--surface2); border:0.5px solid var(--border); border-radius:10px; padding:14px; margin-bottom:8px; }
+.sell-headline { font-family:var(--mono); font-size:20px; font-weight:700; margin-bottom:3px; }
+.sell-sub { font-family:var(--mono); font-size:10px; color:var(--muted); line-height:1.6; }
+.sell-constraint { font-family:var(--mono); font-size:8px; letter-spacing:.08em; text-transform:uppercase; color:#e8a03a; margin-top:8px; }
+.sell-rule { display:flex; align-items:flex-start; gap:10px; padding:9px 0; border-top:0.5px solid var(--border); }
+.sell-rule:first-child { border-top:none; padding-top:0; }
+.sell-rule-icon { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:12px; }
+.sell-rule-text { font-family:var(--mono); font-size:10px; color:var(--text); line-height:1.5; }
+.sell-rule-text .sell-rule-sub { color:var(--muted); font-size:9px; display:block; margin-top:1px; }
+.sell-tag { display:inline-block; font-family:var(--mono); font-size:9px; padding:2px 7px; border-radius:10px; margin:3px 3px 0 0; }
+.sell-tag-r { background:rgba(232,96,96,0.12); color:#e86060; }
+.sell-tag-o { background:rgba(232,160,58,0.12); color:#e8a03a; }
+.sell-tag-g { background:rgba(58,173,114,0.12); color:#3aad72; }
+.sell-meter-row { display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+.sell-meter-label { font-family:var(--mono); font-size:9px; color:var(--muted); width:80px; flex-shrink:0; }
+.sell-meter-bar { flex:1; height:5px; background:var(--border); border-radius:3px; overflow:hidden; }
+.sell-meter-fill { height:100%; border-radius:3px; }
+.sell-meter-val { font-family:var(--mono); font-size:9px; font-weight:700; width:32px; text-align:right; }
 </style>
 </head>
 <body data-theme="dark">
@@ -334,6 +354,17 @@ input[type="range"]::-moz-range-thumb {
                 <div class="you-sub" id="you-sub">to see where you stand</div>
             </div>
         </div>
+
+        <!-- What can I sell -->
+        <div id="sell-section" style="margin-top:14px;display:none;">
+            <button id="sell-toggle" onclick="toggleSell()" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:10px;border:0.5px solid var(--border);background:var(--surface2);cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;">
+                <span>What can I sell today?</span>
+                <span id="sell-arrow" style="font-size:14px;transition:transform .2s;">▸</span>
+            </button>
+            <div id="sell-body" style="display:none;margin-top:8px;">
+                <div id="sell-content"></div>
+            </div>
+        </div>
     </div>
 
     <div id="empty-state" class="empty-state">Enter your net liq value above</div>
@@ -362,8 +393,11 @@ input[type="range"]::-moz-range-thumb {
     var curNot = 'USD';
 
     // Concentration data parsed from IBKR CSV
-    var gTickerConc = 0;  // 0..1, fraction of notional in biggest single ticker
-    var gDateConc   = 0;  // 0..1, fraction of notional expiring on busiest single date
+    var gTickerConc = 0;
+    var gDateConc   = 0;
+    var gTickerMap  = {};
+    var gDateMap    = {};
+    var gNotionalUSD = 0;
 
     function getFX() { return parseFloat(el('fx-rate').value) || 1.08; }
 
@@ -705,6 +739,14 @@ input[type="range"]::-moz-range-thumb {
             scores: scores, targetScores: targetScores
         });
 
+        // Render what can I sell
+        renderSell({
+            nlv: nlv, excess: excess, notional: notional,
+            stopExcess: stopExcess, targetExcess: targetExcess,
+            greenNotional: greenNotional, orangeNotional: orangeNotional,
+            marginUsed: marginUsed, scores: scores
+        });
+
         // Status message
         var status   = el('you-status');
         var headline = el('you-headline');
@@ -854,6 +896,129 @@ input[type="range"]::-moz-range-thumb {
         el('axis-rows').innerHTML = html;
     }
 
+    // ── WHAT CAN I SELL ───────────────────────────────────────────────────
+    function toggleSell() {
+        var body  = el('sell-body');
+        var arrow = el('sell-arrow');
+        var open  = body.style.display === 'block';
+        body.style.display  = open ? 'none' : 'block';
+        arrow.textContent   = open ? '▸' : '▾';
+    }
+
+    function renderSell(d) {
+        el('sell-section').style.display = 'block';
+
+        var nlv            = d.nlv;
+        var excess         = d.excess;
+        var notional       = d.notional;
+        var greenNotional  = d.greenNotional;
+        var orangeNotional = d.orangeNotional;
+        var targetExcess   = d.targetExcess;
+        var stopExcess     = d.stopExcess;
+        var marginUsed     = d.marginUsed;
+
+        // How much more notional can we add before hitting the binding constraint?
+        // Constraint 1: Exposure — room to greenNotional
+        var roomExposure = Math.max(0, greenNotional - notional);
+        // Constraint 2: Liquidity — each 1 EUR notional uses MARGIN EUR of margin
+        var excessAboveTarget = excess - targetExcess;
+        var roomLiquidity = excessAboveTarget > 0 ? excessAboveTarget / MARGIN : 0;
+        // Constraint 3: Margin — excess must cover margin + stop
+        var roomMargin = Math.max(0, (excess - stopExcess) / MARGIN - notional);
+
+        var roomEUR = Math.min(roomExposure, roomLiquidity, roomMargin);
+        roomEUR = Math.max(0, roomEUR);
+
+        var bindingLabel = roomExposure <= roomLiquidity && roomExposure <= roomMargin
+            ? 'Exposure limit'
+            : roomLiquidity <= roomMargin
+                ? 'Liquidity — excess near target floor'
+                : 'Margin — excess covers margin + stop floor';
+
+        // Blocked tickers — use original USD notional as denominator (not slider)
+        var totalUSD = gNotionalUSD > 0 ? gNotionalUSD : 1;
+        var blockedTickers = [];
+        var blockedDates   = [];
+        Object.keys(gTickerMap || {}).forEach(function(t) {
+            var pct = gTickerMap[t] / totalUSD;
+            if (pct >= 0.25) blockedTickers.push({ name: t, pct: Math.round(pct * 100) });
+        });
+        blockedTickers.sort(function(a,b){ return b.pct - a.pct; });
+
+        Object.keys(gDateMap || {}).forEach(function(dd) {
+            var pct = gDateMap[dd] / totalUSD;
+            if (pct >= 0.30) blockedDates.push({ name: dd, pct: Math.round(pct * 100) });
+        });
+        blockedDates.sort(function(a,b){ return b.pct - a.pct; });
+
+        // Suggest good expiry months (not blocked)
+        var blockedDateNames = blockedDates.map(function(d){ return d.name; });
+        var suggestions = ['Sep 2026','Dec 2026','Mar 2027'].filter(function(s) {
+            return !blockedDateNames.some(function(b){ return b.indexOf(s.split(' ')[0].toUpperCase().slice(0,3)) >= 0; });
+        });
+
+        var scores = d.scores;
+        var liqPct  = Math.round(scores[0] * 100);
+        var expPct  = Math.round(scores[2] * 100);
+        var mrgPct  = Math.round(scores[3] * 100);
+
+        function meterColor(s) { return s >= 70 ? '#3aad72' : s >= 40 ? '#e8a03a' : '#e86060'; }
+
+        var blockedTickerHTML = blockedTickers.length
+            ? blockedTickers.map(function(t){ return '<span class="sell-tag sell-tag-r">'+t.name+' '+t.pct+'%</span>'; }).join('')
+            : '<span class="sell-tag sell-tag-g">No ticker near limit</span>';
+
+        var blockedDateHTML = blockedDates.length
+            ? blockedDates.map(function(b){ return '<span class="sell-tag sell-tag-r">'+b.name+' '+b.pct+'%</span>'; }).join('')
+            : '<span class="sell-tag sell-tag-g">Dates well spread</span>';
+
+        var suggestHTML = suggestions.length
+            ? suggestions.map(function(s){ return '<span class="sell-tag sell-tag-g">'+s+'</span>'; }).join('')
+            : '<span class="sell-tag sell-tag-o">Spread across all available months</span>';
+
+        var idealNotional = Math.min(roomEUR, greenNotional * 0.15);
+
+        el('sell-content').innerHTML =
+            '<div class="sell-card" style="border-color:rgba(58,173,114,0.3)">' +
+                '<div class="sell-headline" style="color:' + (roomEUR > 0 ? '#3aad72' : '#e86060') + '">' +
+                    (roomEUR > 0 ? '+' + fmt(roomEUR) + ' EUR notional' : 'No room to add') +
+                '</div>' +
+                '<div class="sell-sub">' +
+                    (roomEUR > 0
+                        ? 'You can open new short put positions up to this amount before entering warn zone.'
+                        : 'Reduce existing positions before opening new ones.') +
+                '</div>' +
+                '<div class="sell-constraint">Binding constraint: ' + bindingLabel + '</div>' +
+                '<div style="margin-top:10px">' +
+                    '<div class="sell-meter-row"><div class="sell-meter-label">Liquidity</div><div class="sell-meter-bar"><div class="sell-meter-fill" style="width:'+liqPct+'%;background:'+meterColor(liqPct)+'"></div></div><div class="sell-meter-val" style="color:'+meterColor(liqPct)+'">'+liqPct+'%</div></div>' +
+                    '<div class="sell-meter-row"><div class="sell-meter-label">Exposure</div><div class="sell-meter-bar"><div class="sell-meter-fill" style="width:'+expPct+'%;background:'+meterColor(expPct)+'"></div></div><div class="sell-meter-val" style="color:'+meterColor(expPct)+'">'+expPct+'%</div></div>' +
+                    '<div class="sell-meter-row"><div class="sell-meter-label">Margin</div><div class="sell-meter-bar"><div class="sell-meter-fill" style="width:'+mrgPct+'%;background:'+meterColor(mrgPct)+'"></div></div><div class="sell-meter-val" style="color:'+meterColor(mrgPct)+'">'+mrgPct+'%</div></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="sell-card">' +
+                '<div class="sell-rule">' +
+                    '<div class="sell-rule-icon" style="background:rgba(232,96,96,0.10)">🚫</div>' +
+                    '<div class="sell-rule-text">Avoid these tickers<span class="sell-rule-sub">Getting close to 40% ticker limit</span><div style="margin-top:5px">'+blockedTickerHTML+'</div></div>' +
+                '</div>' +
+                '<div class="sell-rule">' +
+                    '<div class="sell-rule-icon" style="background:rgba(232,96,96,0.10)">📅</div>' +
+                    '<div class="sell-rule-text">Avoid these expiry dates<span class="sell-rule-sub">Already concentrated — any new deal here worsens date score</span><div style="margin-top:5px">'+blockedDateHTML+'</div></div>' +
+                '</div>' +
+                '<div class="sell-rule">' +
+                    '<div class="sell-rule-icon" style="background:rgba(58,173,114,0.10)">✅</div>' +
+                    '<div class="sell-rule-text">Prefer these expiry months<span class="sell-rule-sub">Spreads date concentration and improves score</span><div style="margin-top:5px">'+suggestHTML+'</div></div>' +
+                '</div>' +
+                '<div class="sell-rule">' +
+                    '<div class="sell-rule-icon" style="background:rgba(58,173,114,0.10)">🎯</div>' +
+                    '<div class="sell-rule-text">Ideal next trade<span class="sell-rule-sub">Maximises diversification without breaking other axes</span><div style="margin-top:5px">' +
+                        '<span class="sell-tag sell-tag-g">New ticker</span>' +
+                        (suggestions[0] ? '<span class="sell-tag sell-tag-g">Exp '+suggestions[0]+'</span>' : '') +
+                        '<span class="sell-tag sell-tag-g">Notional &lt; '+fmt(Math.round(idealNotional/1000)*1000)+' EUR</span>' +
+                    '</div></div>' +
+                '</div>' +
+            '</div>';
+    }
+
     // ── IBKR CSV IMPORT ───────────────────────────────────────────────────
     function clearImport() {
         el('import-banner').style.display = 'none';
@@ -940,11 +1105,16 @@ input[type="range"]::-moz-range-thumb {
         if (notionalUSD > 0) {
             var maxTicker = Math.max.apply(null, Object.keys(tickerMap).map(function(k){ return tickerMap[k]; }));
             var maxDate   = Math.max.apply(null, Object.keys(dateMap).map(function(k){ return dateMap[k]; }));
-            gTickerConc = maxTicker / notionalUSD;  // fraction in biggest ticker
-            gDateConc   = maxDate   / notionalUSD;  // fraction on busiest expiry
+            gTickerConc = maxTicker / notionalUSD;
+            gDateConc   = maxDate   / notionalUSD;
+            gTickerMap  = tickerMap;
+            gDateMap    = dateMap;
+            gNotionalUSD = notionalUSD;
         } else {
             gTickerConc = 0;
             gDateConc   = 0;
+            gTickerMap  = {};
+            gDateMap    = {};
         }
 
         // Apply what we found
