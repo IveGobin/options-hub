@@ -255,6 +255,38 @@ input[type="range"]::-moz-range-thumb {
         </div>
     </div>
 
+    <!-- Position sliders -->
+    <div class="sliders-wrap">
+        <div class="slider-field">
+            <div class="slider-header">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="slider-label">Your excess liq</span>
+                    <div class="cur-toggle" id="exc-cur-toggle">
+                        <button class="cur-btn active" onclick="setCur('exc','EUR')">EUR</button>
+                        <button class="cur-btn" onclick="setCur('exc','USD')">USD</button>
+                    </div>
+                </div>
+                <span class="slider-val" id="exc-val">—</span>
+            </div>
+            <input type="range" id="exc-slider" min="0" step="1000" oninput="onSliders()">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;" id="exc-converted"></div>
+        </div>
+        <div class="slider-field">
+            <div class="slider-header">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="slider-label">Put notional sold</span>
+                    <div class="cur-toggle" id="not-cur-toggle">
+                        <button class="cur-btn" onclick="setCur('not','EUR')">EUR</button>
+                        <button class="cur-btn active" onclick="setCur('not','USD')">USD</button>
+                    </div>
+                </div>
+                <span class="slider-val" id="not-val">—</span>
+            </div>
+            <input type="range" id="not-slider" min="0" step="1000" oninput="onSliders()">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;" id="not-converted"></div>
+        </div>
+    </div>
+
     <!-- Net liq + FX rate -->
     <div class="nlv-wrap">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
@@ -292,36 +324,6 @@ input[type="range"]::-moz-range-thumb {
         <div id="axis-legend" style="margin-top:14px;">
             <div style="font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Axis breakdown</div>
             <div id="axis-rows"></div>
-        </div>
-        <div class="sliders-wrap">
-            <div class="slider-field">
-                <div class="slider-header">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span class="slider-label">Your excess liq</span>
-                        <div class="cur-toggle" id="exc-cur-toggle">
-                            <button class="cur-btn active" onclick="setCur('exc','EUR')">EUR</button>
-                            <button class="cur-btn" onclick="setCur('exc','USD')">USD</button>
-                        </div>
-                    </div>
-                    <span class="slider-val" id="exc-val">—</span>
-                </div>
-                <input type="range" id="exc-slider" min="0" step="1000" oninput="onSliders()">
-                <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;" id="exc-converted"></div>
-            </div>
-            <div class="slider-field">
-                <div class="slider-header">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span class="slider-label">Put notional sold</span>
-                        <div class="cur-toggle" id="not-cur-toggle">
-                            <button class="cur-btn" onclick="setCur('not','EUR')">EUR</button>
-                            <button class="cur-btn active" onclick="setCur('not','USD')">USD</button>
-                        </div>
-                    </div>
-                    <span class="slider-val" id="not-val">—</span>
-                </div>
-                <input type="range" id="not-slider" min="0" step="1000" oninput="onSliders()">
-                <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;" id="not-converted"></div>
-            </div>
         </div>
 
         <!-- Status -->
