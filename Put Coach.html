@@ -607,38 +607,79 @@ input[type="range"]::-moz-range-thumb {
         var orangeNotional = exp.o * nlv;
 
         // ── Compute 0..1 scores for each axis ───────────────────────────
-        // 1. LIQUIDITY: excess / targetExcess, capped at 1
-        var liqScore = Math.min(excess / targetExcess, 1);
+        // Convention: score ≥ 0.70 = green, 0.40–0.70 = warn, < 0.40 = danger
 
-        // 2. VIX BUFFER: how far are we from the vix danger zone?
-        //    VIX 5 = full score, VIX 60 = 0 score
-        var vixScore = Math.max(0, 1 - (vix - 5) / 55);
+        // 1. LIQUIDITY
+        // Green: excess ≥ targetExcess, Warn: stopExcess–targetExcess, Danger: < stopExcess
+        var liqScore;
+        if (excess >= targetExcess) {
+            liqScore = 1.0;
+        } else if (excess >= stopExcess) {
+            liqScore = 0.40 + ((excess - stopExcess) / (targetExcess - stopExcess)) * 0.30;
+        } else {
+            liqScore = Math.max(0, (excess / stopExcess) * 0.40);
+        }
 
-        // 3. EXPOSURE SAFETY: 1 if notional=0, 0 if at orange limit
-        var expScore = notional <= 0 ? 1 : Math.max(0, 1 - (notional / orangeNotional));
+        // 2. VIX BUFFER
+        // Green: VIX < 20, Warn: 20–30, Danger: > 30
+        var vixScore;
+        if (vix < 20) {
+            vixScore = 0.70 + ((20 - vix) / 15) * 0.30; // 0.70..1.0
+        } else if (vix <= 30) {
+            vixScore = 0.40 + ((30 - vix) / 10) * 0.30; // 0.40..0.70
+        } else {
+            vixScore = Math.max(0, 0.40 - ((vix - 30) / 30) * 0.40); // 0..0.40
+        }
 
-        // 4. MARGIN SAFETY: excess vs margin used
+        // 3. EXPOSURE SAFETY
+        // Green: ≤ greenNotional, Warn: green–orange, Danger: > orangeNotional
+        var expScore;
+        if (notional <= 0) {
+            expScore = 1.0;
+        } else if (notional <= greenNotional) {
+            expScore = 0.70 + (1 - notional / greenNotional) * 0.30;
+        } else if (notional <= orangeNotional) {
+            expScore = 0.40 + ((orangeNotional - notional) / (orangeNotional - greenNotional)) * 0.30;
+        } else {
+            expScore = Math.max(0, 0.40 - ((notional - orangeNotional) / orangeNotional) * 0.40);
+        }
+
+        // 4. MARGIN SAFETY
+        // Green: excess ≥ marginUsed + stopExcess, Danger: below that
         var marginUsed = notional * MARGIN;
-        var marginScore = marginUsed <= 0 ? 1 : Math.min(1, excess / (marginUsed + stopExcess));
+        var marginTarget = marginUsed + stopExcess;
+        var marginScore;
+        if (marginUsed <= 0) {
+            marginScore = 1.0;
+        } else if (excess >= marginTarget) {
+            marginScore = 0.70 + Math.min(0.30, ((excess - marginTarget) / marginTarget) * 0.30);
+        } else {
+            marginScore = Math.max(0, (excess / marginTarget) * 0.70);
+        }
 
-        // 5. TICKER CONCENTRATION: gTickerConc=0 means all in one ticker (bad), 1=diversified
-        //    Score: 1 if ≤20% in one ticker, 0 if 100% in one ticker
-        var tickerScore = Math.max(0, 1 - (gTickerConc / 0.6));
+        // 5. TICKER CONCENTRATION
+        // Green: <40% (<0.40), Warn: 40-60%, Danger: >60%
+        // Map: 0.40 → score 0.70, 0.60 → score 0.40, 1.0 → score 0
+        var tickerScore = gTickerConc <= 0.40
+            ? 0.70 + (1 - gTickerConc / 0.40) * 0.30   // 0.70..1.0 range for green
+            : Math.max(0, 0.70 - ((gTickerConc - 0.40) / 0.20) * 0.30); // warn→danger
 
-        // 6. DATE CONCENTRATION: gDateConc=0 means spread out, 1=all same date
-        //    Score: 1 if ≤25% on one date, 0 if 100% on one date
-        var dateScore = Math.max(0, 1 - (gDateConc / 0.7));
+        // 6. DATE CONCENTRATION
+        // Green: <35% (<0.35), Warn: 35-70%, Danger: >70%
+        var dateScore = gDateConc <= 0.35
+            ? 0.70 + (1 - gDateConc / 0.35) * 0.30
+            : Math.max(0, 0.70 - ((gDateConc - 0.35) / 0.35) * 0.70);
 
         var scores = [liqScore, vixScore, expScore, marginScore, tickerScore, dateScore];
 
-        // Target scores (what "ideal" looks like given current mode/VIX)
+        // Target scores — the green zone boundary (0.70), not the theoretical maximum
         var targetScores = [
-            1.0,
-            vixScore,
-            greenNotional > 0 ? Math.max(0, 1 - (greenNotional * 0.5 / orangeNotional)) : 1,
-            1.0,
-            0.67,  // target: no ticker > 40% (score=0.33 maps to ~40%)
-            0.64,  // target: no date  > 35%
+            0.70,  // Liquidity: just at the green threshold (= targetExcess)
+            vixScore < 0.70 ? vixScore : 0.70 + ((20 - Math.min(vix, 20)) / 15) * 0.30, // VIX: score at VIX=20
+            0.70,  // Exposure: score at greenNotional boundary
+            0.70,  // Margin: score at margin+stop boundary
+            0.70,  // Ticker: score at 40% boundary
+            0.70,  // Date: score at 35% boundary
         ];
 
         // Zone logic (same as before)
@@ -757,6 +798,8 @@ input[type="range"]::-moz-range-thumb {
                 tgtScore: d.targetScores[4],
                 value: fmtP(gTickerConc) + ' in top ticker',
                 optimal: '< 40% in any ticker',
+                rawPct: Math.round(gTickerConc * 100),
+                dangerPct: 60,
                 zones: [
                     { label: '🔴 Danger: > 60% one ticker', color: '#e86060' },
                     { label: '🟡 Warn: 40–60% one ticker',  color: '#e8a03a' },
@@ -769,6 +812,8 @@ input[type="range"]::-moz-range-thumb {
                 tgtScore: d.targetScores[5],
                 value: fmtP(gDateConc) + ' one expiry',
                 optimal: '< 35% on any date',
+                rawPct: Math.round(gDateConc * 100),
+                dangerPct: 70,
                 zones: [
                     { label: '🔴 Danger: > 70% one date', color: '#e86060' },
                     { label: '🟡 Warn: 35–70% one date',  color: '#e8a03a' },
@@ -781,9 +826,14 @@ input[type="range"]::-moz-range-thumb {
         axes.forEach(function(ax) {
             var sc = ax.score;
             var barColor = sc >= 0.7 ? '#3aad72' : sc >= 0.4 ? '#e8a03a' : '#e86060';
-            var valColor = sc >= 0.7 ? '#3aad72' : sc >= 0.4 ? '#e8a03a' : '#e86060';
-            var tgtPct   = Math.round(ax.tgtScore * 100);
-            var fillPct  = Math.round(sc * 100);
+            var valColor = barColor;
+            var tgtPct  = Math.round(ax.tgtScore * 100);
+            // For concentration axes use the raw % so bar is always visible
+            var fillPct = ax.rawPct !== undefined ? Math.min(ax.rawPct, 100) : Math.round(sc * 100);
+            // For concentration, target marker = green boundary
+            var tgtMarker = ax.rawPct !== undefined
+                ? (ax.name.indexOf('Ticker') >= 0 ? 40 : 35)
+                : tgtPct;
 
             html += '<div class="ax-row">';
             html +=   '<span class="ax-name">' + ax.name + '</span>';
@@ -791,7 +841,7 @@ input[type="range"]::-moz-range-thumb {
             html +=   '<span class="ax-opt" style="color:var(--muted)">target: ' + ax.optimal + '</span>';
             html +=   '<div class="ax-bar-wrap" style="grid-column:1/-1">';
             html +=     '<div class="ax-bar-fill" style="width:' + fillPct + '%;background:' + barColor + '"></div>';
-            html +=     '<div class="ax-bar-tgt" style="left:' + tgtPct + '%"></div>';
+            html +=     '<div class="ax-bar-tgt" style="left:' + tgtMarker + '%"></div>';
             html +=   '</div>';
             html +=   '<div class="ax-zones">';
             ax.zones.forEach(function(z) {
