@@ -580,6 +580,18 @@
     </div>
 
     <div class="section">
+      <div class="section-title">Value expiring by date — premium breakdown</div>
+      <div class="pie-grid">
+        <div class="pie-card">
+          <div class="pie-card-header">
+            <div class="pie-card-title"><span class="dot" style="background:var(--accent)"></span>Open positions — total value at expiry by date</div>
+          </div>
+          <div class="pie-inner" id="pie-expiry-date-inner"><div class="pie-empty">No data</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
       <div class="section-title">Premium at risk — next 4 months by expiry</div>
       <div class="monthly-grid" id="monthly-grid"></div>
     </div>
@@ -1434,6 +1446,7 @@ function renderDashboard(data, fileName) {
   data.openPositions.forEach(p => { openByTicker[p.ticker] = (openByTicker[p.ticker]||0) + p.premiumCollected; });
   const OPEN_PAL = ['#00b4d8','#c8ff00','#ff4757','#a78bfa','#ffd32a','#ff6b9d','#34d399','#fb923c','#38bdf8','#f472b6'];
   renderPieChart('pie-open-inner', Object.entries(openByTicker).sort((a,b)=>b[1]-a[1]), OPEN_PAL, true);
+  renderExpiryDatePie(data.openPositions);
 
   // ── MONTHLY & WEEKLY ──
   renderMonthlyPremium(data.openPositions);
@@ -1658,6 +1671,194 @@ function renderAssignedTable(assignedPositions) {
 // ═══════════════════════════════════════════════════════════════════
 // MONTHLY PREMIUM
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// EXPIRY DATE PIE CHART
+// ═══════════════════════════════════════════════════════════════════
+function renderExpiryDatePie(openPositions) {
+  const container = document.getElementById('pie-expiry-date-inner');
+  if (!container) return;
+
+  // Group by exact expiry date
+  const byDate = {};
+  const premByDate = {};
+  openPositions.forEach(p => {
+    if (!p.expiry) return;
+    const dateKey = fmtDate(p.expiry);
+    byDate[dateKey] = (byDate[dateKey] || 0) + (p.exposure || 0);
+    premByDate[dateKey] = (premByDate[dateKey] || 0) + (p.premiumCollected || 0);
+  });
+
+  const sorted = Object.entries(byDate)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => {
+      const da = new Date(a[0]);
+      const db = new Date(b[0]);
+      return da - db;
+    });
+
+  if (!sorted.length) {
+    container.innerHTML = '<div class="pie-empty">No data</div>';
+    return;
+  }
+
+  const DATE_PAL = ['#00b4d8','#c8ff00','#a78bfa','#ffd32a','#ff6b9d','#34d399','#fb923c','#38bdf8','#f472b6','#ff4757','#6ee7b7','#fbbf24'];
+  const labels  = sorted.map(d => d[0]);
+  const values  = sorted.map(d => d[1]);
+  const prems   = labels.map(l => premByDate[l] || 0);
+  const colors  = sorted.map((_, i) => DATE_PAL[i % DATE_PAL.length]);
+  const total   = values.reduce((a, b) => a + b, 0);
+  const maxVal  = Math.max(...values);
+
+  const containerId = 'pie-expiry-date-inner';
+  if (_pieChartInstances[containerId]) {
+    _pieChartInstances[containerId].destroy();
+    delete _pieChartInstances[containerId];
+  }
+
+  // Build DOM
+  const canvasSide = document.createElement('div'); canvasSide.className = 'pie-canvas-side';
+  const wrap       = document.createElement('div'); wrap.className = 'pie-canvas-wrap';
+  const canvas     = document.createElement('canvas');
+  canvas.style.width = '160px'; canvas.style.height = '160px';
+  wrap.appendChild(canvas); canvasSide.appendChild(wrap);
+
+  const legendSide = document.createElement('div'); legendSide.className = 'pie-legend-side';
+  const legend     = document.createElement('div'); legend.className = 'pie-legend';
+  legend.style.maxHeight = '220px';
+
+  labels.forEach((lbl, i) => {
+    const barPct = Math.round((values[i] / maxVal) * 100);
+    const pct    = (values[i] / total * 100).toFixed(1);
+    const prem   = prems[i];
+    const row    = document.createElement('div');
+    row.className = 'legend-row'; row.dataset.idx = i;
+    row.style.cursor = 'default';
+    row.innerHTML = `
+      <div class="legend-left"><span class="legend-dot" style="background:${colors[i]}"></span><span class="legend-ticker">${escHtml(lbl)}</span></div>
+      <div class="legend-bar-wrap"><div class="legend-bar-fill" style="width:${barPct}%;background:${colors[i]};opacity:0.6"></div></div>
+      <span class="legend-pct">${pct}%</span>
+      <span class="legend-val" style="color:var(--accent)">$${values[i].toLocaleString('en-US',{maximumFractionDigits:0})}</span>
+    `;
+    // Tooltip showing premium collected on hover
+    row.title = `Expiry: ${lbl}\nExposure: $${values[i].toLocaleString('en-US',{maximumFractionDigits:0})}\nPremium collected: +$${prem.toFixed(2)}`;
+    legend.appendChild(row);
+  });
+
+  legendSide.appendChild(legend);
+  container.innerHTML = '';
+  container.appendChild(canvasSide);
+  container.appendChild(legendSide);
+
+  // Floating tooltip element
+  let floatingTip = document.getElementById('expiry-date-tooltip');
+  if (!floatingTip) {
+    floatingTip = document.createElement('div');
+    floatingTip.id = 'expiry-date-tooltip';
+    floatingTip.style.cssText = `
+      position:fixed; pointer-events:none; display:none; z-index:9999;
+      background:#111419; border:1px solid #2a3040; border-radius:8px;
+      padding:10px 14px; font-size:12px; color:#e8ecf0; line-height:1.7;
+      box-shadow:0 4px 16px rgba(0,0,0,0.5); min-width:160px;
+    `;
+    document.body.appendChild(floatingTip);
+  }
+
+  const surfaceColor = getComputedStyle(document.body).getPropertyValue('--surface').trim() || '#111419';
+
+  const chart = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderColor: surfaceColor,
+        borderWidth: 2,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: false,
+      cutout: '52%',
+      animation: { duration: 400 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: false,
+          external(context) {
+            const tip = floatingTip;
+            if (context.tooltip.opacity === 0) { tip.style.display = 'none'; return; }
+            const idx = context.tooltip.dataPoints?.[0]?.dataIndex;
+            if (idx === undefined) { tip.style.display = 'none'; return; }
+            const lbl  = labels[idx];
+            const val  = values[idx];
+            const prem = prems[idx];
+            const pct  = (val / total * 100).toFixed(1);
+            tip.innerHTML = `
+              <div style="color:${colors[idx]};font-weight:700;margin-bottom:4px">${lbl}</div>
+              <div><span style="color:var(--muted,#5a6473)">Exposure:</span> <span style="color:#e8ecf0">$${val.toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>
+              <div><span style="color:var(--muted,#5a6473)">Premium:</span> <span style="color:#00e676">+$${prem.toFixed(2)}</span></div>
+              <div><span style="color:var(--muted,#5a6473)">Share:</span> <span style="color:#e8ecf0">${pct}%</span></div>
+            `;
+            tip.style.display = 'block';
+            const pos = context.chart.canvas.getBoundingClientRect();
+            tip.style.left  = (pos.left + context.tooltip.caretX + 12) + 'px';
+            tip.style.top   = (pos.top  + context.tooltip.caretY - 20) + 'px';
+          }
+        }
+      }
+    },
+    plugins: [{
+      id: 'centerText',
+      afterDraw(chart) {
+        const { ctx, chartArea: { width, height, left, top } } = chart;
+        const cx = left + width / 2, cy = top + height / 2;
+        ctx.save();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text').trim() || '#e8ecf0';
+        ctx.font = "bold 11px 'Space Mono',monospace";
+        ctx.fillText(fmtAbs(total), cx, cy);
+        ctx.restore();
+      }
+    }]
+  });
+
+  _pieChartInstances[containerId] = chart;
+
+  // Legend hover sync
+  legend.querySelectorAll('.legend-row').forEach((row, i) => {
+    row.addEventListener('mouseenter', (e) => {
+      legend.querySelectorAll('.legend-row').forEach((r, j) => { r.style.opacity = j === i ? '1' : '0.3'; });
+      chart.setDatasetVisibility(0, true);
+      chart.tooltip.setActiveElements([{ datasetIndex: 0, index: i }], { x: 0, y: 0 });
+      chart.update('none');
+      // Show floating tooltip on legend hover
+      const prem = prems[i];
+      const pct  = (values[i] / total * 100).toFixed(1);
+      floatingTip.innerHTML = `
+        <div style="color:${colors[i]};font-weight:700;margin-bottom:4px">${labels[i]}</div>
+        <div><span style="color:#5a6473">Exposure:</span> <span style="color:#e8ecf0">$${values[i].toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>
+        <div><span style="color:#5a6473">Premium:</span> <span style="color:#00e676">+$${prem.toFixed(2)}</span></div>
+        <div><span style="color:#5a6473">Share:</span> <span style="color:#e8ecf0">${pct}%</span></div>
+      `;
+      floatingTip.style.display = 'block';
+      const rect = row.getBoundingClientRect();
+      floatingTip.style.left = (rect.right + 10) + 'px';
+      floatingTip.style.top  = (rect.top - 10) + 'px';
+    });
+    row.addEventListener('mousemove', (e) => {
+      floatingTip.style.left = (e.clientX + 14) + 'px';
+      floatingTip.style.top  = (e.clientY - 20) + 'px';
+    });
+    row.addEventListener('mouseleave', () => {
+      legend.querySelectorAll('.legend-row').forEach(r => { r.style.opacity = '1'; });
+      chart.tooltip.setActiveElements([], {});
+      chart.update('none');
+      floatingTip.style.display = 'none';
+    });
+  });
+}
+
 function renderMonthlyPremium(openPositions) {
   const grid = document.getElementById('monthly-grid');
   grid.innerHTML = '';
