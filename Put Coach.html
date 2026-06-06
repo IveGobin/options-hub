@@ -200,10 +200,15 @@ input[type="range"]::-moz-range-thumb {
 .ax-val  { font-family: var(--mono); font-size: 12px; font-weight: 700; text-align:right; min-width: 52px; }
 .ax-opt  { font-family: var(--mono); font-size: 9px; color: var(--muted); text-align:right; min-width: 52px; }
 .ax-bar-wrap { grid-column: 1 / -1; height: 4px; background: var(--border); border-radius: 2px; margin-top: 3px; position:relative; overflow:visible; }
-.ax-bar-fill { height: 100%; border-radius: 2px; transition: width .4s; }
+.ax-bar-fill { height: 100%; border-radius: 2px; transition: width .4s ease; -webkit-transition: width .4s ease; -webkit-transform: translateZ(0); transform: translateZ(0); will-change: width; }
 .ax-bar-tgt  { position:absolute; top:-2px; width:2px; height:8px; border-radius:1px; background: rgba(58,173,114,0.7); }
 .ax-zones    { grid-column: 1 / -1; display:flex; gap:4px; margin-top:4px; flex-wrap:wrap; }
 .ax-zone-pill { font-family:var(--mono); font-size:8px; padding: 1px 6px; border-radius:10px; white-space:nowrap; }
+
+/* +/- adjustment buttons */
+.adj-btn { flex-shrink:0; width:28px; height:28px; border-radius:7px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:16px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; font-family:var(--mono); transition:background .15s; user-select:none; -webkit-user-select:none; }
+.adj-btn:hover { background:var(--border); }
+.adj-btn:active { transform:scale(0.93); }
 
 /* Sell section */
 .sell-card { background:var(--surface2); border:0.5px solid var(--border); border-radius:10px; padding:14px; margin-bottom:8px; }
@@ -266,7 +271,11 @@ input[type="range"]::-moz-range-thumb {
                 <span class="vix-tag vt-calm" id="vix-tag">Calm</span>
             </div>
         </div>
-        <input type="range" id="vix-slider" min="5" max="60" step="0.5" value="18" oninput="onVix()">
+        <div style="display:flex;align-items:center;gap:8px;">
+            <button class="adj-btn" onclick="adjustSlider('vix-slider','-0.5',onVix)">−</button>
+            <input type="range" id="vix-slider" min="5" max="60" step="0.5" value="18" oninput="onVix()" style="flex:1;">
+            <button class="adj-btn" onclick="adjustSlider('vix-slider','0.5',onVix)">+</button>
+        </div>
         <div class="vix-scale">
             <span>5</span>
             <span style="color:#3aad72">20 calm</span>
@@ -288,7 +297,11 @@ input[type="range"]::-moz-range-thumb {
                 </div>
                 <span class="slider-val" id="exc-val">—</span>
             </div>
-            <input type="range" id="exc-slider" min="0" step="1000" oninput="onSliders()">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <button class="adj-btn" onclick="adjustSlider('exc-slider','-500',onSliders)">−</button>
+                <input type="range" id="exc-slider" min="0" step="500" oninput="onSliders()" style="flex:1;">
+                <button class="adj-btn" onclick="adjustSlider('exc-slider','500',onSliders)">+</button>
+            </div>
             <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;" id="exc-converted"></div>
         </div>
         <div class="slider-field">
@@ -302,7 +315,11 @@ input[type="range"]::-moz-range-thumb {
                 </div>
                 <span class="slider-val" id="not-val">—</span>
             </div>
-            <input type="range" id="not-slider" min="0" step="1000" oninput="onSliders()">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <button class="adj-btn" onclick="adjustSlider('not-slider','-500',onSliders)">−</button>
+                <input type="range" id="not-slider" min="0" step="500" oninput="onSliders()" style="flex:1;">
+                <button class="adj-btn" onclick="adjustSlider('not-slider','500',onSliders)">+</button>
+            </div>
             <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;" id="not-converted"></div>
         </div>
     </div>
@@ -401,6 +418,14 @@ input[type="range"]::-moz-range-thumb {
 
     function getFX() { return parseFloat(el('fx-rate').value) || 1.08; }
 
+    function adjustSlider(id, delta, callback) {
+        var s = el(id);
+        var newVal = parseFloat(s.value) + parseFloat(delta);
+        newVal = Math.max(parseFloat(s.min), Math.min(parseFloat(s.max), newVal));
+        s.value = newVal;
+        callback();
+    }
+
     // Convert input value to EUR for calculations
     function toEUR(val, cur) {
         return cur === 'USD' ? val / getFX() : val;
@@ -428,7 +453,7 @@ input[type="range"]::-moz-range-thumb {
     function el(id) { return document.getElementById(id); }
     function fmt(n) {
         if (n >= 1e6) return (n/1e6).toFixed(2) + 'M';
-        if (n >= 1e3) return (n/1e3).toFixed(0) + 'k';
+        if (n >= 1e3) return (n % 1000 === 0 ? (n/1e3).toFixed(0) : (n/1e3).toFixed(1)) + 'k';
         return n.toFixed(0);
     }
 
@@ -647,7 +672,8 @@ input[type="range"]::-moz-range-thumb {
         // Green: excess ≥ targetExcess, Warn: stopExcess–targetExcess, Danger: < stopExcess
         var liqScore;
         if (excess >= targetExcess) {
-            liqScore = 1.0;
+            // Continue growing smoothly from 0.70 to 1.0 as excess grows above target
+            liqScore = Math.min(1.0, 0.70 + ((excess - targetExcess) / targetExcess) * 0.30);
         } else if (excess >= stopExcess) {
             liqScore = 0.40 + ((excess - stopExcess) / (targetExcess - stopExcess)) * 0.30;
         } else {
@@ -686,7 +712,7 @@ input[type="range"]::-moz-range-thumb {
         if (marginUsed <= 0) {
             marginScore = 1.0;
         } else if (excess >= marginTarget) {
-            marginScore = 0.70 + Math.min(0.30, ((excess - marginTarget) / marginTarget) * 0.30);
+            marginScore = Math.min(1.0, 0.70 + ((excess - marginTarget) / marginTarget) * 0.30);
         } else {
             marginScore = Math.max(0, (excess / marginTarget) * 0.70);
         }
@@ -864,36 +890,48 @@ input[type="range"]::-moz-range-thumb {
             },
         ];
 
-        var html = '';
-        axes.forEach(function(ax) {
+        var container = el('axis-rows');
+
+        // First call: build DOM structure; subsequent calls: update values only
+        var rows = container.querySelectorAll('.ax-row');
+        var firstRender = rows.length === 0;
+
+        axes.forEach(function(ax, i) {
             var sc = ax.score;
-            var barColor = sc >= 0.7 ? '#3aad72' : sc >= 0.4 ? '#e8a03a' : '#e86060';
-            var valColor = barColor;
-            var tgtPct  = Math.round(ax.tgtScore * 100);
-            // For concentration axes use the raw % so bar is always visible
-            var fillPct = ax.rawPct !== undefined ? Math.min(ax.rawPct, 100) : Math.round(sc * 100);
-            // For concentration, target marker = green boundary
+            var barColor  = sc >= 0.7 ? '#3aad72' : sc >= 0.4 ? '#e8a03a' : '#e86060';
+            var valColor  = barColor;
+            var fillPct   = ax.rawPct !== undefined ? Math.min(ax.rawPct, 100) : Math.round(sc * 100);
             var tgtMarker = ax.rawPct !== undefined
                 ? (ax.name.indexOf('Ticker') >= 0 ? 40 : 35)
-                : tgtPct;
+                : Math.round(ax.tgtScore * 100);
 
-            html += '<div class="ax-row">';
-            html +=   '<span class="ax-name">' + ax.name + '</span>';
-            html +=   '<span class="ax-val" style="color:' + valColor + '">' + ax.value + '</span>';
-            html +=   '<span class="ax-opt" style="color:var(--muted)">target: ' + ax.optimal + '</span>';
-            html +=   '<div class="ax-bar-wrap" style="grid-column:1/-1">';
-            html +=     '<div class="ax-bar-fill" style="width:' + fillPct + '%;background:' + barColor + '"></div>';
-            html +=     '<div class="ax-bar-tgt" style="left:' + tgtMarker + '%"></div>';
-            html +=   '</div>';
-            html +=   '<div class="ax-zones">';
-            ax.zones.forEach(function(z) {
-                html += '<span class="ax-zone-pill" style="background:' + z.color + '18;color:' + z.color + '">' + z.label + '</span>';
-            });
-            html +=   '</div>';
-            html += '</div>';
+            if (firstRender) {
+                var row = document.createElement('div');
+                row.className = 'ax-row';
+                var zonesHTML = ax.zones.map(function(z) {
+                    return '<span class="ax-zone-pill" style="background:' + z.color + '18;color:' + z.color + '">' + z.label + '</span>';
+                }).join('');
+                row.innerHTML =
+                    '<span class="ax-name">' + ax.name + '</span>' +
+                    '<span class="ax-val" style="color:' + valColor + '">' + ax.value + '</span>' +
+                    '<span class="ax-opt" style="color:var(--muted)">target: ' + ax.optimal + '</span>' +
+                    '<div class="ax-bar-wrap" style="grid-column:1/-1">' +
+                        '<div class="ax-bar-fill" style="width:' + fillPct + '%;background:' + barColor + '"></div>' +
+                        '<div class="ax-bar-tgt" style="position:absolute;top:-2px;width:2px;height:8px;border-radius:1px;background:rgba(58,173,114,0.7);left:' + tgtMarker + '%"></div>' +
+                    '</div>' +
+                    '<div class="ax-zones">' + zonesHTML + '</div>';
+                container.appendChild(row);
+            } else {
+                var row = rows[i];
+                row.querySelector('.ax-val').style.color = valColor;
+                row.querySelector('.ax-val').textContent = ax.value;
+                row.querySelector('.ax-opt').textContent = 'target: ' + ax.optimal;
+                var fill = row.querySelector('.ax-bar-fill');
+                fill.style.width      = fillPct + '%';
+                fill.style.background = barColor;
+                row.querySelector('.ax-bar-tgt').style.left = tgtMarker + '%';
+            }
         });
-
-        el('axis-rows').innerHTML = html;
     }
 
     // ── WHAT CAN I SELL ───────────────────────────────────────────────────
