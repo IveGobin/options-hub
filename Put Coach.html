@@ -1232,6 +1232,30 @@ input[type="range"]::-moz-range-thumb {
             });
     })();
 
+    (function loadVIX() {
+        fetch('vix_povijest.json')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var dates = Object.keys(data).sort();
+                if (!dates.length) return;
+                var latest = dates[dates.length - 1];
+                var vixVal = parseFloat(data[latest]);
+                if (!isNaN(vixVal) && vixVal > 0) {
+                    var slider = el('vix-slider');
+                    // Clamp to slider range
+                    vixVal = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), vixVal));
+                    slider.value = vixVal;
+                    // Show date next to VIX label
+                    var vixLabel = document.querySelector('.vix-label');
+                    if (vixLabel) vixLabel.textContent = 'VIX · ' + latest.slice(5).replace('-', '/');
+                    onVix();
+                }
+            })
+            .catch(function() {
+                // File not found — VIX ostaje na defaultnoj vrijednosti
+            });
+    })();
+
     onVix();
 </script>
 <script>
