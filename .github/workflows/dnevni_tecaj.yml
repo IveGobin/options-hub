@@ -1,0 +1,33 @@
+name: Dnevni tečajevi
+
+on:
+  schedule:
+    - cron: '0 7 * * *'  # 9:00 po hrvatskom vremenu
+  workflow_dispatch:
+
+jobs:
+  dohvati:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instaliraj dependencies
+        run: pip install requests  # dodaj što god tecajna lista.py koristi
+
+      - name: Pokreni skriptu
+        run: python "tecajna lista.py"
+
+      - name: Commitaj JSON
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tecajna_lista_usd.json
+          git diff --staged --quiet || git commit -m "Tečajevi: $(date '+%Y-%m-%d')"
+          git push
