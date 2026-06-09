@@ -20,6 +20,7 @@ jobs:
 
       - name: Instaliraj dependencies
         run: pip install requests  # dodaj što god tecajna lista.py koristi
+        run: pip install requests yfinance
 
       - name: Pokreni skriptu
         run: python "tecajna lista.py"
