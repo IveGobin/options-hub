@@ -19,7 +19,6 @@ jobs:
           python-version: '3.12'
 
       - name: Instaliraj dependencies
-        run: pip install requests  # dodaj što god tecajna lista.py koristi
         run: pip install requests yfinance
 
       - name: Pokreni skriptu
