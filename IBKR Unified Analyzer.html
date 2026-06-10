@@ -690,6 +690,8 @@
                 <th onclick="sortDetail('closeDate')">Close Date</th>
                 <th onclick="sortDetail('premium')">Premium Collected</th>
                 <th onclick="sortDetail('buyback')">Paid to Close</th>
+                <th onclick="sortDetail('openFee')">Open Fee</th>
+                <th onclick="sortDetail('closeFee')">Close Fee</th>
                 <th onclick="sortDetail('profit')">Profit</th>
                 <th onclick="sortDetail('profitPct')">Profit %</th>
                 <th onclick="sortDetail('status')">Status</th>
@@ -1674,34 +1676,30 @@ function buildClosedDetailRows(tradesBySym) {
     const parsed = parseOptSym(sym);
     if (!parsed) continue;
 
-    // Sort all trades chronologically
     const sorted = [...trades].sort((a,b) => {
       const da = a.date instanceof Date ? a.date.getTime() : (a.date ? new Date(a.date).getTime() : 0);
       const db = b.date instanceof Date ? b.date.getTime() : (b.date ? new Date(b.date).getTime() : 0);
       return da - db;
     });
 
-    // FIFO queue of open lots
     const openQueue = [];
 
     for (const t of sorted) {
       const tDate = t.date instanceof Date ? t.date : (t.date ? new Date(t.date) : null);
 
       if (t.qty < 0) {
-        // Opening trade: push lot into queue
         const contracts = Math.abs(t.qty);
         openQueue.push({
           date: tDate,
-          pricePerContract: Math.abs(t.proceeds) / contracts,
-          commPerContract:  (t.comm || 0) / contracts,
+          pricePerContract:   Math.abs(t.proceeds) / contracts,
+          openFeePerContract: Math.abs(t.comm || 0) / contracts,
           remaining: contracts
         });
       } else if (t.qty > 0) {
-        // Closing trade: FIFO match
         let toClose = t.qty;
         const closeDate = tDate;
-        const closePricePerContract = t.qty > 0 ? Math.abs(t.proceeds) / t.qty : 0;
-        const closeCommPerContract  = t.qty > 0 ? (t.comm || 0) / t.qty : 0;
+        const closePricePerContract  = Math.abs(t.proceeds) / t.qty;
+        const closeFeePerContract    = Math.abs(t.comm || 0) / t.qty;
 
         const code = (t.code || '').toUpperCase();
         let status;
@@ -1715,15 +1713,16 @@ function buildClosedDetailRows(tradesBySym) {
 
           const premium   = matched * lot.pricePerContract;
           const buyback   = matched * closePricePerContract;
-          const comm      = matched * lot.commPerContract + matched * closeCommPerContract;
-          const profit    = premium - buyback + comm;
+          const openFee   = -(matched * lot.openFeePerContract);   // negative = cost
+          const closeFee  = -(matched * closeFeePerContract);       // negative = cost
+          const profit    = premium - buyback + openFee + closeFee;
           const profitPct = premium > 0 ? (profit / premium) * 100 : null;
 
           rows.push({
             ticker: parsed.ticker, sym,
             type: parsed.type, strike: parsed.strike,
             qty: matched, openDate: lot.date, closeDate,
-            premium, buyback, profit, profitPct, status
+            premium, buyback, openFee, closeFee, profit, profitPct, status
           });
 
           lot.remaining -= matched;
@@ -1732,7 +1731,6 @@ function buildClosedDetailRows(tradesBySym) {
         }
       }
     }
-    // Remaining lots in queue are still open — not shown
   }
 
   window._closedDetailRows = rows;
@@ -1767,13 +1765,13 @@ function renderDetailTable() {
 
   // Update sort indicators
   document.querySelectorAll('table.detail-table thead th').forEach(th => th.classList.remove('sort-asc','sort-desc'));
-  const thMap = {ticker:0,sym:1,strike:2,qty:3,openDate:4,closeDate:5,premium:6,buyback:7,profit:8,profitPct:9,status:10};
+  const thMap = {ticker:0,sym:1,strike:2,qty:3,openDate:4,closeDate:5,premium:6,buyback:7,openFee:8,closeFee:9,profit:10,profitPct:11,status:12};
   const ths = document.querySelectorAll('table.detail-table thead th');
   if (ths[thMap[key]]) ths[thMap[key]].classList.add(dir===1?'sort-asc':'sort-desc');
 
   tbody.innerHTML = '';
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:20px;">No closed option trades found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:20px;">No closed option trades found.</td></tr>`;
     return;
   }
 
@@ -1805,6 +1803,8 @@ function renderDetailTable() {
       <td class="dim">${fmtD(r.closeDate)}</td>
       <td class="pos">+${fmtAbs(r.premium)}</td>
       <td class="${r.buyback>0?'neg':'dim'}">${r.buyback>0?'-'+fmtAbs(r.buyback):'$0.00'}</td>
+      <td class="neg">${r.openFee!==0?'-'+fmtAbs(r.openFee):'$0.00'}</td>
+      <td class="neg">${r.closeFee!==0?'-'+fmtAbs(r.closeFee):'$0.00'}</td>
       <td class="${profCls}">${profSign}${fmtAbs(r.profit)}</td>
       <td class="${profCls}">${pctStr}</td>
       <td><span class="status-pill ${statusCls}">${r.status}</span></td>`;
@@ -1819,11 +1819,15 @@ function renderDetailTable() {
   const totSign = totalProfit>=0?'+':'-';
   const tfoot = document.createElement('tr');
   tfoot.style.cssText = 'border-top:1px solid var(--border);font-weight:700;background:var(--surface2);';
+  const totalOpenFee  = rows.reduce((s,r)=>s+r.openFee,0);
+  const totalCloseFee = rows.reduce((s,r)=>s+r.closeFee,0);
   tfoot.innerHTML = `
     <td style="text-align:left;font-family:'Syne',sans-serif;font-size:12px;">Total (${rows.length})</td>
     <td></td><td></td><td></td><td></td><td></td>
     <td class="pos">+$${totalPremium.toFixed(2)}</td>
     <td></td>
+    <td class="neg">-$${Math.abs(totalOpenFee).toFixed(2)}</td>
+    <td class="neg">-$${Math.abs(totalCloseFee).toFixed(2)}</td>
     <td class="${totCls}">${totSign}$${Math.abs(totalProfit).toFixed(2)}</td>
     <td class="${totCls}">${fmtPct(avgPct)}</td>
     <td></td>`;
