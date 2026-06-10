@@ -1718,12 +1718,15 @@ function buildClosedDetailRows(tradesBySym) {
           const profit    = premium - buyback + openFee + closeFee;
           const profitPct = premium > 0 ? (profit / premium) * 100 : null;
 
-          rows.push({
-            ticker: parsed.ticker, sym,
-            type: parsed.type, strike: parsed.strike,
-            qty: matched, openDate: lot.date, closeDate,
-            premium, buyback, openFee, closeFee, profit, profitPct, status
-          });
+          // Assigned options are treated as stock purchases — exclude from this table
+          if (status !== 'Assigned') {
+            rows.push({
+              ticker: parsed.ticker, sym,
+              type: parsed.type, strike: parsed.strike,
+              qty: matched, openDate: lot.date, closeDate,
+              premium, buyback, openFee, closeFee, profit, profitPct, status
+            });
+          }
 
           lot.remaining -= matched;
           toClose -= matched;
