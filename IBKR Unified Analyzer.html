@@ -258,6 +258,35 @@
   .week-ticker-chip { display:inline-flex; align-items:center; gap:4px; background:rgba(0,180,216,0.08); border-radius:5px; padding:2px 7px; font-family:'Space Mono',monospace; font-size:10px; font-weight:700; color:var(--blue); }
   .week-ticker-chip span { opacity:0.7; font-weight:400; }
 
+  /* ── CLOSED OPTIONS DETAIL ── */
+  .detail-toggle { display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; padding:10px 0 4px; }
+  .detail-toggle-label { font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); }
+  .detail-toggle-arrow { font-size:11px; color:var(--muted); transition:transform 0.2s; }
+  .detail-toggle.open .detail-toggle-arrow { transform:rotate(90deg); }
+  .detail-collapsible { display:none; }
+  .detail-collapsible.open { display:block; }
+  .detail-filter-bar { display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+  .detail-filter-bar label { font-size:11px; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase; }
+  .detail-filter-bar select, .detail-filter-bar input[type=text] { background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:'Space Mono',monospace; font-size:11px; padding:4px 8px; cursor:pointer; }
+  table.detail-table { width:100%; border-collapse:collapse; font-size:12px; min-width:900px; }
+  table.detail-table thead th { font-family:'Space Mono',monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--border); padding:8px 12px; text-align:right; white-space:nowrap; cursor:pointer; }
+  table.detail-table thead th:first-child, table.detail-table thead th:nth-child(2) { text-align:left; }
+  table.detail-table thead th:hover { color:var(--text); }
+  table.detail-table thead th.sort-asc::after { content:' ▲'; color:var(--blue); }
+  table.detail-table thead th.sort-desc::after { content:' ▼'; color:var(--blue); }
+  table.detail-table tbody tr { border-bottom:1px solid rgba(128,128,128,0.07); transition:background 0.1s; }
+  table.detail-table tbody tr:hover { background:var(--surface2); }
+  table.detail-table tbody td { padding:9px 12px; font-family:'Space Mono',monospace; font-size:11px; text-align:right; }
+  table.detail-table tbody td:first-child { text-align:left; font-size:12px; font-family:'Syne',sans-serif; font-weight:700; }
+  table.detail-table tbody td:nth-child(2) { text-align:left; }
+  table.detail-table tbody td.pos { color:var(--green); }
+  table.detail-table tbody td.neg { color:var(--red); }
+  table.detail-table tbody td.dim { color:var(--muted); }
+  .status-pill { display:inline-flex; align-items:center; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; font-family:'Space Mono',monospace; }
+  .status-pill.closed   { background:rgba(0,180,216,0.12); color:var(--blue); }
+  .status-pill.expired  { background:rgba(200,255,0,0.10); color:#c8ff00; }
+  .status-pill.assigned { background:rgba(251,146,60,0.14); color:#fb923c; }
+
   /* ── CLOSED MATRIX ── */
   .matrix-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:12px; color:var(--muted); }
   .matrix-toolbar select { background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:'Space Mono',monospace; font-size:11px; padding:4px 8px; cursor:pointer; }
@@ -621,6 +650,52 @@
           <table class="pnl-matrix">
             <thead id="closed-matrix-head"></thead>
             <tbody id="closed-matrix-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="detail-toggle" id="closed-detail-toggle" onclick="toggleClosedDetail()">
+        <span class="detail-toggle-arrow">▶</span>
+        <span class="detail-toggle-label">Closed Options — Trade Detail</span>
+      </div>
+      <div class="detail-collapsible" id="closed-detail-collapsible">
+        <div class="detail-filter-bar" style="margin-top:10px;">
+          <label>Ticker</label>
+          <input type="text" id="detail-filter-ticker" placeholder="e.g. ALAB" oninput="renderDetailTable()" style="width:90px;">
+          <label>Status</label>
+          <select id="detail-filter-status" onchange="renderDetailTable()">
+            <option value="all">All</option>
+            <option value="Closed">Closed</option>
+            <option value="Expired">Expired</option>
+            <option value="Assigned">Assigned</option>
+          </select>
+          <label>Type</label>
+          <select id="detail-filter-type" onchange="renderDetailTable()">
+            <option value="all">All</option>
+            <option value="P">Put</option>
+            <option value="C">Call</option>
+          </select>
+        </div>
+        <div class="table-wrapper">
+          <table class="detail-table">
+            <thead>
+              <tr>
+                <th onclick="sortDetail('ticker')">Ticker</th>
+                <th onclick="sortDetail('sym')">Contract</th>
+                <th onclick="sortDetail('strike')">Strike</th>
+                <th onclick="sortDetail('qty')">Qty</th>
+                <th onclick="sortDetail('openDate')">Open Date</th>
+                <th onclick="sortDetail('closeDate')">Close Date</th>
+                <th onclick="sortDetail('premium')">Premium Collected</th>
+                <th onclick="sortDetail('buyback')">Paid to Close</th>
+                <th onclick="sortDetail('profit')">Profit</th>
+                <th onclick="sortDetail('profitPct')">Profit %</th>
+                <th onclick="sortDetail('status')">Status</th>
+              </tr>
+            </thead>
+            <tbody id="detail-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -1487,6 +1562,9 @@ function renderDashboard(data, fileName) {
     });
   }
 
+  // ── CLOSED OPTIONS DETAIL TABLE ──
+  buildClosedDetailRows(data.tradesBySym);
+
   // ── CLOSED PIE CHARTS ──
   const GREEN_PAL = ['#00e676','#00b4d8','#c8ff00','#a78bfa','#ffd32a','#ff6b9d','#38bdf8','#fb923c','#34d399','#f472b6'];
   const RED_PAL   = ['#ff4757','#00b4d8','#ffd32a','#a78bfa','#c8ff00','#34d399','#fb923c','#f472b6','#38bdf8','#ff6b9d'];
@@ -1580,6 +1658,171 @@ function renderNavFlow(d) {
       €${d.navStart.toLocaleString(undefined,{minimumFractionDigits:2})} + €${d.navDeposits.toFixed(2)} + €${d.navMtM.toFixed(2)} + €${d.navIncome.toFixed(2)} − €${Math.abs(d.navCosts).toFixed(2)}${Math.abs(d.navFX)>0.001?' + €'+d.navFX.toFixed(2):''} = <strong style="color:var(--text);">€${d.navEnd.toLocaleString(undefined,{minimumFractionDigits:2})}</strong>
     </span>
     <span class="verify-badge ${ok?'ok':'warn'}">${verStr}</span>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CLOSED OPTIONS DETAIL TABLE
+// ═══════════════════════════════════════════════════════════════════
+window._closedDetailRows = [];
+window._detailSortKey = 'openDate';
+window._detailSortDir = 1;
+
+function buildClosedDetailRows(tradesBySym) {
+  const rows = [];
+  for (const [sym, trades] of Object.entries(tradesBySym || {})) {
+    const parsed = parseOptSym(sym);
+    if (!parsed) continue;
+    // Sort trades by date
+    const sorted = [...trades].sort((a,b) => (a.date||0) - (b.date||0));
+    // Separate open legs (negative qty = short sell) from close legs
+    let openLegs = [], closeLegs = [];
+    for (const t of sorted) {
+      if (t.qty < 0) openLegs.push(t);
+      else closeLegs.push(t);
+    }
+    if (!openLegs.length) continue;
+    // Group: one row per unique option (sym). Aggregate open/close.
+    const qty = Math.abs(openLegs.reduce((s,t)=>s+t.qty, 0));
+    const openDate = openLegs[0].date;
+    const closeDate = closeLegs.length ? closeLegs[closeLegs.length-1].date : null;
+    // Premium collected = sum of proceeds from open legs (positive = cash in)
+    const premium = openLegs.reduce((s,t) => s + Math.abs(t.proceeds), 0);
+    // Paid to close = sum of proceeds from close legs (negative = cash out, or 0 for expiry)
+    const buyback = closeLegs.reduce((s,t) => s + Math.abs(t.proceeds), 0);
+    const commTotal = sorted.reduce((s,t)=>s+(t.comm||0),0);
+    // Net profit
+    const profit = premium - buyback + commTotal;
+    const profitPct = premium > 0 ? (profit / premium) * 100 : null;
+    // Determine status from close leg codes
+    let status = 'Open';
+    if (closeLegs.length) {
+      const codes = closeLegs.map(t=>t.code||'').join(';').toUpperCase();
+      if (codes.includes('EP') || codes.includes('EX')) status = 'Expired';
+      else if (codes.includes('A;C') || (codes.includes('A') && !codes.includes('O'))) status = 'Assigned';
+      else status = 'Closed';
+    }
+    if (status === 'Open') continue; // Only show closed positions
+    rows.push({
+      ticker: parsed.ticker,
+      sym,
+      type: parsed.type,
+      strike: parsed.strike,
+      qty,
+      openDate,
+      closeDate,
+      premium,
+      buyback,
+      profit,
+      profitPct,
+      status
+    });
+  }
+  window._closedDetailRows = rows;
+  renderDetailTable();
+}
+
+function renderDetailTable() {
+  const tbody = document.getElementById('detail-tbody');
+  if (!tbody) return;
+  const tickerFilter = (document.getElementById('detail-filter-ticker')?.value||'').trim().toUpperCase();
+  const statusFilter = document.getElementById('detail-filter-status')?.value || 'all';
+  const typeFilter   = document.getElementById('detail-filter-type')?.value || 'all';
+  let rows = window._closedDetailRows.filter(r => {
+    if (tickerFilter && !r.ticker.toUpperCase().includes(tickerFilter)) return false;
+    if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+    if (typeFilter !== 'all' && r.type !== typeFilter) return false;
+    return true;
+  });
+  const key = window._detailSortKey;
+  const dir = window._detailSortDir;
+  rows.sort((a,b) => {
+    let av = a[key], bv = b[key];
+    // Date objects: compare by timestamp
+    if (av instanceof Date) av = av.getTime();
+    if (bv instanceof Date) bv = bv.getTime();
+    // null/undefined always last
+    if (av===null||av===undefined) return 1;
+    if (bv===null||bv===undefined) return -1;
+    if (typeof av === 'string') return dir * av.localeCompare(bv);
+    return dir * (av - bv);
+  });
+
+  // Update sort indicators
+  document.querySelectorAll('table.detail-table thead th').forEach(th => th.classList.remove('sort-asc','sort-desc'));
+  const thMap = {ticker:0,sym:1,strike:2,qty:3,openDate:4,closeDate:5,premium:6,buyback:7,profit:8,profitPct:9,status:10};
+  const ths = document.querySelectorAll('table.detail-table thead th');
+  if (ths[thMap[key]]) ths[thMap[key]].classList.add(dir===1?'sort-asc':'sort-desc');
+
+  tbody.innerHTML = '';
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:20px;">No closed option trades found.</td></tr>`;
+    return;
+  }
+
+  const fmtD = d => {
+    if (!d) return '—';
+    if (!(d instanceof Date)) return '—';
+    return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
+  };
+  const fmtAbs = v => `$${Math.abs(v).toFixed(2)}`;
+  // Format profit %: always show sign explicitly, never strip minus
+  const fmtPct = pct => {
+    if (pct === null || pct === undefined) return '—';
+    const sign = pct >= 0 ? '+' : '';
+    return `${sign}${pct.toFixed(1)}%`;
+  };
+
+  rows.forEach(r => {
+    const profCls = r.profit > 0 ? 'pos' : r.profit < 0 ? 'neg' : '';
+    const profSign = r.profit >= 0 ? '+' : '-';
+    const pctStr  = fmtPct(r.profitPct);
+    const statusCls = r.status.toLowerCase();
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escHtml(r.ticker)}</td>
+      <td class="dim">${escHtml(r.sym)}</td>
+      <td>$${r.strike%1===0?r.strike.toFixed(0):r.strike.toFixed(2)}</td>
+      <td>${r.qty}</td>
+      <td class="dim">${fmtD(r.openDate)}</td>
+      <td class="dim">${fmtD(r.closeDate)}</td>
+      <td class="pos">+${fmtAbs(r.premium)}</td>
+      <td class="${r.buyback>0?'neg':'dim'}">${r.buyback>0?'-'+fmtAbs(r.buyback):'$0.00'}</td>
+      <td class="${profCls}">${profSign}${fmtAbs(r.profit)}</td>
+      <td class="${profCls}">${pctStr}</td>
+      <td><span class="status-pill ${statusCls}">${r.status}</span></td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Summary footer row
+  const totalProfit  = rows.reduce((s,r)=>s+r.profit,0);
+  const totalPremium = rows.reduce((s,r)=>s+r.premium,0);
+  const avgPct = totalPremium > 0 ? (totalProfit/totalPremium*100) : null;
+  const totCls  = totalProfit>=0?'pos':'neg';
+  const totSign = totalProfit>=0?'+':'-';
+  const tfoot = document.createElement('tr');
+  tfoot.style.cssText = 'border-top:1px solid var(--border);font-weight:700;background:var(--surface2);';
+  tfoot.innerHTML = `
+    <td style="text-align:left;font-family:'Syne',sans-serif;font-size:12px;">Total (${rows.length})</td>
+    <td></td><td></td><td></td><td></td><td></td>
+    <td class="pos">+$${totalPremium.toFixed(2)}</td>
+    <td></td>
+    <td class="${totCls}">${totSign}$${Math.abs(totalProfit).toFixed(2)}</td>
+    <td class="${totCls}">${fmtPct(avgPct)}</td>
+    <td></td>`;
+  tbody.appendChild(tfoot);
+}
+
+function sortDetail(key) {
+  if (window._detailSortKey === key) window._detailSortDir *= -1;
+  else { window._detailSortKey = key; window._detailSortDir = 1; }
+  renderDetailTable();
+}
+
+function toggleClosedDetail() {
+  const toggle = document.getElementById('closed-detail-toggle');
+  const panel  = document.getElementById('closed-detail-collapsible');
+  toggle.classList.toggle('open');
+  panel.classList.toggle('open');
 }
 
 // ═══════════════════════════════════════════════════════════════════
