@@ -1669,54 +1669,72 @@ window._detailSortDir = 1;
 
 function buildClosedDetailRows(tradesBySym) {
   const rows = [];
+
   for (const [sym, trades] of Object.entries(tradesBySym || {})) {
     const parsed = parseOptSym(sym);
     if (!parsed) continue;
-    // Sort trades by date
-    const sorted = [...trades].sort((a,b) => (a.date||0) - (b.date||0));
-    // Separate open legs (negative qty = short sell) from close legs
-    let openLegs = [], closeLegs = [];
-    for (const t of sorted) {
-      if (t.qty < 0) openLegs.push(t);
-      else closeLegs.push(t);
-    }
-    if (!openLegs.length) continue;
-    // Group: one row per unique option (sym). Aggregate open/close.
-    const qty = Math.abs(openLegs.reduce((s,t)=>s+t.qty, 0));
-    const openDate = openLegs[0].date;
-    const closeDate = closeLegs.length ? closeLegs[closeLegs.length-1].date : null;
-    // Premium collected = sum of proceeds from open legs (positive = cash in)
-    const premium = openLegs.reduce((s,t) => s + Math.abs(t.proceeds), 0);
-    // Paid to close = sum of proceeds from close legs (negative = cash out, or 0 for expiry)
-    const buyback = closeLegs.reduce((s,t) => s + Math.abs(t.proceeds), 0);
-    const commTotal = sorted.reduce((s,t)=>s+(t.comm||0),0);
-    // Net profit
-    const profit = premium - buyback + commTotal;
-    const profitPct = premium > 0 ? (profit / premium) * 100 : null;
-    // Determine status from close leg codes
-    let status = 'Open';
-    if (closeLegs.length) {
-      const codes = closeLegs.map(t=>t.code||'').join(';').toUpperCase();
-      if (codes.includes('EP') || codes.includes('EX')) status = 'Expired';
-      else if (codes.includes('A;C') || (codes.includes('A') && !codes.includes('O'))) status = 'Assigned';
-      else status = 'Closed';
-    }
-    if (status === 'Open') continue; // Only show closed positions
-    rows.push({
-      ticker: parsed.ticker,
-      sym,
-      type: parsed.type,
-      strike: parsed.strike,
-      qty,
-      openDate,
-      closeDate,
-      premium,
-      buyback,
-      profit,
-      profitPct,
-      status
+
+    // Sort all trades chronologically
+    const sorted = [...trades].sort((a,b) => {
+      const da = a.date instanceof Date ? a.date.getTime() : (a.date ? new Date(a.date).getTime() : 0);
+      const db = b.date instanceof Date ? b.date.getTime() : (b.date ? new Date(b.date).getTime() : 0);
+      return da - db;
     });
+
+    // FIFO queue of open lots
+    const openQueue = [];
+
+    for (const t of sorted) {
+      const tDate = t.date instanceof Date ? t.date : (t.date ? new Date(t.date) : null);
+
+      if (t.qty < 0) {
+        // Opening trade: push lot into queue
+        const contracts = Math.abs(t.qty);
+        openQueue.push({
+          date: tDate,
+          pricePerContract: Math.abs(t.proceeds) / contracts,
+          commPerContract:  (t.comm || 0) / contracts,
+          remaining: contracts
+        });
+      } else if (t.qty > 0) {
+        // Closing trade: FIFO match
+        let toClose = t.qty;
+        const closeDate = tDate;
+        const closePricePerContract = t.qty > 0 ? Math.abs(t.proceeds) / t.qty : 0;
+        const closeCommPerContract  = t.qty > 0 ? (t.comm || 0) / t.qty : 0;
+
+        const code = (t.code || '').toUpperCase();
+        let status;
+        if (code.includes('EP') || code.includes('EX')) status = 'Expired';
+        else if (code.includes('A') && !code.includes('O')) status = 'Assigned';
+        else status = 'Closed';
+
+        while (toClose > 0 && openQueue.length > 0) {
+          const lot = openQueue[0];
+          const matched = Math.min(lot.remaining, toClose);
+
+          const premium   = matched * lot.pricePerContract;
+          const buyback   = matched * closePricePerContract;
+          const comm      = matched * lot.commPerContract + matched * closeCommPerContract;
+          const profit    = premium - buyback + comm;
+          const profitPct = premium > 0 ? (profit / premium) * 100 : null;
+
+          rows.push({
+            ticker: parsed.ticker, sym,
+            type: parsed.type, strike: parsed.strike,
+            qty: matched, openDate: lot.date, closeDate,
+            premium, buyback, profit, profitPct, status
+          });
+
+          lot.remaining -= matched;
+          toClose -= matched;
+          if (lot.remaining === 0) openQueue.shift();
+        }
+      }
+    }
+    // Remaining lots in queue are still open — not shown
   }
+
   window._closedDetailRows = rows;
   renderDetailTable();
 }
