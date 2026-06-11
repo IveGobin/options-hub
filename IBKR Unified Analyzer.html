@@ -502,10 +502,10 @@
   <div id="drop-zone">
     <div class="drop-icon">📊</div>
     <div class="drop-text">Drag CSV here or click</div>
-    <div class="drop-sub">IBKR Activity Statement export (.csv)</div>
+    <div class="drop-sub">IBKR Activity Statement export (.csv) — select multiple to merge</div>
     <button class="btn-upload" onclick="event.stopPropagation(); document.getElementById('file-input').click()">Choose file</button>
   </div>
-  <input type="file" id="file-input" accept=".csv" style="display:none">
+  <input type="file" id="file-input" accept=".csv" multiple style="display:none">
   <div class="drop-hint">
     Export via <strong>Reports → Activity → Custom → CSV</strong><br>
     Combines portfolio overview, stock P&L, options deep-dive &amp; expiry calendar.
@@ -1418,9 +1418,9 @@ const dropZone  = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); const f=e.dataTransfer.files[0]; if(f) loadFile(f); });
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); if(e.dataTransfer.files.length) loadFiles(e.dataTransfer.files); });
 dropZone.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', () => { if(fileInput.files[0]) loadFile(fileInput.files[0]); });
+fileInput.addEventListener('change', () => { if(fileInput.files.length) loadFiles(fileInput.files); });
 
 function resetApp() {
   document.getElementById('dashboard').style.display = 'none';
@@ -1428,20 +1428,157 @@ function resetApp() {
   fileInput.value = '';
 }
 
-function loadFile(file) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const sections = parseIBKR(e.target.result);
-      const stmtRows = getData(sections,'Statement');
-      if (!stmtRows.length) throw new Error('Not an IBKR Activity Statement CSV. Export via Reports → Activity → Custom → CSV.');
-      const data = processIBKR(sections);
-      renderDashboard(data, file.name);
-    } catch(err) {
-      document.getElementById('error-box').innerHTML = '<div class="error-msg">⚠ ' + escHtml(err.message) + '</div>';
+// Sections: newest-only (snapshots), concat (history), nav-sum (special merge)
+const NEWEST_ONLY_SECTIONS = new Set([
+  'Statement','Account Information',
+  'Net Asset Value',            // prior/current handled specially below
+  'Mark-to-Market Performance Summary',
+  'Open Positions',
+  'Net Stock Position Summary',
+  'Month & Year to Date Performance Summary',
+  'Forex Balances',
+  'Collateral for Customer Borrowing',
+  'Total P/L for Statement Period',
+]);
+// Change in NAV needs special merge: sum all fields except Starting/Ending Value
+const CHANGE_IN_NAV_SUM_FIELDS = new Set([
+  'Mark-to-Market','Deposits & Withdrawals','Dividends','Withholding Tax',
+  'Change in Dividend Accruals','Interest','Change in Interest Accruals',
+  'Other Fees','Commissions','Sales Tax','Other FX Translations'
+]);
+
+function mergeSections(allSections) {
+  // allSections: array of {sections, periodEnd}, sorted ascending by periodEnd
+  const oldest = allSections[0].sections;
+  const newest = allSections[allSections.length - 1].sections;
+  const merged = {};
+
+  // 1. Newest-only sections
+  NEWEST_ONLY_SECTIONS.forEach(sec => {
+    if (newest[sec]) merged[sec] = newest[sec];
+    else if (oldest[sec]) merged[sec] = oldest[sec];
+  });
+
+  // 2. Concatenated sections (history)
+  const allSecs = new Set();
+  allSections.forEach(({sections}) => Object.keys(sections).forEach(s => allSecs.add(s)));
+  allSecs.forEach(sec => {
+    if (NEWEST_ONLY_SECTIONS.has(sec)) return;
+    if (sec === 'Change in NAV') return; // handled below
+    merged[sec] = [];
+    let headerAdded = false;
+    allSections.forEach(({sections}) => {
+      if (!sections[sec]) return;
+      sections[sec].forEach(r => {
+        if (r[1] === 'Header') {
+          if (!headerAdded) { merged[sec].push(r); headerAdded = true; }
+        } else {
+          merged[sec].push(r);
+        }
+      });
+    });
+  });
+
+  // 3. Change in NAV: Starting Value from oldest, Ending Value from newest, rest summed
+  const navAccum = {};
+  allSections.forEach(({sections}) => {
+    (sections['Change in NAV'] || []).filter(r => r[1] === 'Data').forEach(r => {
+      const field = r[2], val = parseFloat(r[3]) || 0;
+      if (field === 'Starting Value' || field === 'Ending Value') return;
+      navAccum[field] = (navAccum[field] || 0) + val;
+    });
+  });
+  const oldestNavRows = (oldest['Change in NAV'] || []);
+  const newestNavRows = (newest['Change in NAV'] || []);
+  const getNavField = (rows, name) => { const r = rows.find(x => x[1]==='Data' && x[2]===name); return r ? r[3] : '0'; };
+  const startingValue = getNavField(oldestNavRows, 'Starting Value');
+  const endingValue   = getNavField(newestNavRows, 'Ending Value');
+  const mergedNavRows = [];
+  // Header from newest
+  const navHeader = (newest['Change in NAV'] || oldest['Change in NAV'] || []).find(r => r[1] === 'Header');
+  if (navHeader) mergedNavRows.push(navHeader);
+  mergedNavRows.push(['Change in NAV','Data','Starting Value', startingValue]);
+  Object.keys(navAccum).forEach(field => {
+    mergedNavRows.push(['Change in NAV','Data', field, String(navAccum[field])]);
+  });
+  mergedNavRows.push(['Change in NAV','Data','Ending Value', endingValue]);
+  merged['Change in NAV'] = mergedNavRows;
+
+  // 4. Net Asset Value: keep newest but fix Prior Total to be oldest's Starting Value
+  // (so NAV flow shows correct starting point across merged period)
+  if (merged['Net Asset Value']) {
+    const oldestStart = parseFloat(startingValue) || 0;
+    merged['Net Asset Value'] = merged['Net Asset Value'].map(r => {
+      if (r[1] === 'Data' && r[2] && r[2].trim() === 'Total') {
+        const row = r.slice();
+        row[3] = String(oldestStart); // prior total = true starting value
+        return row;
+      }
+      return r;
+    });
+
+    // 5. TWR: combine across all files by chain-linking: (1+r1)*(1+r2)*...-1
+    if (allSections.length > 1) {
+      let combinedTWR = 1;
+      allSections.forEach(({sections}) => {
+        const twrRow = (sections['Net Asset Value'] || []).find(r => r[1] === 'Data' && r[2] && r[2].includes('%'));
+        if (twrRow) {
+          const pct = parseFloat(twrRow[2]) / 100;
+          if (!isNaN(pct)) combinedTWR *= (1 + pct);
+        }
+      });
+      combinedTWR = (combinedTWR - 1) * 100;
+      // Replace or add TWR row in merged Net Asset Value
+      const twrIdx = merged['Net Asset Value'].findIndex(r => r[1] === 'Data' && r[2] && r[2].includes('%'));
+      const twrRowNew = ['Net Asset Value', 'Data', combinedTWR.toFixed(9) + '%'];
+      if (twrIdx !== -1) merged['Net Asset Value'][twrIdx] = twrRowNew;
+      else merged['Net Asset Value'].push(twrRowNew);
     }
-  };
-  reader.readAsText(file);
+  }
+
+  return merged;
+}
+
+function getPeriodEnd(sections) {
+  const stmtRows = getData(sections, 'Statement');
+  const periodRow = stmtRows.find(r => r[2] === 'Period');
+  if (!periodRow) return 0;
+  const parts = periodRow[3].split(' - ');
+  const d = new Date(parts[parts.length - 1].trim());
+  return isNaN(d) ? 0 : d.getTime();
+}
+
+function loadFiles(files) {
+  const fileArr = Array.from(files);
+  const results = new Array(fileArr.length);
+  let done = 0;
+  fileArr.forEach((file, idx) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      results[idx] = { text: e.target.result.replace(/^\uFEFF/, ''), name: file.name };
+      done++;
+      if (done === fileArr.length) {
+        try {
+          const parsed = results.map(r => ({ sections: parseIBKR(r.text), name: r.name }));
+          // Validate all are IBKR files
+          parsed.forEach(p => {
+            if (!getData(p.sections, 'Statement').length)
+              throw new Error(p.name + ' is not an IBKR Activity Statement CSV.');
+          });
+          // Sort by period end ascending
+          parsed.forEach(p => { p.periodEnd = getPeriodEnd(p.sections); });
+          parsed.sort((a, b) => a.periodEnd - b.periodEnd);
+          const merged = mergeSections(parsed);
+          const label = fileArr.length === 1 ? fileArr[0].name : fileArr.length + ' files merged';
+          const data = processIBKR(merged);
+          renderDashboard(data, label);
+        } catch(err) {
+          document.getElementById('error-box').innerHTML = '<div class="error-msg">⚠ ' + escHtml(err.message) + '</div>';
+        }
+      }
+    };
+    reader.readAsText(file);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
