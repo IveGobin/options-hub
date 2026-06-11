@@ -242,8 +242,8 @@ input[type="range"]::-moz-range-thumb {
             <span class="title">Put Coach</span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
-            <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV">📂 Import</label>
-            <input type="file" id="ibkr-file" accept=".csv" style="display:none;" onchange="importIBKR(this)">
+            <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
+            <input type="file" id="ibkr-file" accept=".csv" multiple style="display:none;" onchange="importIBKR(this)">
             <button class="btn-sm" onclick="toggleTheme()">Theme</button>
         </div>
     </div>
@@ -1068,100 +1068,129 @@ input[type="range"]::-moz-range-thumb {
     }
 
     function importIBKR(input) {
-        var file = input.files[0];
-        if (!file) return;
-        var reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                parseIBKR(e.target.result);
-            } catch(err) {
-                showImportBanner('⚠️ Could not parse file: ' + err.message, true);
-            }
-        };
-        reader.readAsText(file);
+        var files = Array.from(input.files);
+        if (!files.length) return;
+
+        var results = new Array(files.length);
+        var done = 0;
+
+        files.forEach(function(file, idx) {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                results[idx] = e.target.result.replace(/^\uFEFF/, '');
+                done++;
+                if (done === files.length) {
+                    try {
+                        var fileNames = files.map(function(f){ return f.name; }).join(' + ');
+                        parseIBKRMulti(results, fileNames);
+                    } catch(err) {
+                        showImportBanner('\u26a0\ufe0f Could not parse file(s): ' + err.message, true);
+                    }
+                }
+            };
+            reader.onerror = function() {
+                showImportBanner('\u26a0\ufe0f Error reading file: ' + file.name, true);
+            };
+            reader.readAsText(file);
+        });
     }
 
-    function showImportBanner(msg, isError) {
-        var banner = el('import-banner');
-        banner.style.display = 'flex';
-        banner.style.background = isError ? 'rgba(232,96,96,0.08)' : 'rgba(58,173,114,0.08)';
-        banner.style.borderColor = isError ? 'rgba(232,96,96,0.25)' : 'rgba(58,173,114,0.25)';
-        banner.querySelector('span').textContent = isError ? '⚠️' : '✅';
-        el('import-msg').textContent = msg;
-    }
-
-    function parseIBKR(csv) {
+    // Parse a single IBKR CSV and return extracted data object
+    function parseIBKRSingle(csv) {
         var lines = csv.split('\n').map(function(l) { return l.trim(); });
+        var out = { periodEnd: 0, nlvEUR: null, cashEUR: null, notionalUSD: 0, tickerMap: {}, dateMap: {} };
 
-        // 1. NET LIQUIDATION — "Net Asset Value,Data,Total,..."
-        //    columns: section,type,asset class,prior,current long,current short,current total,change
-        var nlvEUR = null;
+        // Period end date
         lines.forEach(function(line) {
-            if (line.startsWith('Net Asset Value,Data,Total,')) {
+            if (line.startsWith('Statement,Data,Period,')) {
                 var cols = splitCSV(line);
-                // current total = index 6
-                var val = parseFloat(cols[6]);
-                if (!isNaN(val)) nlvEUR = val;
+                var period = cols[3] || '';
+                var parts = period.split(' - ');
+                var endStr = parts[parts.length - 1].trim();
+                var d = new Date(endStr);
+                if (!isNaN(d)) out.periodEnd = d.getTime();
             }
         });
 
-        // 2. CASH (used as proxy for excess liq)
-        //    "Net Asset Value,Data,Cash ,..." current total = index 6
-        var cashEUR = null;
+        // NLV total (col[6] = current total)
+        lines.forEach(function(line) {
+            if (line.startsWith('Net Asset Value,Data,Total,')) {
+                var cols = splitCSV(line);
+                var val = parseFloat(cols[6]);
+                if (!isNaN(val)) out.nlvEUR = val;
+            }
+        });
+
+        // Cash (col[6] = current total)
         lines.forEach(function(line) {
             if (line.startsWith('Net Asset Value,Data,Cash')) {
                 var cols = splitCSV(line);
                 var val = parseFloat(cols[6]);
-                if (!isNaN(val)) cashEUR = val;
+                if (!isNaN(val)) out.cashEUR = val;
             }
         });
 
-        // 3. OPEN SHORT PUTS — notional = |quantity| * multiplier * strike (USD)
-        //    Also track per-ticker and per-date notional for concentration scores
-        var notionalUSD = 0;
-        var tickerMap = {};  // ticker -> notional
-        var dateMap   = {};  // expDate -> notional
+        // Open short puts notional
         lines.forEach(function(line) {
             if (!line.startsWith('Open Positions,Data,Summary,Equity and Index Options')) return;
             var cols = splitCSV(line);
             var symbol = cols[5] || '';
             var qty    = parseFloat(cols[6]);
             var mult   = parseFloat(cols[7]);
-            // Short put: qty < 0 and symbol ends with ' P'
             if (qty < 0 && symbol.trim().endsWith(' P')) {
                 var parts  = symbol.trim().split(' ');
-                // Format: TICKER DDMMMYY STRIKE P
                 var ticker  = parts[0];
                 var expDate = parts[1] || 'unknown';
                 var strike  = parseFloat(parts[parts.length - 2]);
                 if (!isNaN(strike) && !isNaN(mult)) {
                     var n = Math.abs(qty) * mult * strike;
-                    notionalUSD += n;
-                    tickerMap[ticker] = (tickerMap[ticker] || 0) + n;
-                    dateMap[expDate]  = (dateMap[expDate]  || 0) + n;
+                    out.notionalUSD += n;
+                    out.tickerMap[ticker] = (out.tickerMap[ticker] || 0) + n;
+                    out.dateMap[expDate]  = (out.dateMap[expDate]  || 0) + n;
                 }
             }
         });
 
-        // Compute concentration fractions (0=all in one, approaching 1=diversified)
+        return out;
+    }
+
+    // NLV/cash from newest file, notional summed across all files
+    function parseIBKRMulti(csvArray, fileNames) {
+        var parsed = csvArray.map(parseIBKRSingle);
+
+        // Sort by period end ascending — newest last
+        parsed.sort(function(a, b) { return a.periodEnd - b.periodEnd; });
+        var newest = parsed[parsed.length - 1];
+
+        var nlvEUR  = newest.nlvEUR;
+        var cashEUR = newest.cashEUR;
+
+        var notionalUSD = 0;
+        var tickerMap   = {};
+        var dateMap     = {};
+        parsed.forEach(function(p) {
+            notionalUSD += p.notionalUSD;
+            Object.keys(p.tickerMap).forEach(function(k) {
+                tickerMap[k] = (tickerMap[k] || 0) + p.tickerMap[k];
+            });
+            Object.keys(p.dateMap).forEach(function(k) {
+                dateMap[k] = (dateMap[k] || 0) + p.dateMap[k];
+            });
+        });
+
         if (notionalUSD > 0) {
             var maxTicker = Math.max.apply(null, Object.keys(tickerMap).map(function(k){ return tickerMap[k]; }));
             var maxDate   = Math.max.apply(null, Object.keys(dateMap).map(function(k){ return dateMap[k]; }));
-            gTickerConc = maxTicker / notionalUSD;
-            gDateConc   = maxDate   / notionalUSD;
-            gTickerMap  = tickerMap;
-            gDateMap    = dateMap;
+            gTickerConc  = maxTicker / notionalUSD;
+            gDateConc    = maxDate   / notionalUSD;
+            gTickerMap   = tickerMap;
+            gDateMap     = dateMap;
             gNotionalUSD = notionalUSD;
         } else {
-            gTickerConc = 0;
-            gDateConc   = 0;
-            gTickerMap  = {};
-            gDateMap    = {};
+            gTickerConc = 0; gDateConc = 0; gTickerMap = {}; gDateMap = {}; gNotionalUSD = 0;
         }
 
-        // Apply what we found
         var messages = [];
-        var fxRate = getFX();
 
         if (nlvEUR !== null) {
             el('nlv').value = Math.round(nlvEUR);
@@ -1177,11 +1206,9 @@ input[type="range"]::-moz-range-thumb {
         }
 
         if (notionalUSD > 0) {
-            var orangeNotional = EXP[currentMode].o * (nlvEUR || 0);
             el('not-slider').max = Math.max(el('not-slider').max, Math.round(notionalUSD * 1.5));
             el('not-slider').value = Math.round(notionalUSD);
             setCur('not', 'USD');
-            // Find biggest ticker and date for display
             var bigTicker = Object.keys(tickerMap).reduce(function(a,b){ return tickerMap[a]>tickerMap[b]?a:b; });
             var bigDate   = Object.keys(dateMap).reduce(function(a,b){ return dateMap[a]>dateMap[b]?a:b; });
             messages.push('Put notional: ' + fmt(notionalUSD) + ' USD');
@@ -1190,12 +1217,22 @@ input[type="range"]::-moz-range-thumb {
         }
 
         if (messages.length === 0) {
-            showImportBanner('No recognisable data found in this file', true);
+            showImportBanner('No recognisable data found in file(s): ' + (fileNames || 'unknown'), true);
             return;
         }
 
         render();
-        showImportBanner(messages.join(' · '), false);
+        var prefix = fileNames ? '\ud83d\udcc1 ' + fileNames + ' \u00b7 ' : '';
+        showImportBanner(prefix + messages.join(' \u00b7 '), false);
+    }
+
+    function showImportBanner(msg, isError) {
+        var banner = el('import-banner');
+        banner.style.display = 'flex';
+        banner.style.background = isError ? 'rgba(232,96,96,0.08)' : 'rgba(58,173,114,0.08)';
+        banner.style.borderColor = isError ? 'rgba(232,96,96,0.25)' : 'rgba(58,173,114,0.25)';
+        banner.querySelector('span').textContent = isError ? '⚠️' : '✅';
+        el('import-msg').textContent = msg;
     }
 
     // Simple CSV split that handles quoted fields
