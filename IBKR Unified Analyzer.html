@@ -1536,6 +1536,73 @@ function mergeSections(allSections) {
     }
   }
 
+  // 6. Period string: combine oldest start with newest end
+  if (merged['Statement']) {
+    const oldestStmt = (oldest['Statement'] || []);
+    const newestStmt = (newest['Statement'] || []);
+    const getStmtField = (rows, name) => {
+      const r = rows.find(x => x[1] === 'Data' && x[2] === name);
+      return r ? r[3] : '';
+    };
+    const oldPeriod = getStmtField(oldestStmt, 'Period');
+    const newPeriod = getStmtField(newestStmt, 'Period');
+    if (oldPeriod && newPeriod && oldPeriod !== newPeriod) {
+      const oldStart = oldPeriod.split(' - ')[0].trim();
+      const newEnd   = newPeriod.split(' - ').pop().trim();
+      const combinedPeriod = oldStart + ' - ' + newEnd;
+      merged['Statement'] = merged['Statement'].map(r => {
+        if (r[1] === 'Data' && r[2] === 'Period') {
+          const row = r.slice();
+          row[3] = combinedPeriod;
+          return row;
+        }
+        return r;
+      });
+    }
+  }
+
+  // 7. Cash Report: Starting Cash from oldest, Ending Cash/Settled from newest, rest summed
+  if (allSections.length > 1) {
+    const CASH_ENDING_FIELDS = new Set(['Ending Cash', 'Ending Settled Cash', 'Ending Collateral Value']);
+    const CASH_STARTING_FIELDS = new Set(['Starting Cash']);
+    // Collect all currencies across all files
+    const currencies = new Set();
+    allSections.forEach(({sections}) => {
+      (sections['Cash Report'] || []).filter(r => r[1] === 'Data').forEach(r => currencies.add(r[3]));
+    });
+    const cashHeader = (newest['Cash Report'] || oldest['Cash Report'] || []).find(r => r[1] === 'Header');
+    const mergedCash = cashHeader ? [cashHeader] : [];
+    currencies.forEach(ccy => {
+      const getField = (sections, field) => {
+        const rows = (sections['Cash Report'] || []).filter(r => r[1] === 'Data' && r[2] === field && r[3] === ccy);
+        return rows.length ? parseFloat(rows[0][4]) || 0 : null;
+      };
+      // Starting Cash: from oldest file that has it
+      const startVal = getField(oldest, 'Starting Cash');
+      if (startVal !== null) mergedCash.push(['Cash Report','Data','Starting Cash', ccy, String(startVal), String(startVal), '0']);
+
+      // Sum all non-starting, non-ending fields
+      const sumFields = {};
+      allSections.forEach(({sections}) => {
+        (sections['Cash Report'] || []).filter(r => r[1] === 'Data' && r[3] === ccy).forEach(r => {
+          const field = r[2];
+          if (CASH_STARTING_FIELDS.has(field) || CASH_ENDING_FIELDS.has(field)) return;
+          sumFields[field] = (sumFields[field] || 0) + (parseFloat(r[4]) || 0);
+        });
+      });
+      Object.keys(sumFields).forEach(field => {
+        mergedCash.push(['Cash Report','Data', field, ccy, String(sumFields[field]), String(sumFields[field]), '0']);
+      });
+
+      // Ending Cash: from newest file that has it
+      CASH_ENDING_FIELDS.forEach(field => {
+        const endVal = getField(newest, field);
+        if (endVal !== null) mergedCash.push(['Cash Report','Data', field, ccy, String(endVal), String(endVal), '0']);
+      });
+    });
+    merged['Cash Report'] = mergedCash;
+  }
+
   return merged;
 }
 
