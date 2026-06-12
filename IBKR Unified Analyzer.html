@@ -577,6 +577,20 @@
       <div class="nav-verify" id="nav-verify"></div>
     </div>
 
+    <div class="section">
+      <div class="section-title">Portfolio growth by month</div>
+      <div class="chart-card">
+        <div class="chart-legend" style="margin-bottom:10px;">
+          <span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--blue);"></span>Portfolio value (estimated)</span>
+          <span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--muted);"></span>Net deposits (cost basis)</span>
+        </div>
+        <div style="position:relative;height:280px;"><canvas id="navGrowthChart"></canvas></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:10px;">
+          Estimate: monthly net deposits are exact (from Deposits &amp; Withdrawals). The portfolio value line distributes the period's total mark-to-market P/L across months in proportion to that month's trading activity, then is calibrated to reconcile exactly with the statement's starting and ending NAV.
+        </div>
+      </div>
+    </div>
+
   </div><!-- /tab-portfolio -->
 
   <!-- ───── TAB: OPEN OPTIONS ───── -->
@@ -1651,7 +1665,7 @@ function loadFiles(files) {
 // ═══════════════════════════════════════════════════════════════════
 // RENDER DASHBOARD
 // ═══════════════════════════════════════════════════════════════════
-let _chartOpt = null, _chartStock = null, _chartPortPie = null, _chartIncomePie = null, _chartExp = null, _chartExpTotal = null;
+let _chartOpt = null, _chartStock = null, _chartPortPie = null, _chartIncomePie = null, _chartExp = null, _chartExpTotal = null, _chartNavGrowth = null;
 
 function renderDashboard(data, fileName) {
   document.getElementById('drop-screen').style.display = 'none';
@@ -1717,6 +1731,7 @@ function renderDashboard(data, fileName) {
 
   // ── NAV FLOW ──
   renderNavFlow(data);
+  renderNavGrowthChart(data);
 
   // ── OPEN OPTIONS TABLE ──
   renderOpenTable(data.openPositions);
@@ -1864,6 +1879,153 @@ function renderNavFlow(d) {
       €${d.navStart.toLocaleString(undefined,{minimumFractionDigits:2})} + €${d.navDeposits.toFixed(2)} + €${d.navMtM.toFixed(2)} + €${d.navIncome.toFixed(2)} − €${Math.abs(d.navCosts).toFixed(2)}${Math.abs(d.navFX)>0.001?' + €'+d.navFX.toFixed(2):''} = <strong style="color:var(--text);">€${d.navEnd.toLocaleString(undefined,{minimumFractionDigits:2})}</strong>
     </span>
     <span class="verify-badge ${ok?'ok':'warn'}">${verStr}</span>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PORTFOLIO GROWTH BY MONTH (estimated NAV trajectory)
+// ═══════════════════════════════════════════════════════════════════
+function renderNavGrowthChart(data) {
+  const sections = data._sections || {};
+
+  // 1. Build ordered list of months covering the period (deposits + trades dates)
+  const monthKey = (dateStr) => (dateStr || '').substring(0,7); // YYYY-MM
+  const allMonths = new Set();
+
+  const depCols = { date: 3, amount: 5 };
+  const deposits = getData(sections,'Deposits & Withdrawals');
+  deposits.forEach(r => { const m = monthKey(r[depCols.date]); if (m) allMonths.add(m); });
+
+  const tCols  = colMap(sections,'Trades');
+  const itDateT  = ci(tCols,'date/time',6);
+  const itMtmT   = ci(tCols,'mtm p/l',14);
+  const trades = (sections['Trades']||[]).filter(r => r[1]==='Data' && r[2]==='Order');
+  trades.forEach(r => { const m = monthKey((r[itDateT]||'').substring(0,10)); if (m) allMonths.add(m); });
+
+  if (allMonths.size === 0) return; // nothing to chart
+
+  let sortedMonths = Array.from(allMonths).sort();
+
+  // 2. Net deposits per month
+  const depByMonth = {};
+  deposits.forEach(r => {
+    const m = monthKey(r[depCols.date]);
+    if (!m) return;
+    depByMonth[m] = (depByMonth[m]||0) + num(r[depCols.amount]);
+  });
+
+  // 3. Trading activity weight per month (abs MTM P/L as proxy for activity)
+  const mtmWeightByMonth = {};
+  let totalWeight = 0;
+  trades.forEach(r => {
+    const m = monthKey((r[itDateT]||'').substring(0,10));
+    if (!m) return;
+    const w = Math.abs(num(r[itMtmT]));
+    mtmWeightByMonth[m] = (mtmWeightByMonth[m]||0) + w;
+    totalWeight += w;
+  });
+
+  // 4. Distribute total MtM P/L (navMtM, EUR) across months by weight
+  const totalMtM = data.navMtM || 0;
+  const mtmShareByMonth = {};
+  sortedMonths.forEach(m => {
+    const w = mtmWeightByMonth[m] || 0;
+    mtmShareByMonth[m] = totalWeight > 0 ? totalMtM * (w / totalWeight) : 0;
+  });
+  // If no trades at all, spread evenly
+  if (totalWeight === 0 && sortedMonths.length > 0) {
+    sortedMonths.forEach(m => { mtmShareByMonth[m] = totalMtM / sortedMonths.length; });
+  }
+
+  // 5. Distribute income (dividends + interest) and costs (commissions + fees) evenly across months
+  const otherTotal = data.navIncome + data.navCosts + data.navFX;
+  const otherPerMonth = sortedMonths.length > 0 ? otherTotal / sortedMonths.length : 0;
+
+  // 6. Build cumulative series
+  let cumDeposits = 0, cumPL = 0;
+  const labels = [], navSeries = [], depSeries = [];
+  sortedMonths.forEach(m => {
+    cumDeposits += (depByMonth[m] || 0);
+    cumPL += (mtmShareByMonth[m] || 0) + otherPerMonth;
+    const navValue = data.navStart + cumDeposits + cumPL;
+    const d = new Date(m + '-01');
+    labels.push(d.toLocaleString('en-US', {month:'short', year:'2-digit'}));
+    navSeries.push(navValue);
+    depSeries.push(data.navStart + cumDeposits);
+  });
+
+  // 7. Calibrate last point to exactly equal navEnd
+  if (navSeries.length > 0) {
+    const diff = data.navEnd - navSeries[navSeries.length - 1];
+    if (Math.abs(diff) > 0.005) {
+      // Distribute the residual proportionally across months weighted by their existing PL share,
+      // so the cumulative curve still ends exactly at navEnd while staying smooth.
+      let runningAdj = 0;
+      for (let i = 0; i < navSeries.length; i++) {
+        const w = sortedMonths.length > 0 ? (i+1) / sortedMonths.length : 1;
+        runningAdj = diff * w;
+        navSeries[i] += runningAdj;
+      }
+    }
+  }
+
+  // 8. Render chart
+  if (_chartNavGrowth) { _chartNavGrowth.destroy(); _chartNavGrowth = null; }
+  const canvas = document.getElementById('navGrowthChart');
+  if (!canvas) return;
+  const muted = getComputedStyle(document.body).getPropertyValue('--muted');
+  const border = getComputedStyle(document.body).getPropertyValue('--border');
+  const blue = getComputedStyle(document.body).getPropertyValue('--blue');
+
+  _chartNavGrowth = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Portfolio value (estimated)',
+          data: navSeries,
+          borderColor: blue,
+          backgroundColor: 'rgba(0,180,216,0.12)',
+          fill: true,
+          tension: 0.25,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          borderWidth: 2
+        },
+        {
+          label: 'Net deposits (cost basis)',
+          data: depSeries,
+          borderColor: muted,
+          backgroundColor: 'transparent',
+          borderDash: [5,4],
+          fill: false,
+          tension: 0.25,
+          pointRadius: 0,
+          borderWidth: 1.5
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ' ' + ctx.dataset.label + ': €' + ctx.parsed.y.toLocaleString(undefined,{maximumFractionDigits:0})
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: border }, ticks: { color: muted, font: { size: 11 } } },
+        y: {
+          grid: { color: border },
+          ticks: { color: muted, font: { size: 11 }, callback: v => '€' + v.toLocaleString(undefined,{maximumFractionDigits:0}) }
+        }
+      }
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
