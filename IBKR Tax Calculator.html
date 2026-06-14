@@ -216,7 +216,7 @@
     </div>
   </div>
 
-  <input type="file" id="fi-csv" accept=".csv"  style="display:none">
+  <input type="file" id="fi-csv" accept=".csv" multiple style="display:none">
   <input type="file" id="fi-fx"  accept=".json" style="display:none">
 
   <button class="start-btn" id="start-btn" onclick="runAnalysis()"></button>
@@ -288,7 +288,7 @@ const STRINGS = {
     dropTitle:      'Tax <span>Calculator</span>',
     dbTitleSpan:    'Tax Calculator',
     csvZoneTitle:   'IBKR Activity Statement',
-    csvZoneSub:     'Drag &amp; drop or click<br>.csv export from IBKR',
+    csvZoneSub:     'Drag &amp; drop or click<br>.csv export(s) from IBKR — select multiple to merge',
     csvBtn:         'Choose CSV',
     fxZoneTitle:    'HNB Exchange Rate USD',
     fxZoneSub:      'Drag &amp; drop or click<br>.json — for EUR conversion',
@@ -348,7 +348,7 @@ const STRINGS = {
     dropTitle:      'Porezni <span>Kalkulator</span>',
     dbTitleSpan:    'Porezni Kalkulator',
     csvZoneTitle:   'IBKR izvod aktivnosti',
-    csvZoneSub:     'Povuci &amp; pusti ili klikni<br>.csv izvoz iz IBKR-a',
+    csvZoneSub:     'Povuci &amp; pusti ili klikni<br>.csv izvoz(i) iz IBKR-a — odaberi više za spajanje',
     csvBtn:         'Odaberi CSV',
     fxZoneTitle:    'HNB Tečajna lista USD',
     fxZoneSub:      'Povuci &amp; pusti ili klikni<br>.json — za konverziju u EUR',
@@ -411,7 +411,7 @@ const EXEMPT_DAYS = 730;
 
 // ── STATE ──────────────────────────────────────────────────────
 let _lang         = 'en';
-let _csvFile      = null;
+let _csvFiles     = [];
 let _fxFile       = null;
 let _fxRates      = null;
 let _fxLastDate   = null;
@@ -740,17 +740,18 @@ const fiFx  = document.getElementById('fi-fx');
 function setupDrop(zone, onFile) {
   zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
   zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); const f=e.dataTransfer.files[0]; if(f) onFile(f); });
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); const f=e.dataTransfer.files; if(f && f.length) onFile(f); });
   zone.addEventListener('click', () => { if(zone===dzCsv) fiCsv.click(); else fiFx.click(); });
 }
-setupDrop(dzCsv, setCsvFile);
+setupDrop(dzCsv, setCsvFiles);
 setupDrop(dzFx,  setFxFile);
-fiCsv.addEventListener('change', () => { if(fiCsv.files[0]) setCsvFile(fiCsv.files[0]); });
+fiCsv.addEventListener('change', () => { if(fiCsv.files.length) setCsvFiles(fiCsv.files); });
 fiFx.addEventListener('change',  () => { if(fiFx.files[0])  setFxFile(fiFx.files[0]); });
 
-function setCsvFile(file) {
-  _csvFile = file;
-  document.getElementById('csv-fname').textContent = file.name;
+function setCsvFiles(files) {
+  _csvFiles = Array.from(files);
+  const names = _csvFiles.map(f => f.name).join(', ');
+  document.getElementById('csv-fname').textContent = _csvFiles.length === 1 ? _csvFiles[0].name : _csvFiles.length + ' files: ' + names;
   dzCsv.classList.add('loaded');
   const b = document.getElementById('badge-csv');
   b.textContent = T('badgeOk'); b.className = 'dz-badge ok';
@@ -767,11 +768,11 @@ function setFxFile(file) {
 }
 
 function checkReady() {
-  document.getElementById('start-btn').classList.toggle('ready', _csvFile !== null);
+  document.getElementById('start-btn').classList.toggle('ready', _csvFiles.length > 0);
 }
 
 function resetApp() {
-  _csvFile = _fxFile = _fxRates = _lastData = null;
+  _csvFiles = []; _fxFile = _fxRates = _lastData = null;
   _fxLastDate = _fxLastKey = _fxLastRate = null;
   document.getElementById('dashboard').style.display   = 'none';
   document.getElementById('drop-screen').style.display = 'flex';
@@ -798,16 +799,21 @@ function resetApp() {
 }
 
 function runAnalysis() {
-  if (!_csvFile) return;
+  if (!_csvFiles.length) return;
   document.getElementById('error-box').innerHTML = '';
-  const readCsv = new Promise(res => { const r=new FileReader(); r.onload=e=>res(e.target.result); r.readAsText(_csvFile); });
+  const readCsvs = Promise.all(_csvFiles.map(f => new Promise(res => { const r=new FileReader(); r.onload=e=>res(e.target.result); r.readAsText(f); })));
   const readFx  = _fxFile && !_fxAutoLoaded
     ? new Promise(res => { const r=new FileReader(); r.onload=e=>res(e.target.result); r.readAsText(_fxFile); })
     : Promise.resolve(null);
-  Promise.all([readCsv, readFx]).then(([csvText, fxText]) => {
+  Promise.all([readCsvs, readFx]).then(([csvTexts, fxText]) => {
     try {
-      const sections = parseIBKR(csvText);
-      if (!getData(sections,'Statement').length) throw new Error(T('errNotIBKR'));
+      const parsedFiles = csvTexts.map((text, idx) => {
+        const sections = parseIBKR(text);
+        if (!getData(sections,'Statement').length) throw new Error(_csvFiles[idx].name + ': ' + T('errNotIBKR'));
+        return { sections, periodEnd: getPeriodEnd(sections) };
+      });
+      parsedFiles.sort((a,b) => a.periodEnd - b.periodEnd);
+      const sections = parsedFiles.length === 1 ? parsedFiles[0].sections : mergeTaxSections(parsedFiles);
       if (fxText) loadFxData(JSON.parse(fxText));
       _lastData = processTax(sections);
       renderDashboard(_lastData);
@@ -815,6 +821,67 @@ function runAnalysis() {
       document.getElementById('error-box').innerHTML = '<div class="error-msg">⚠ ' + escH(err.message) + '</div>';
     }
   });
+}
+
+// ── MULTI-FILE MERGE ───────────────────────────────────────────
+// Combine sections from multiple IBKR exports for tax purposes.
+// 'Trades' rows are concatenated and deduplicated (overlapping periods
+// often re-export the same trades); 'Open Positions' comes from the
+// newest file (current state); 'Statement' period spans oldest→newest.
+function getPeriodEnd(sections) {
+  const stmtRows = getData(sections, 'Statement');
+  const periodRow = stmtRows.find(r => r[2] === 'Period');
+  if (!periodRow) return 0;
+  const parts = periodRow[3].split(' - ');
+  const d = new Date(parts[parts.length - 1].trim());
+  return isNaN(d) ? 0 : d.getTime();
+}
+
+function mergeTaxSections(parsedFiles) {
+  const oldest = parsedFiles[0].sections;
+  const newest = parsedFiles[parsedFiles.length - 1].sections;
+  const merged = {};
+
+  // Open Positions: newest file reflects current state
+  if (newest['Open Positions']) merged['Open Positions'] = newest['Open Positions'];
+  else if (oldest['Open Positions']) merged['Open Positions'] = oldest['Open Positions'];
+
+  // Trades: concatenate across files, dedupe identical rows
+  const seen = new Set();
+  const mergedTrades = [];
+  let tradesHeaderAdded = false;
+  parsedFiles.forEach(({sections}) => {
+    (sections['Trades']||[]).forEach(r => {
+      if (r[1] === 'Header') {
+        if (!tradesHeaderAdded) { mergedTrades.push(r); tradesHeaderAdded = true; }
+        return;
+      }
+      const key = r.join('\u0001');
+      if (seen.has(key)) return;
+      seen.add(key);
+      mergedTrades.push(r);
+    });
+  });
+  merged['Trades'] = mergedTrades;
+
+  // Statement: combine period from oldest start to newest end
+  const oldestStmt = oldest['Statement'] || [];
+  const newestStmt = newest['Statement'] || [];
+  const getStmtField = (rows, name) => { const r = rows.find(x => x[1]==='Data' && x[2]===name); return r ? r[3] : ''; };
+  const oldPeriod = getStmtField(oldestStmt, 'Period');
+  const newPeriod = getStmtField(newestStmt, 'Period');
+  merged['Statement'] = newestStmt.map(r => {
+    if (r[1] === 'Data' && r[2] === 'Period' && oldPeriod && newPeriod) {
+      const oldStart = oldPeriod.split(' - ')[0].trim();
+      const newEnd   = newPeriod.split(' - ').pop().trim();
+      const row = r.slice();
+      row[3] = oldStart + (oldPeriod !== newPeriod ? ' - ' + newEnd : '');
+      return row;
+    }
+    return r;
+  });
+
+  return merged;
 }
 
 // ── AUTO-LOAD FX ───────────────────────────────────────────────
@@ -835,7 +902,7 @@ window.addEventListener('DOMContentLoaded', () => {
 function renderDashboard(data) {
   document.getElementById('drop-screen').style.display = 'none';
   document.getElementById('dashboard').style.display   = 'block';
-  document.getElementById('chip-csv').textContent = _csvFile.name;
+  document.getElementById('chip-csv').textContent = _csvFiles.length === 1 ? _csvFiles[0].name : _csvFiles.length + ' files merged';
   if (_fxFile || _fxAutoLoaded) {
     document.getElementById('chip-fx').textContent = _fxAutoLoaded ? 'tecajna_lista_usd.json' : (_fxFile ? _fxFile.name : '');
     document.getElementById('chip-fx-wrap').style.display = 'flex';
