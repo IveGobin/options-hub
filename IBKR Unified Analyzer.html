@@ -602,7 +602,7 @@
         <table class="open-table">
           <thead><tr>
             <th>Ticker</th><th>Type</th><th>Exp. date</th><th>Strike</th><th>Qty</th>
-            <th>Premium collected</th><th>Per share</th><th>Cost to close</th>
+            <th>Premium collected</th><th>Per share</th><th>80%</th><th>Cost to close</th>
             <th>Unrealized P&amp;L</th><th>% Kept</th><th>Exposure</th><th>Days left</th>
           </tr></thead>
           <tbody id="open-tbody"></tbody>
@@ -2222,7 +2222,7 @@ function toggleClosedDetail() {
 function renderOpenTable(openPositions) {
   const tbody = document.getElementById('open-tbody');
   tbody.innerHTML = '';
-  if (!openPositions.length) { tbody.innerHTML = `<tr><td colspan="12" class="empty-state">No open option positions found.</td></tr>`; return; }
+  if (!openPositions.length) { tbody.innerHTML = `<tr><td colspan="13" class="empty-state">No open option positions found.</td></tr>`; return; }
   const sorted = [...openPositions].sort((a,b) => a.expiry - b.expiry);
   sorted.forEach(p => {
     const dl = daysLeft(new Date(p.expiry));
@@ -2240,6 +2240,7 @@ function renderOpenTable(openPositions) {
       <td class="mono">${p.qty}</td>
       <td><span class="premium-pill">+$${p.premiumCollected.toFixed(2)}</span></td>
       <td class="mono" style="color:var(--accent);font-size:11px;">$${(p.premiumCollected/(p.qty*100)).toFixed(2)}/sh</td>
+      <td class="mono" style="color:var(--green);font-weight:600;">$${((p.premiumCollected/(p.qty*100))*0.8).toFixed(2)}</td>
       <td class="mono" style="color:var(--muted)">$${p.currentValue.toFixed(2)}</td>
       <td class="${unrCls}">${unrStr}</td>
       <td>${keptEl}</td>
@@ -2259,7 +2260,7 @@ function renderOpenTable(openPositions) {
     <td colspan="5" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">TOTAL</td>
     <td><span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$${totPrem.toFixed(2)}</span></td>
     <td></td><td></td>
-    <td class="${totUnrPL>=0?'unr-pos':'unr-neg'}">${totUnrPL>=0?'+':'−'}$${Math.abs(totUnrPL).toFixed(2)}</td>
+    <td></td>
     <td>${totKept!==null?`<span class="kept-pill ${totKCls}">${totKept.toFixed(1)}%</span>`:'—'}</td>
     <td class="mono">${fmtK(totExp)}</td><td></td>`;
   tbody.appendChild(tfoot);
