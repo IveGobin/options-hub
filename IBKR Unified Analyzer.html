@@ -2240,7 +2240,7 @@ function renderOpenTable(openPositions) {
       <td class="mono">${p.qty}</td>
       <td><span class="premium-pill">+$${p.premiumCollected.toFixed(2)}</span></td>
       <td class="mono" style="color:var(--accent);font-size:11px;">$${(p.premiumCollected/(p.qty*100)).toFixed(2)}/sh</td>
-      <td class="mono" style="color:var(--green);font-weight:600;">$${((p.premiumCollected/(p.qty*100))*0.8).toFixed(2)}</td>
+      <td class="mono" style="color:var(--green);font-weight:600;">$${((p.premiumCollected/(p.qty*100))*0.2).toFixed(2)}</td>
       <td class="mono" style="color:var(--muted)">$${p.currentValue.toFixed(2)}</td>
       <td class="${unrCls}">${unrStr}</td>
       <td>${keptEl}</td>
