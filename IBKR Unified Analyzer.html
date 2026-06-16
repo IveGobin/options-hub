@@ -1453,6 +1453,7 @@ const NEWEST_ONLY_SECTIONS = new Set([
   'Forex Balances',
   'Collateral for Customer Borrowing',
   'Total P/L for Statement Period',
+  'Realized & Unrealized Performance Summary', // cumulative snapshot, not incremental — would duplicate symbols if concatenated across files
 ]);
 // Change in NAV needs special merge: sum all fields except Starting/Ending Value
 const CHANGE_IN_NAV_SUM_FIELDS = new Set([
@@ -1685,7 +1686,7 @@ function renderDashboard(data, fileName) {
   const kpis = [
     { label:'Portfolio NAV',    value:'€'+data.navEnd.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}), cls:'blue',  bar:'blue' },
     { label:'Realized options', value:fmt(data.closedNet), cls:data.closedNet>=0?'pos':'neg', bar:data.closedNet>=0?'green':'red' },
-    { label:'Unrealized P&L',   value:fmt(data.openUnrPL), cls:data.openUnrPL>=0?'pos':'neg', bar:data.openUnrPL>=0?'green':'red' },
+    { label:'Unrealized P&L',   value:fmt(data.openUnrPL + data.stockUnrNet), cls:(data.openUnrPL + data.stockUnrNet)>=0?'pos':'neg', bar:(data.openUnrPL + data.stockUnrNet)>=0?'green':'red' },
     { label:'Premium at risk',  value:fmt(data.openPremiumCollected), cls:'neutral', bar:'accent' },
     { label:'Put exposure',     value:fmtK(data.totalExposure), cls:'neutral', bar:'yellow' },
     { label:'Stock P&L',        value:fmt(data.stockTotal), cls:data.stockTotal>=0?'pos':'neg', bar:data.stockTotal>=0?'green':'red' },
@@ -2254,13 +2255,16 @@ function renderOpenTable(openPositions) {
   const totCtC   = openPositions.reduce((s,p)=>s+p.currentValue,0);
   const totKept  = totPrem>0 ? ((totPrem-totCtC)/totPrem)*100 : null;
   const totKCls  = totKept===null?'':totKept>=75?'high':totKept>=40?'mid':totKept>=0?'low':'neg';
+  const totUnrCls = totUnrPL>0?'unr-pos':totUnrPL<0?'unr-neg':'unr-neu';
+  const totUnrStr = totUnrPL>0?`+$${totUnrPL.toFixed(2)}`:totUnrPL<0?`-$${Math.abs(totUnrPL).toFixed(2)}`:'$0';
   const tfoot = document.createElement('tr');
   tfoot.style.borderTop = '1px solid var(--border)';
   tfoot.innerHTML = `
     <td colspan="5" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">TOTAL</td>
     <td><span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$${totPrem.toFixed(2)}</span></td>
     <td></td><td></td>
-    <td></td>
+    <td class="mono" style="color:var(--muted)">$${totCtC.toFixed(2)}</td>
+    <td class="${totUnrCls}">${totUnrStr}</td>
     <td>${totKept!==null?`<span class="kept-pill ${totKCls}">${totKept.toFixed(1)}%</span>`:'—'}</td>
     <td class="mono">${fmtK(totExp)}</td><td></td>`;
   tbody.appendChild(tfoot);
