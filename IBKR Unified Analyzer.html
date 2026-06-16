@@ -972,6 +972,24 @@ function fmtAbs(val) { const v = Math.abs(num(val)); return v >= 1000 ? '$' + (v
 function fmtSign(val,ccy) { const v=num(val); if(v===0) return (ccy||'€')+'0.00'; return (v>0?'+':'−')+(ccy||'€')+Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+// Builds a <tr> for a table's total/summary footer row from an explicit list of cells.
+// Each cell is either a string (rendered as-is) or { html, colspan, class }.
+// Using this instead of hand-counting <td></td> placeholders prevents cells from
+// silently shifting into the wrong column when a table's column count changes.
+function buildTotalRow(cells, rowStyle) {
+  const tr = document.createElement('tr');
+  if (rowStyle) tr.style.cssText = rowStyle;
+  tr.innerHTML = cells.map(c => {
+    if (typeof c === 'string') return `<td>${c}</td>`;
+    const attrs = [];
+    if (c.colspan) attrs.push(`colspan="${c.colspan}"`);
+    if (c.class)   attrs.push(`class="${c.class}"`);
+    if (c.style)   attrs.push(`style="${c.style}"`);
+    return `<td${attrs.length?' '+attrs.join(' '):''}>${c.html||''}</td>`;
+  }).join('');
+  return tr;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // CSV PARSER
 // ═══════════════════════════════════════════════════════════════════
@@ -2187,20 +2205,23 @@ function renderDetailTable() {
   const avgPct = totalPremium > 0 ? (totalProfit/totalPremium*100) : null;
   const totCls  = totalProfit>=0?'pos':'neg';
   const totSign = totalProfit>=0?'+':'-';
-  const tfoot = document.createElement('tr');
-  tfoot.style.cssText = 'border-top:1px solid var(--border);font-weight:700;background:var(--surface2);';
   const totalOpenFee  = rows.reduce((s,r)=>s+r.openFee,0);
   const totalCloseFee = rows.reduce((s,r)=>s+r.closeFee,0);
-  tfoot.innerHTML = `
-    <td style="text-align:left;font-family:'Syne',sans-serif;font-size:12px;">Total (${rows.length})</td>
-    <td></td><td></td><td></td><td></td><td></td>
-    <td class="pos">+$${totalPremium.toFixed(2)}</td>
-    <td></td>
-    <td class="neg">-$${Math.abs(totalOpenFee).toFixed(2)}</td>
-    <td class="neg">-$${Math.abs(totalCloseFee).toFixed(2)}</td>
-    <td class="${totCls}">${totSign}$${Math.abs(totalProfit).toFixed(2)}</td>
-    <td class="${totCls}">${fmtPct(avgPct)}</td>
-    <td></td>`;
+  const tfoot = buildTotalRow([
+    { html:`Total (${rows.length})`, style:"text-align:left;font-family:'Syne',sans-serif;font-size:12px;" }, // Ticker
+    '',                                                                                                        // Contract
+    '',                                                                                                        // Strike
+    '',                                                                                                        // Qty
+    '',                                                                                                        // Open Date
+    '',                                                                                                        // Close Date
+    { html:`+$${totalPremium.toFixed(2)}`, class:'pos' },                                                      // Premium Collected
+    '',                                                                                                        // Paid to Close
+    { html:`-$${Math.abs(totalOpenFee).toFixed(2)}`, class:'neg' },                                            // Open Fee
+    { html:`-$${Math.abs(totalCloseFee).toFixed(2)}`, class:'neg' },                                           // Close Fee
+    { html:`${totSign}$${Math.abs(totalProfit).toFixed(2)}`, class:totCls },                                   // Profit
+    { html:fmtPct(avgPct), class:totCls },                                                                     // Profit %
+    '',                                                                                                        // Status
+  ], 'border-top:1px solid var(--border);font-weight:700;background:var(--surface2);');
   tbody.appendChild(tfoot);
 }
 
@@ -2257,16 +2278,17 @@ function renderOpenTable(openPositions) {
   const totKCls  = totKept===null?'':totKept>=75?'high':totKept>=40?'mid':totKept>=0?'low':'neg';
   const totUnrCls = totUnrPL>0?'unr-pos':totUnrPL<0?'unr-neg':'unr-neu';
   const totUnrStr = totUnrPL>0?`+$${totUnrPL.toFixed(2)}`:totUnrPL<0?`-$${Math.abs(totUnrPL).toFixed(2)}`:'$0';
-  const tfoot = document.createElement('tr');
-  tfoot.style.borderTop = '1px solid var(--border)';
-  tfoot.innerHTML = `
-    <td colspan="5" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">TOTAL</td>
-    <td><span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$${totPrem.toFixed(2)}</span></td>
-    <td></td><td></td>
-    <td class="mono" style="color:var(--muted)">$${totCtC.toFixed(2)}</td>
-    <td class="${totUnrCls}">${totUnrStr}</td>
-    <td>${totKept!==null?`<span class="kept-pill ${totKCls}">${totKept.toFixed(1)}%</span>`:'—'}</td>
-    <td class="mono">${fmtK(totExp)}</td><td></td>`;
+  const tfoot = buildTotalRow([
+    { html:'TOTAL', colspan:5, style:'color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;' }, // Ticker, Type, Exp.date, Strike, Qty
+    { html:`<span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$${totPrem.toFixed(2)}</span>` },            // Premium collected
+    '',                                                                                                                                        // Per share
+    '',                                                                                                                                        // 80%
+    { html:`$${totCtC.toFixed(2)}`, class:'mono', style:'color:var(--muted)' },                                                                // Cost to close
+    { html:totUnrStr, class:totUnrCls },                                                                                                       // Unrealized P&L
+    { html:totKept!==null?`<span class="kept-pill ${totKCls}">${totKept.toFixed(1)}%</span>`:'—' },                                            // % Kept
+    { html:fmtK(totExp), class:'mono' },                                                                                                        // Exposure
+    '',                                                                                                                                        // Days left
+  ], 'border-top:1px solid var(--border);');
   tbody.appendChild(tfoot);
 }
 
@@ -2297,15 +2319,15 @@ function renderAssignedTable(assignedPositions) {
   const totContr = assignedPositions.reduce((s,p)=>s+p.qtyContracts,0);
   const totShares= assignedPositions.reduce((s,p)=>s+p.sharesAssigned,0);
   const totPlCls = totPL>=0?'unr-pos':'unr-neg';
-  const tfoot = document.createElement('tr');
-  tfoot.style.borderTop = '1px solid var(--border)';
-  tfoot.innerHTML = `
-    <td colspan="3" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">TOTAL</td>
-    <td class="mono">${totShares} sh <span style="color:var(--muted);font-size:11px;">(${totContr} contracts)</span></td>
-    <td></td>
-    <td><span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$${totPrem.toFixed(2)}</span></td>
-    <td></td><td></td>
-    <td class="${totPlCls}">${totPL>=0?'+':'−'}$${Math.abs(totPL).toFixed(2)}</td>`;
+  const tfoot = buildTotalRow([
+    { html:'TOTAL', colspan:3, style:'color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;' }, // Ticker, Type, Strike
+    { html:`${totShares} sh <span style="color:var(--muted);font-size:11px;">(${totContr} contracts)</span>`, class:'mono' },                // Qty assigned
+    '',                                                                                                                                       // Assign date
+    { html:`<span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$${totPrem.toFixed(2)}</span>` },           // Premium collected
+    '',                                                                                                                                       // Per share
+    '',                                                                                                                                       // Effective cost
+    { html:`${totPL>=0?'+':'−'}$${Math.abs(totPL).toFixed(2)}`, class:totPlCls },                                                             // P&L at assign
+  ], 'border-top:1px solid var(--border);');
   tbody.appendChild(tfoot);
 }
 
