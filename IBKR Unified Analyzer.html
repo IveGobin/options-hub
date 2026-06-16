@@ -2300,10 +2300,12 @@ function renderAssignedTable(assignedPositions) {
   const tfoot = document.createElement('tr');
   tfoot.style.borderTop = '1px solid var(--border)';
   tfoot.innerHTML = `
-    <td colspan="4" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">TOTAL</td>
+    <td colspan="3" style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;">TOTAL</td>
+    <td class="mono">${totShares} sh <span style="color:var(--muted);font-size:11px;">(${totContr} contracts)</span></td>
     <td></td>
     <td><span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$${totPrem.toFixed(2)}</span></td>
-    <td></td><td></td><td></td>`;
+    <td></td><td></td>
+    <td class="${totPlCls}">${totPL>=0?'+':'−'}$${Math.abs(totPL).toFixed(2)}</td>`;
   tbody.appendChild(tfoot);
 }
 
