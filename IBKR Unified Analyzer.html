@@ -1163,6 +1163,12 @@ function processIBKR(sections) {
     const d = r[itDate] ? r[itDate].substring(0,10) : null;
     if (d && (!optTradeMap[sym].lastDate || d > optTradeMap[sym].lastDate)) optTradeMap[sym].lastDate = d;
     if (d && (!optTradeMap[sym].firstDate || d < optTradeMap[sym].firstDate)) optTradeMap[sym].firstDate = d;
+    // Track the last CLOSING trade date (code 'C', expiry 'Ep', or any trade with realized P/L)
+    // so partial-close realized P/L can be attributed to the month it was actually realized.
+    const _codes = (r[itCode]||'').split(';').map(c=>c.trim());
+    if (d && (_codes.includes('C') || _codes.includes('Ep') || num(r[itRealPL]) !== 0)) {
+      if (!optTradeMap[sym].lastCloseDate || d > optTradeMap[sym].lastCloseDate) optTradeMap[sym].lastCloseDate = d;
+    }
     optTradeMap[sym].netQty += num(r[itQty]);
     optTradeMap[sym]._trades.push({ d, qty: num(r[itQty]) });
   }
@@ -1229,12 +1235,9 @@ function processIBKR(sections) {
     }
   }
   const closedOptions = optionsRU.filter(o => o.unrTotal === 0);
-  const closedWin  = closedOptions.filter(o => o.tradePL > 0).length;
-  const closedLose = closedOptions.filter(o => o.tradePL < 0).length;
-  const closedWinRate = closedOptions.length > 0 ? (closedWin/closedOptions.length*100).toFixed(0) : 0;
-  const closedGross = closedOptions.reduce((s,o) => s + (o.tradePL>0?o.tradePL:0), 0);
-  const closedLoss  = closedOptions.reduce((s,o) => s + (o.tradePL<0?o.tradePL:0), 0);
-  const closedNet   = closedOptions.reduce((s,o) => s + o.tradePL, 0);
+  // NOTE: win/loss/gross/net stats are computed further below from `closedPL`
+  // (IBKR Trades SubTotal realized P/L) so they include partial closes and
+  // always match the Closed P&L matrix.
 
   // ── OPEN OPTION POSITIONS (Options Analyzer-style enriched) ──
   const openRaw = getData(sections,'Open Positions')
@@ -1306,6 +1309,18 @@ function processIBKR(sections) {
     const isPartial = num(r[itQty]) !== 0;
     closedPL.push({ sym, ticker:parsed.ticker, expiry:parsed.expiry, strike:parsed.strike, type:parsed.type, realTotal, closeDate, monthKey, monthLabel, isPartial });
   }
+
+  // ── CLOSED STATS (from realized P/L — same source as the matrix) ──
+  // Includes partially-closed positions (e.g. a partial buyback of a short put),
+  // whose realized loss/gain was previously ignored because the position still
+  // had unrealized P/L. Assigned premium (realized P/L = 0) counts as neither
+  // win nor loss — it rolls into the stock's cost basis, matching IBKR.
+  const closedWin  = closedPL.filter(c => c.realTotal > 0).length;
+  const closedLose = closedPL.filter(c => c.realTotal < 0).length;
+  const closedWinRate = (closedWin+closedLose) > 0 ? (closedWin/(closedWin+closedLose)*100).toFixed(0) : 0;
+  const closedGross = closedPL.reduce((s,c) => s + (c.realTotal>0?c.realTotal:0), 0);
+  const closedLoss  = closedPL.reduce((s,c) => s + (c.realTotal<0?c.realTotal:0), 0);
+  const closedNet   = closedPL.reduce((s,c) => s + c.realTotal, 0);
 
   // ── CASH ──
   const cashEUR = getData(sections,'Cash Report').filter(r=>r[3]==='EUR');
@@ -1397,8 +1412,22 @@ function processIBKR(sections) {
     if (isOpen) { const m = o.sym.match(/(\d{2})([A-Z]{3})(\d{2})/); key = m ? m[2]+"'"+m[3] : 'Other'; }
     else { const t = optTradeMap[o.sym.trim()]; if (t&&t.lastDate) { const d=new Date(t.lastDate+'T00:00:00'); key=MONTH_ABBR[d.getMonth()]+"'"+String(d.getFullYear()).slice(2); } else { const m=o.sym.match(/(\d{2})([A-Z]{3})(\d{2})/); key=m?m[2]+"'"+m[3]:'Other'; } }
     if (!optByMonth[key]) optByMonth[key] = { closedPL:0, premiumCollected:0, count:0 };
-    if (isOpen) optByMonth[key].premiumCollected += openOptPosMap[o.sym.trim()];
-    else        optByMonth[key].closedPL += o.tradePL;
+    if (isOpen) {
+      optByMonth[key].premiumCollected += openOptPosMap[o.sym.trim()];
+      // Partially-closed open position: realized P/L already booked (e.g. partial
+      // buyback) belongs to the month it was realized, not the expiry month.
+      const t = optTradeMap[o.sym.trim()];
+      if (t && t.subRealPL) {
+        const cd = t.lastCloseDate || t.lastDate;
+        if (cd) {
+          const d2 = new Date(cd+'T00:00:00');
+          const ck = MONTH_ABBR[d2.getMonth()]+"'"+String(d2.getFullYear()).slice(2);
+          if (!optByMonth[ck]) optByMonth[ck] = { closedPL:0, premiumCollected:0, count:0 };
+          optByMonth[ck].closedPL += t.subRealPL;
+        }
+      }
+    }
+    else optByMonth[key].closedPL += o.tradePL;
     optByMonth[key].count++;
   }
   const monthOrder = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
@@ -1786,7 +1815,7 @@ function renderDashboard(data, fileName) {
   // ── CLOSED STAT BADGES ──
   const statRow = document.getElementById('closed-stat-row');
   statRow.innerHTML = '';
-  if (data.closedOptions.length) {
+  if (data.closedPL.length) {
     [
       { label:'Win rate',   value:(data.closedWinRate||0)+'%', cls: data.closedWinRate>=50?'pos':'neg' },
       { label:'Wins',       value:data.closedWin,              cls:'pos' },
