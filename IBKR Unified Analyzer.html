@@ -799,7 +799,7 @@
       <div class="section-title" id="ua-section-stock-pl">Stock P&amp;L by position</div>
       <div class="chart-card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-          <div class="chart-card-title" style="margin:0;" id="ua-chart-stock-sub">Realized vs unrealized</div>
+          <div class="chart-card-title" style="margin:0;" id="ua-chart-stock-sub">Realized vs unrealized (EUR, base currency)</div>
           <div class="chart-legend">
             <span class="chart-legend-item"><span class="chart-legend-dot" style="background:#00c853;"></span><span id="ua-chart-stock-real">Realized</span></span>
             <span class="chart-legend-item"><span class="chart-legend-dot" style="background:#00b4d8;"></span><span id="ua-chart-stock-unr">Unrealized</span></span>
@@ -1142,6 +1142,7 @@ function processIBKR(sections) {
   const itComm   = ci(tCols,'comm/fee',11);
   const itRealPL = ci(tCols,'realized p/l',13);
   const itCode   = ci(tCols,'code',15);
+  const itBasis  = ci(tCols,'basis',12);
 
   const tradesRaw = getData(sections,'Trades').filter(r => r[2]==='Order' && r[3]==='Equity and Index Options');
   const tradeSubTotals = (sections['Trades']||[]).filter(r => r[1]==='SubTotal' && r[3]==='Equity and Index Options');
@@ -1372,7 +1373,15 @@ function processIBKR(sections) {
 
   // ── INSTRUMENT INFO ──
   const instrMap = {};
-  for (const r of getData(sections,'Financial Instrument Information')) instrMap[r[2]] = r[3];
+  for (const r of getData(sections,'Financial Instrument Information')) {
+    // Columns: [2]=Asset Category, [3]=Symbol(s), [4]=Description.
+    // Symbol may contain multiple listings ("COPA, COPAl") — map each.
+    const desc = (r[4]||'').trim();
+    for (const s of (r[3]||'').split(',')) {
+      const key = s.trim();
+      if (key) { instrMap[key] = desc; const nk = normSym(key); if (nk && nk !== key) instrMap[nk] = desc; }
+    }
+  }
 
   // ── STOCK SUMMARY ──
   const stockRealNet = stocks.reduce((s,o)=>s+o.realTotal,0);
@@ -1434,6 +1443,51 @@ function processIBKR(sections) {
   const keyToNum = k => { const mo=monthOrder.indexOf(k.substring(0,3)); const yr=parseInt(k.substring(4))||0; return yr*12+mo; };
   const sortedMonths = Object.keys(optByMonth).sort((a,b)=>keyToNum(a)-keyToNum(b));
 
+  // ── STOCKS TABLE (trades-based, instrument currency) ──
+  // Realized P/L: sum of Trades SubTotal "Realized P/L" per symbol across all loaded
+  // files (full history — includes symbols closed in older statements that no longer
+  // appear in the newest R&U summary). Values are in the instrument's currency.
+  const stockSubStats = {};
+  for (const r of (sections['Trades']||[]).filter(r2 => r2[1]==='SubTotal' && r2[3]==='Stocks')) {
+    const key = normSym((r[itSym]||'').trim());
+    if (!key) continue;
+    if (!stockSubStats[key]) stockSubStats[key] = { ccy:(r[4]||'').trim()||'USD', netQty:0, basis:0, realPL:0 };
+    stockSubStats[key].netQty += num(r[itQty]);
+    stockSubStats[key].basis  += num(r[itBasis]);
+    stockSubStats[key].realPL += num(r[itRealPL]);
+  }
+  // Current qty & price from Mark-to-Market Performance Summary (newest file, instrument ccy)
+  const mtmStockMap = {};
+  for (const r of getData(sections,'Mark-to-Market Performance Summary').filter(r2=>r2[2]==='Stocks')) {
+    mtmStockMap[normSym((r[3]||'').trim())] = { curQty:num(r[5]), curPrice:num(r[7]) };
+  }
+  // Unrealized P/L: prefer Open Positions "Unrealized P/L" (authoritative — IBKR adjusts
+  // cost basis for premium of assigned options, which raw trade Basis does not reflect).
+  // Fallback: MTM current qty × current price − Σ SubTotal Basis.
+  const openStockUnrMap = {};
+  for (const p of openStocks) openStockUnrMap[p.normSym||p.sym] = p.unrPL;
+  const stocksTable = [];
+  const _stSeen = new Set();
+  for (const key of Object.keys(stockSubStats)) {
+    const st = stockSubStats[key];
+    let unr = 0;
+    if (openStockUnrMap.hasOwnProperty(key)) unr = openStockUnrMap[key];
+    else if (Math.abs(st.netQty) > 1e-6) {
+      const m = mtmStockMap[key];
+      if (m) unr = m.curQty*m.curPrice - st.basis;
+    }
+    stocksTable.push({ sym:key, ccy:st.ccy, realTotal:+st.realPL.toFixed(2), unrTotal:+unr.toFixed(2), total:+(st.realPL+unr).toFixed(2), eurBase:false });
+    _stSeen.add(key);
+  }
+  // Symbols with P&L in R&U but no trades in the loaded files (e.g. transferred in):
+  // fall back to base-currency (EUR) values and flag them.
+  for (const s of stocks) {
+    const key = normSym((s.sym||'').trim());
+    if (_stSeen.has(key)) continue;
+    stocksTable.push({ sym:key, ccy:'EUR', realTotal:s.realTotal, unrTotal:s.unrTotal, total:s.total, eurBase:true });
+  }
+  stocksTable.sort((a,b)=>b.total-a.total);
+
   // ── STOCK TRADE MAP (for transaction drill-down) ──
   const stockTradeMap = {};
   for (const r of getData(sections,'Trades').filter(r2 => r2[2]==='Order' && r2[3]==='Stocks')) {
@@ -1459,7 +1513,7 @@ function processIBKR(sections) {
     stocks, openStocks, openPositions, assignedPositions,
     closedPL, closedOptions, closedWin, closedLose, closedWinRate, closedGross, closedLoss, closedNet,
     openPremiumCollected, openBuybackCost, openUnrPL, totalExposure,
-    stockRealNet, stockUnrNet, stockTotal,
+    stockRealNet, stockUnrNet, stockTotal, stocksTable,
     endCashEUR, endCashUSD, settledCashEUR, settledCashUSD, collateralUSD, collateralBase, totalCashEUR,
     fxEURcash, fxUSDinEUR, eurUsdRate, deposits, totalDeposits, totalFees, totalComm,
     divEur, intEur, accrualEur, whtVal, lendVal, totalInflow, totalDeductions,
@@ -1733,10 +1787,10 @@ function renderDashboard(data, fileName) {
   const kpis = [
     { label:'Portfolio NAV',    value:'€'+data.navEnd.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}), cls:'blue',  bar:'blue' },
     { label:'Realized options', value:fmt(data.closedNet), cls:data.closedNet>=0?'pos':'neg', bar:data.closedNet>=0?'green':'red' },
-    { label:'Unrealized P&L',   value:fmt(data.openUnrPL + data.stockUnrNet), cls:(data.openUnrPL + data.stockUnrNet)>=0?'pos':'neg', bar:(data.openUnrPL + data.stockUnrNet)>=0?'green':'red' },
+    { label:'Unrealized P&L',   value:fmt(data.openUnrPL + data.stockUnrNet * data.eurUsdRate), cls:(data.openUnrPL + data.stockUnrNet * data.eurUsdRate)>=0?'pos':'neg', bar:(data.openUnrPL + data.stockUnrNet * data.eurUsdRate)>=0?'green':'red' },
     { label:'Premium at risk',  value:fmt(data.openPremiumCollected), cls:'neutral', bar:'accent' },
     { label:'Put exposure',     value:fmtK(data.totalExposure), cls:'neutral', bar:'yellow' },
-    { label:'Stock P&L',        value:fmt(data.stockTotal), cls:data.stockTotal>=0?'pos':'neg', bar:data.stockTotal>=0?'green':'red' },
+    { label:'Stock P&L',        value:fmtEur(data.stockTotal), cls:data.stockTotal>=0?'pos':'neg', bar:data.stockTotal>=0?'green':'red' },
     { label:'Cash (EUR equiv)', value:'€'+data.totalCashEUR.toLocaleString(undefined,{minimumFractionDigits:0}), cls:'neutral', bar:'blue' },
     { label:'Win rate',         value:(data.closedWinRate||0)+'%', cls:data.closedWinRate>=50?'pos':'neg', bar:data.closedWinRate>=50?'green':'red' },
   ];
@@ -1766,7 +1820,7 @@ function renderDashboard(data, fileName) {
     { label:'Organic P&L', val:(data.organicPL>=0?'+':'')+'€'+Math.abs(data.organicPL).toLocaleString(undefined,{minimumFractionDigits:2}), color:data.organicPL>=0?'var(--green)':'var(--red)', sub:'trading gains' },
     { label:'Cash deposited', val:'+€'+data.totalDeposits.toLocaleString(undefined,{minimumFractionDigits:2}), color:'var(--blue)', sub:`${data.deposits.length} transfers` },
     { label:'Options income', val:(data.closedNet>=0?'+':'')+'$'+Math.abs(data.closedNet).toLocaleString(undefined,{minimumFractionDigits:2}), color:data.closedNet>=0?'var(--green)':'var(--red)', sub:`${data.closedOptions.length} closed` },
-    { label:'Stock P&L', val:(data.stockTotal>=0?'+':'')+'$'+Math.abs(data.stockTotal).toLocaleString(undefined,{minimumFractionDigits:2}), color:data.stockTotal>=0?'var(--green)':'var(--red)', sub:'realized + unr.' },
+    { label:'Stock P&L', val:(data.stockTotal>=0?'+':'')+'€'+Math.abs(data.stockTotal).toLocaleString(undefined,{minimumFractionDigits:2}), color:data.stockTotal>=0?'var(--green)':'var(--red)', sub:'realized + unr.' },
     { label:'Commissions', val:'€'+Math.abs(data.totalComm).toLocaleString(undefined,{minimumFractionDigits:2}), color:'var(--red)', sub:'total paid' },
     { label:'Cash on account', val:'€'+data.totalCashEUR.toLocaleString(undefined,{minimumFractionDigits:0}), color:'var(--text)', sub:'EUR+USD equiv.', wide:true },
   ];
@@ -2701,10 +2755,10 @@ function renderStocksTable(data) {
   }
 
   tbody.innerHTML = '';
-  data.stocks.forEach(s => {
+  (data.stocksTable || data.stocks).forEach(s => {
     const op  = openStockMap[s.sym];
-    const ccy = op ? op.ccy : 'USD';
-    const cs  = ccy === 'EUR' ? '€' : '$';
+    const ccy = s.ccy || (op ? op.ccy : 'USD');
+    const cs  = s.eurBase ? '€' : (ccy === 'EUR' ? '€' : '$');
     const qty = op ? op.qty.toLocaleString() : '<span style="color:var(--muted)">sold</span>';
     const costP = op ? cs + op.costPrice.toFixed(2) : '—';
     const lastP = op ? cs + op.closePrice.toFixed(2) : '—';
@@ -2721,7 +2775,7 @@ function renderStocksTable(data) {
     tr.innerHTML = `
       <td>${escHtml(s.sym)}</td>
       <td style="text-align:left;color:var(--muted);font-family:'Syne',sans-serif;font-size:12px;">${escHtml(data.instrMap[s.sym]||'')}</td>
-      <td class="neu">${ccy}</td>
+      <td class="neu">${s.eurBase ? ccy+' <span style="color:var(--muted)" title="No trades in loaded files — values from R&U summary in base currency (EUR)">*</span>' : ccy}</td>
       <td class="neu">${qty}</td>
       <td class="neu">${costP}</td>
       <td class="neu">${lastP}</td>
@@ -2760,7 +2814,7 @@ function renderStocksTable(data) {
           <div class="stock-tx-title">Transaction history — ${escHtml(s.sym)} (${trades.length} trade${trades.length !== 1 ? 's' : ''})</div>
           <table class="tx-table">
             <thead><tr>
-              <th>Date</th><th>Qty</th><th>Price</th><th>Proceeds</th><th>Commission</th><th>Realized P&L</th><th>Code</th>
+              <th>Date</th><th>Qty</th><th>Price</th><th>Proceeds</th><th>Commission</th><th>Realized P&L (${ccy})</th><th>Code</th>
             </tr></thead>
             <tbody>${txRows}</tbody>
           </table>
@@ -2779,14 +2833,20 @@ function renderStocksTable(data) {
     tbody.appendChild(txRow);
   });
 
-  const totR = data.stockRealNet, totU = data.stockUnrNet, totT = data.stockTotal;
+  // TOTAL: rows are in mixed currencies — sum as EUR equivalent using the statement's FX rate
+  const _rate = data.eurUsdRate > 0 ? data.eurUsdRate : 1;
+  const toEur = (v, row) => (row.eurBase || row.ccy === 'EUR') ? v : v / _rate;
+  const rowsArr = data.stocksTable || data.stocks;
+  const totR = rowsArr.reduce((a,r)=>a+toEur(r.realTotal,r),0);
+  const totU = rowsArr.reduce((a,r)=>a+toEur(r.unrTotal,r),0);
+  const totT = rowsArr.reduce((a,r)=>a+toEur(r.total,r),0);
   const summaryRow = document.createElement('tr');
   summaryRow.className = 'summary-row';
   summaryRow.innerHTML = `
-    <td colspan="7">TOTAL</td>
-    <td class="${totR >= 0 ? 'pos' : 'neg'}">${(totR >= 0 ? '+' : '−')}$${Math.abs(totR).toFixed(2)}</td>
-    <td class="${totU >= 0 ? 'pos' : 'neg'}">${(totU >= 0 ? '+' : '−')}$${Math.abs(totU).toFixed(2)}</td>
-    <td class="${totT >= 0 ? 'pos' : 'neg'}">${(totT >= 0 ? '+' : '−')}$${Math.abs(totT).toFixed(2)}</td>`;
+    <td colspan="7">TOTAL (€ equiv. @ ${_rate.toFixed(4)})</td>
+    <td class="${totR >= 0 ? 'pos' : 'neg'}">${(totR >= 0 ? '+' : '−')}€${Math.abs(totR).toFixed(2)}</td>
+    <td class="${totU >= 0 ? 'pos' : 'neg'}">${(totU >= 0 ? '+' : '−')}€${Math.abs(totU).toFixed(2)}</td>
+    <td class="${totT >= 0 ? 'pos' : 'neg'}">${(totT >= 0 ? '+' : '−')}€${Math.abs(totT).toFixed(2)}</td>`;
   tbody.appendChild(summaryRow);
 }
 
@@ -2999,7 +3059,7 @@ function renderCharts(data) {
       { label:'Realized', data:stockSorted.map(s=>+s.realTotal.toFixed(2)), backgroundColor:stockSorted.map(s=>s.realTotal>=0?'#00c853':'#ff4757'), borderRadius:4, barPercentage:0.55 },
       { label:'Unrealized', data:stockSorted.map(s=>+s.unrTotal.toFixed(2)), backgroundColor:stockSorted.map(s=>s.unrTotal>=0?'rgba(0,180,216,0.65)':'rgba(255,71,87,0.5)'), borderRadius:4, barPercentage:0.55 }
     ]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{ticks:{color:'#5a6473',font:{size:12,family:'Space Mono'}},grid:{display:false}}, y:{ticks:{color:'#5a6473',font:{size:11},callback:v=>'$'+v.toLocaleString()},grid:{color:'rgba(128,128,128,0.07)'},border:{display:false}} } }
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{ticks:{color:'#5a6473',font:{size:12,family:'Space Mono'}},grid:{display:false}}, y:{ticks:{color:'#5a6473',font:{size:11},callback:v=>'€'+v.toLocaleString()},grid:{color:'rgba(128,128,128,0.07)'},border:{display:false}} } }
   });
 
   // ── CUMULATIVE OPTIONS EXPOSURE BY MONTH ──
@@ -3570,6 +3630,9 @@ function renderPortfolioPies(data) {
   const ncRows=getData({}, 'Change in NAV'); // already in nc
   let putPL=0,callPL=0;
   data.closedOptions.forEach(o=>{ if(o.sym.trim().endsWith(' P')) putPL+=o.tradePL; else if(o.sym.trim().endsWith(' C')) callPL+=o.tradePL; });
+  // put/call P&L is USD (from Trades); everything else here is EUR — convert to EUR so the pie is one currency
+  const _r = data.eurUsdRate > 0 ? data.eurUsdRate : 1;
+  putPL = putPL / _r; callPL = callPL / _r;
   const incData=[],incLabels=[],incColors=[];
   if(putPL>0)          { incData.push(+putPL.toFixed(2));          incLabels.push('Put selling');  incColors.push('#00c853'); }
   if(callPL>0)         { incData.push(+callPL.toFixed(2));         incLabels.push('Call selling'); incColors.push('#00b4d8'); }
@@ -3578,7 +3641,7 @@ function renderPortfolioPies(data) {
   if(data.intEur>0)    { incData.push(+data.intEur.toFixed(2));    incLabels.push('Interest');     incColors.push('#fb923c'); }
   if(data.lendVal>0)   { incData.push(+data.lendVal.toFixed(2));   incLabels.push('Lending');      incColors.push('#c8ff00'); }
   const incTotal=incData.reduce((a,b)=>a+b,0);
-  _chartIncomePie = new Chart(document.getElementById('incomePieChart'),{type:'doughnut',data:{labels:incLabels,datasets:[{data:incData,backgroundColor:incColors,borderWidth:2,borderColor:getComputedStyle(document.body).getPropertyValue('--surface2'),hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' $'+ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0})+'  ('+((ctx.parsed/incTotal)*100).toFixed(1)+'%)'}}}}});
+  _chartIncomePie = new Chart(document.getElementById('incomePieChart'),{type:'doughnut',data:{labels:incLabels,datasets:[{data:incData,backgroundColor:incColors,borderWidth:2,borderColor:getComputedStyle(document.body).getPropertyValue('--surface2'),hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' €'+ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0})+'  ('+((ctx.parsed/incTotal)*100).toFixed(1)+'%)'}}}}});
   const incLegend=document.getElementById('incomePieLegend');
   incLegend.innerHTML='';
   incLabels.forEach((lbl,i)=>{ incLegend.innerHTML+=`<span style="display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;"><span style="width:9px;height:9px;border-radius:50%;background:${incColors[i]};flex-shrink:0;display:inline-block;"></span>${lbl} <span style="color:var(--muted);opacity:0.6;">(${(incData[i]/incTotal*100).toFixed(1)}%)</span></span>`; });
@@ -3866,7 +3929,7 @@ const UA_I18N = {
     chart_opt_sub: 'Options P&L grouped by close/expiry month',
     chart_opt_profit: 'Profit', chart_opt_loss: 'Loss', chart_opt_open: 'Open (premium)',
     chart_stock_title: 'Stock P&L by position',
-    chart_stock_sub: 'Realized vs unrealized',
+    chart_stock_sub: 'Realized vs unrealized (EUR, base currency)',
     chart_stock_real: 'Realized', chart_stock_unr: 'Unrealized',
     chart_exp_title: 'Peak options exposure by month',
     chart_exp_sub: 'Peak simultaneous put exposure on any single day within each month',
@@ -3910,7 +3973,7 @@ const UA_I18N = {
     chart_opt_sub: 'P&L opcija grupiran po mjesecu zatvaranja/isteka',
     chart_opt_profit: 'Profit', chart_opt_loss: 'Gubitak', chart_opt_open: 'Otvoreno (premija)',
     chart_stock_title: 'P&L dionica po poziciji',
-    chart_stock_sub: 'Realizirano vs. nerealizirano',
+    chart_stock_sub: 'Realizirano vs. nerealizirano (EUR, bazna valuta)',
     chart_stock_real: 'Realizirano', chart_stock_unr: 'Nerealizirano',
     chart_exp_title: 'Maksimalni exposure opcija po mjesecu',
     chart_exp_sub: 'Najveći simultani put exposure u jednom danu unutar svakog mjeseca',
