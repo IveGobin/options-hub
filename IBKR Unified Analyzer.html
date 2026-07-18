@@ -397,6 +397,7 @@
   .tx-buy { color:var(--blue)!important; }
   .tx-sell { color:var(--green)!important; }
   .tx-open-badge { background:rgba(0,180,216,0.1); color:var(--blue); border-radius:4px; padding:1px 5px; font-size:9px; }
+  .tx-assign-badge { background:rgba(251,146,60,0.14); color:#fb923c; border-radius:4px; padding:1px 5px; font-size:9px; margin-right:4px; }
   .tx-close-badge { background:rgba(0,200,83,0.1); color:var(--green); border-radius:4px; padding:1px 5px; font-size:9px; }
   .tx-empty { color:var(--muted); font-size:12px; padding:8px 0; }
 
@@ -516,7 +517,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.5</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.6</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -2755,6 +2756,23 @@ function renderStocksTable(data) {
     if (p.normSym && p.normSym !== p.sym) openStockMap[p.normSym] = p; // normalized key (e.g. COPA)
   }
 
+  // Assignment lookup: ticker|date|strike → net premium/share, so tx history can show
+  // the premium-adjusted effective price next to the raw strike price.
+  const assignLookup = {};
+  for (const p of (data.assignedPositions || [])) {
+    if (!p.assignDate) continue;
+    const d = p.assignDate;
+    const dk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const key = `${(p.ticker||'').trim().toUpperCase()}|${dk}|${p.strike}`;
+    if (!assignLookup[key]) assignLookup[key] = { prem:0, shares:0, type:p.type };
+    assignLookup[key].prem   += p.premCollected;
+    assignLookup[key].shares += p.sharesAssigned;
+  }
+  for (const k of Object.keys(assignLookup)) {
+    const a = assignLookup[k];
+    a.perShare = a.shares ? a.prem / a.shares : 0;
+  }
+
   tbody.innerHTML = '';
   (data.stocksTable || data.stocks).forEach(s => {
     const op  = openStockMap[s.sym];
@@ -2790,19 +2808,38 @@ function renderStocksTable(data) {
     txRow.style.display = 'none';
 
     if (hasTrades) {
+      const symKey = s.sym.trim().toUpperCase().replace(/[a-z]+$/, '');
+      let hasAssign = false;
       const txRows = trades.map(t => {
         const isBuy = t.qty > 0;
-        const isOpen = t.code.includes('O');
-        const isClose = t.code.includes('C');
+        const codes = t.code.split(';').map(c => c.trim());
+        const isOpen = codes.includes('O');
+        const isClose = codes.includes('C');
+        const isAssign = codes.includes('A');
         const dateStr = t.date.substring(0, 10);
         const qtyStr = (isBuy ? '+' : '') + t.qty.toLocaleString();
         const realStr = t.realPL !== 0 ? ((t.realPL > 0 ? '+' : '') + cs + Math.abs(t.realPL).toFixed(2)) : '—';
         const realCls = t.realPL > 0 ? 'style="color:var(--green)"' : t.realPL < 0 ? 'style="color:var(--red)"' : 'style="color:var(--muted)"';
-        const badge = isOpen ? '<span class="tx-open-badge">OPEN</span>' : isClose ? '<span class="tx-close-badge">CLOSE</span>' : '';
+        let priceCell = `${cs}${Math.abs(t.price).toFixed(3)}`;
+        let assignBadge = '';
+        if (isAssign) {
+          const a = assignLookup[`${symKey}|${dateStr}|${Math.abs(t.price)}`];
+          if (a && a.perShare > 0) {
+            hasAssign = true;
+            // Put assignment = buy at strike (effective cost lower by premium);
+            // call assignment = sell at strike (effective proceeds higher by premium).
+            const eff = isBuy ? Math.abs(t.price) - a.perShare : Math.abs(t.price) + a.perShare;
+            priceCell = `${cs}${Math.abs(t.price).toFixed(3)} <span style="color:var(--muted)">→</span> <span style="color:var(--yellow)" title="Strike ${isBuy ? '−' : '+'} net option premium (${cs}${a.perShare.toFixed(3)}/sh)">${cs}${eff.toFixed(3)}</span>`;
+            assignBadge = `<span class="tx-assign-badge" title="Shares delivered via option assignment — premium of ${cs}${a.prem.toFixed(2)} rolled into cost basis">ASSIGNED</span>`;
+          } else {
+            assignBadge = '<span class="tx-assign-badge">ASSIGNED</span>';
+          }
+        }
+        const badge = assignBadge + (isOpen ? '<span class="tx-open-badge">OPEN</span>' : isClose ? '<span class="tx-close-badge">CLOSE</span>' : '');
         return `<tr>
           <td class="dep-date">${dateStr}</td>
           <td class="${isBuy ? 'tx-buy' : 'tx-sell'}">${qtyStr} sh</td>
-          <td>${cs}${Math.abs(t.price).toFixed(3)}</td>
+          <td>${priceCell}</td>
           <td>${cs}${Math.abs(t.proceeds).toFixed(2)}</td>
           <td style="color:var(--red)">${t.comm !== 0 ? cs + t.comm.toFixed(2) : '—'}</td>
           <td ${realCls}>${realStr}</td>
@@ -2819,6 +2856,7 @@ function renderStocksTable(data) {
             </tr></thead>
             <tbody>${txRows}</tbody>
           </table>
+          ${hasAssign ? `<div style="margin-top:8px;font-size:10px;color:var(--muted);">→ <span style="color:var(--yellow)">yellow price</span> = effective price after net option premium (strike − premium/sh for assigned puts, strike + premium/sh for assigned calls). The avg cost in the header row uses this premium-adjusted basis, matching IBKR's Open Positions cost basis.</div>` : ''}
         </div>
       </td>`;
 
