@@ -516,7 +516,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.4</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.5</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -1275,7 +1275,8 @@ function processIBKR(sections) {
     const sellTrades = (tradesBySym[sym]||[]).filter(t=>t.qty<0);
     // Sum total sell qty and total premium collected across all sell trades
     let totalSellQty = 0, totalPremCollected = 0;
-    sellTrades.forEach(t => { totalSellQty += Math.abs(t.qty); totalPremCollected += Math.abs(t.proceeds); });
+    // Net premium: proceeds minus commission (matches IBKR's premium-adjusted cost basis)
+    sellTrades.forEach(t => { totalSellQty += Math.abs(t.qty); totalPremCollected += Math.abs(t.proceeds) - Math.abs(t.comm); });
     // Only attribute the proportion of premium that corresponds to the assigned contracts
     const premCollected = totalSellQty > 0 ? (qty / totalSellQty) * totalPremCollected : 0;
     const perShare = qty > 0 ? premCollected/(qty*100) : 0;
