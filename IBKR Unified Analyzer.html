@@ -1302,7 +1302,13 @@ function processIBKR(sections) {
     if (!parsed) continue;
     const symTrades = (tradesBySym[sym]||[]).slice().sort((a,b)=>a.date-b.date);
     const lastTrade = symTrades[symTrades.length-1];
-    const closeDate = lastTrade ? lastTrade.date : parsed.expiry;
+    // Use the last CLOSING trade date (code 'C'/'Ep' or nonzero realized P/L), not simply
+    // the last trade on this symbol — a symbol can be reopened after being fully closed
+    // (e.g. sold again after expiry/buyback), and that new opening trade must not steal
+    // credit for P/L that was already realized in an earlier month.
+    const tradeInfo = optTradeMap[sym];
+    const closeDate = (tradeInfo && tradeInfo.lastCloseDate) ? tradeInfo.lastCloseDate
+                       : (lastTrade ? lastTrade.date : parsed.expiry);
     let monthKey='0000-00', monthLabel='—';
     if (closeDate) {
       const y=closeDate.getFullYear(), m=closeDate.getMonth();
