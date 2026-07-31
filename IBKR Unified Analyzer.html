@@ -1429,7 +1429,7 @@ function processIBKR(sections) {
     let key = 'Other';
     const isOpen = openOptPosMap.hasOwnProperty(o.sym.trim());
     if (isOpen) { const m = o.sym.match(/(\d{2})([A-Z]{3})(\d{2})/); key = m ? m[2]+"'"+m[3] : 'Other'; }
-    else { const t = optTradeMap[o.sym.trim()]; if (t&&t.lastDate) { const d=new Date(t.lastDate+'T00:00:00'); key=MONTH_ABBR[d.getMonth()]+"'"+String(d.getFullYear()).slice(2); } else { const m=o.sym.match(/(\d{2})([A-Z]{3})(\d{2})/); key=m?m[2]+"'"+m[3]:'Other'; } }
+    else { const t = optTradeMap[o.sym.trim()]; const cd = t && (t.lastCloseDate || t.lastDate); if (cd) { const d=new Date(cd+'T00:00:00'); key=MONTH_ABBR[d.getMonth()]+"'"+String(d.getFullYear()).slice(2); } else { const m=o.sym.match(/(\d{2})([A-Z]{3})(\d{2})/); key=m?m[2]+"'"+m[3]:'Other'; } }
     if (!optByMonth[key]) optByMonth[key] = { closedPL:0, premiumCollected:0, count:0 };
     if (isOpen) {
       optByMonth[key].premiumCollected += openOptPosMap[o.sym.trim()];
