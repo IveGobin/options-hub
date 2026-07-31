@@ -1307,7 +1307,9 @@ function processIBKR(sections) {
     // (e.g. sold again after expiry/buyback), and that new opening trade must not steal
     // credit for P/L that was already realized in an earlier month.
     const tradeInfo = optTradeMap[sym];
-    const closeDate = (tradeInfo && tradeInfo.lastCloseDate) ? tradeInfo.lastCloseDate
+    // lastCloseDate is stored as a 'YYYY-MM-DD' string (see optTradeMap build step above),
+    // not a Date object like lastTrade.date — must be parsed before calling Date methods on it.
+    const closeDate = (tradeInfo && tradeInfo.lastCloseDate) ? new Date(tradeInfo.lastCloseDate + 'T00:00:00')
                        : (lastTrade ? lastTrade.date : parsed.expiry);
     let monthKey='0000-00', monthLabel='—';
     if (closeDate) {
