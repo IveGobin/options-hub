@@ -222,6 +222,15 @@
   .legend-val { font-family:'Space Mono',monospace; font-size:11px; flex-shrink:0; width:54px; text-align:right; }
   .pie-empty { display:flex; align-items:center; justify-content:center; height:100px; color:var(--muted); font-size:14px; flex:1; width:100%; }
 
+  /* ── TREEMAP ── */
+  .treemap-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .treemap-wrap { position:relative; width:100%; height:560px; }
+  .treemap-tile { position:absolute; box-sizing:border-box; border:2px solid var(--surface); padding:8px 10px; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-start; cursor:default; transition:filter 0.15s; }
+  .treemap-tile:hover { filter:brightness(1.12); z-index:2; }
+  .treemap-tile-label { font-family:'Space Mono',monospace; font-weight:700; font-size:13px; color:#fff; letter-spacing:0.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .treemap-tile-value { font-family:'Space Mono',monospace; font-size:12px; color:rgba(255,255,255,0.92); margin-top:2px; }
+  @media(max-width:700px) { .treemap-wrap { height:auto; min-height:420px; } }
+
   /* ── MONTHLY GRID ── */
   .monthly-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:2px; background:var(--border); border:1px solid var(--border); border-radius:14px; overflow:hidden; margin-top:4px; }
   .month-card { background:var(--surface); padding:22px 20px 18px; position:relative; overflow:hidden; transition:background 0.15s; }
@@ -613,25 +622,16 @@
 
     <div class="section">
       <div class="section-title">Premium at risk — share by ticker</div>
-      <div class="pie-grid">
-        <div class="pie-card">
-          <div class="pie-card-header">
-            <div class="pie-card-title"><span class="dot" style="background:var(--blue)"></span>Open positions — premium by ticker</div>
-          </div>
-          <div class="pie-inner" id="pie-open-inner"><div class="pie-empty">No data</div></div>
-        </div>
+      <div class="chart-card">
+        <div class="pie-card-title" style="margin-bottom:10px;"><span class="dot" style="background:var(--blue)"></span>Open positions — premium by ticker</div>
+        <div style="position:relative;height:280px;"><canvas id="premiumByTickerChart"></canvas></div>
       </div>
     </div>
 
     <div class="section">
       <div class="section-title">Value expiring by date — premium breakdown</div>
-      <div class="pie-grid">
-        <div class="pie-card">
-          <div class="pie-card-header">
-            <div class="pie-card-title"><span class="dot" style="background:var(--accent)"></span>Open positions — total value at expiry by date</div>
-          </div>
-          <div class="pie-inner" id="pie-expiry-date-inner"><div class="pie-empty">No data</div></div>
-        </div>
+      <div class="chart-card">
+        <div style="position:relative;height:340px;"><canvas id="expiryDateChart"></canvas></div>
       </div>
     </div>
 
@@ -734,15 +734,9 @@
 
     <div class="section">
       <div class="section-title">P&amp;L distribution — closed options by ticker</div>
-      <div class="pie-grid">
-        <div class="pie-card">
-          <div class="pie-card-header"><div class="pie-card-title"><span class="dot" style="background:var(--green)"></span>Profitable contracts — share by ticker</div></div>
-          <div class="pie-inner" id="pie-positive-inner"><div class="pie-empty">No data</div></div>
-        </div>
-        <div class="pie-card">
-          <div class="pie-card-header"><div class="pie-card-title"><span class="dot" style="background:var(--red)"></span>Losing contracts — share by ticker</div></div>
-          <div class="pie-inner" id="pie-negative-inner"><div class="pie-empty">No data</div></div>
-        </div>
+      <div class="treemap-card">
+        <div class="pie-card-header"><div class="pie-card-title"><span class="dot" style="background:var(--green)"></span>Realized P&amp;L by ticker</div></div>
+        <div class="treemap-wrap" id="pl-treemap"><div class="pie-empty">No data</div></div>
       </div>
     </div>
 
@@ -1852,8 +1846,7 @@ function renderDashboard(data, fileName) {
   // ── OPEN PIE ──
   const openByTicker = {};
   data.openPositions.forEach(p => { openByTicker[p.ticker] = (openByTicker[p.ticker]||0) + p.premiumCollected; });
-  const OPEN_PAL = ['#00b4d8','#c8ff00','#ff4757','#a78bfa','#ffd32a','#ff6b9d','#34d399','#fb923c','#38bdf8','#f472b6'];
-  renderPieChart('pie-open-inner', Object.entries(openByTicker).sort((a,b)=>b[1]-a[1]), OPEN_PAL, true);
+  renderPremiumByTickerChart(openByTicker);
   renderExpiryDatePie(data.openPositions);
 
   // ── MONTHLY & WEEKLY ──
@@ -1899,14 +1892,16 @@ function renderDashboard(data, fileName) {
   buildClosedDetailRows(data.tradesBySym);
 
   // ── CLOSED PIE CHARTS ──
-  const GREEN_PAL = ['#00e676','#00b4d8','#c8ff00','#a78bfa','#ffd32a','#ff6b9d','#38bdf8','#fb923c','#34d399','#f472b6'];
-  const RED_PAL   = ['#ff4757','#00b4d8','#ffd32a','#a78bfa','#c8ff00','#34d399','#fb923c','#f472b6','#38bdf8','#ff6b9d'];
   const netTickerMap = {};
   data.closedPL.forEach(c => { netTickerMap[c.ticker] = (netTickerMap[c.ticker]||0) + c.realTotal; });
-  const posSorted = Object.entries(netTickerMap).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
-  const negSorted = Object.entries(netTickerMap).filter(([,v])=>v<0).sort((a,b)=>a[1]-b[1]);
-  renderPieChart('pie-positive-inner', posSorted, GREEN_PAL, true);
-  renderPieChart('pie-negative-inner', negSorted.map(([t,v])=>[t,Math.abs(v)]), RED_PAL, false);
+
+  // ── REALIZED P&L TREEMAP (combined positive + negative, sized by ticker) ──
+  const treemapData = Object.entries(netTickerMap)
+    .filter(([,v]) => v !== 0)
+    .map(([ticker, value]) => ({ label: ticker, value }))
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  window._plTreemapData = treemapData;
+  renderTreemap('pl-treemap', treemapData);
 
   // ── STOCKS TABLE ──
   renderStocksTable(data);
@@ -2428,11 +2423,69 @@ function renderAssignedTable(assignedPositions) {
 // MONTHLY PREMIUM
 // ═══════════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════
-// EXPIRY DATE PIE CHART
+// PREMIUM AT RISK BY TICKER — horizontal bar chart (replaces the treemap;
+// with only a handful of tickers, small values had unreadable tiles).
 // ═══════════════════════════════════════════════════════════════════
+let _chartPremiumByTicker = null;
+function renderPremiumByTickerChart(openByTicker) {
+  const canvas = document.getElementById('premiumByTickerChart');
+  if (!canvas) return;
+
+  if (_chartPremiumByTicker) { _chartPremiumByTicker.destroy(); _chartPremiumByTicker = null; }
+
+  const sorted = Object.entries(openByTicker)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => a[1] - b[1]); // ascending so the largest ends up on top (Chart.js horizontal bar draws top-to-bottom)
+
+  if (!sorted.length) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  const labels = sorted.map(d => d[0]);
+  const values = sorted.map(d => +d[1].toFixed(2));
+
+  _chartPremiumByTicker = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Premium collected',
+        data: values,
+        backgroundColor: 'rgba(0,200,83,0.75)',
+        hoverBackgroundColor: '#00c853',
+        borderRadius: 6,
+        barPercentage: 0.65,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => 'Premium: +$' + ctx.parsed.x.toLocaleString('en-US', { maximumFractionDigits: 0 }),
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#5a6473', font: { size: 11 }, callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(128,128,128,0.07)' }, border: { display: false }, beginAtZero: true },
+        y: { ticks: { color: '#5a6473', font: { size: 12, family: 'Space Mono', weight: '700' } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPIRY DATE BAR CHART (chronological, replaces the old pie)
+// ═══════════════════════════════════════════════════════════════════
+let _chartExpiryDate = null;
 function renderExpiryDatePie(openPositions) {
-  const container = document.getElementById('pie-expiry-date-inner');
-  if (!container) return;
+  const canvas = document.getElementById('expiryDateChart');
+  if (!canvas) return;
 
   // Group by exact expiry date
   const byDate = {};
@@ -2444,174 +2497,54 @@ function renderExpiryDatePie(openPositions) {
     premByDate[dateKey] = (premByDate[dateKey] || 0) + (p.premiumCollected || 0);
   });
 
+  // Chronological order — this is the whole point of switching to a bar chart:
+  // expiry date order carries meaning that a pie/treemap would discard.
   const sorted = Object.entries(byDate)
     .filter(([, v]) => v > 0)
-    .sort((a, b) => {
-      const da = new Date(a[0]);
-      const db = new Date(b[0]);
-      return da - db;
-    });
+    .sort((a, b) => new Date(a[0]) - new Date(b[0]));
+
+  if (_chartExpiryDate) { _chartExpiryDate.destroy(); _chartExpiryDate = null; }
 
   if (!sorted.length) {
-    container.innerHTML = '<div class="pie-empty">No data</div>';
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     return;
   }
 
-  const DATE_PAL = ['#00b4d8','#c8ff00','#a78bfa','#ffd32a','#ff6b9d','#34d399','#fb923c','#38bdf8','#f472b6','#ff4757','#6ee7b7','#fbbf24'];
-  const labels  = sorted.map(d => d[0]);
-  const values  = sorted.map(d => d[1]);
-  const prems   = labels.map(l => premByDate[l] || 0);
-  const colors  = sorted.map((_, i) => DATE_PAL[i % DATE_PAL.length]);
-  const total   = values.reduce((a, b) => a + b, 0);
-  const maxVal  = Math.max(...values);
+  const labels = sorted.map(d => d[0]);
+  const values = sorted.map(d => d[1]);
+  const prems  = labels.map(l => premByDate[l] || 0);
 
-  const containerId = 'pie-expiry-date-inner';
-  if (_pieChartInstances[containerId]) {
-    _pieChartInstances[containerId].destroy();
-    delete _pieChartInstances[containerId];
-  }
-
-  // Build DOM
-  const canvasSide = document.createElement('div'); canvasSide.className = 'pie-canvas-side';
-  const wrap       = document.createElement('div'); wrap.className = 'pie-canvas-wrap';
-  const canvas     = document.createElement('canvas');
-  canvas.style.width = '160px'; canvas.style.height = '160px';
-  wrap.appendChild(canvas); canvasSide.appendChild(wrap);
-
-  const legendSide = document.createElement('div'); legendSide.className = 'pie-legend-side';
-  const legend     = document.createElement('div'); legend.className = 'pie-legend';
-  legend.style.maxHeight = '220px';
-
-  labels.forEach((lbl, i) => {
-    const barPct = Math.round((values[i] / maxVal) * 100);
-    const pct    = (values[i] / total * 100).toFixed(1);
-    const prem   = prems[i];
-    const row    = document.createElement('div');
-    row.className = 'legend-row'; row.dataset.idx = i;
-    row.style.cursor = 'default';
-    row.innerHTML = `
-      <div class="legend-left"><span class="legend-dot" style="background:${colors[i]}"></span><span class="legend-ticker">${escHtml(lbl)}</span></div>
-      <div class="legend-bar-wrap"><div class="legend-bar-fill" style="width:${barPct}%;background:${colors[i]};opacity:0.6"></div></div>
-      <span class="legend-pct">${pct}%</span>
-      <span class="legend-val" style="color:var(--accent)">$${values[i].toLocaleString('en-US',{maximumFractionDigits:0})}</span>
-    `;
-    // Tooltip showing premium collected on hover
-    row.title = `Expiry: ${lbl}\nExposure: $${values[i].toLocaleString('en-US',{maximumFractionDigits:0})}\nPremium collected: +$${prem.toFixed(2)}`;
-    legend.appendChild(row);
-  });
-
-  legendSide.appendChild(legend);
-  container.innerHTML = '';
-  container.appendChild(canvasSide);
-  container.appendChild(legendSide);
-
-  // Floating tooltip element
-  let floatingTip = document.getElementById('expiry-date-tooltip');
-  if (!floatingTip) {
-    floatingTip = document.createElement('div');
-    floatingTip.id = 'expiry-date-tooltip';
-    floatingTip.style.cssText = `
-      position:fixed; pointer-events:none; display:none; z-index:9999;
-      background:#111419; border:1px solid #2a3040; border-radius:8px;
-      padding:10px 14px; font-size:12px; color:#e8ecf0; line-height:1.7;
-      box-shadow:0 4px 16px rgba(0,0,0,0.5); min-width:160px;
-    `;
-    document.body.appendChild(floatingTip);
-  }
-
-  const surfaceColor = getComputedStyle(document.body).getPropertyValue('--surface').trim() || '#111419';
-
-  const chart = new Chart(canvas, {
-    type: 'doughnut',
+  _chartExpiryDate = new Chart(canvas, {
+    type: 'bar',
     data: {
       labels,
       datasets: [{
+        label: 'Value at expiry',
         data: values,
-        backgroundColor: colors,
-        borderColor: surfaceColor,
-        borderWidth: 2,
-        hoverOffset: 6,
+        backgroundColor: 'rgba(0,180,216,0.65)',
+        hoverBackgroundColor: '#00b4d8',
+        borderRadius: 6,
+        barPercentage: 0.6,
       }]
     },
     options: {
-      responsive: false,
-      cutout: '52%',
-      animation: { duration: 400 },
+      responsive: true,
+      maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         tooltip: {
-          enabled: false,
-          external(context) {
-            const tip = floatingTip;
-            if (context.tooltip.opacity === 0) { tip.style.display = 'none'; return; }
-            const idx = context.tooltip.dataPoints?.[0]?.dataIndex;
-            if (idx === undefined) { tip.style.display = 'none'; return; }
-            const lbl  = labels[idx];
-            const val  = values[idx];
-            const prem = prems[idx];
-            const pct  = (val / total * 100).toFixed(1);
-            tip.innerHTML = `
-              <div style="color:${colors[idx]};font-weight:700;margin-bottom:4px">${lbl}</div>
-              <div><span style="color:var(--muted,#5a6473)">Exposure:</span> <span style="color:#e8ecf0">$${val.toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>
-              <div><span style="color:var(--muted,#5a6473)">Premium:</span> <span style="color:#00e676">+$${prem.toFixed(2)}</span></div>
-              <div><span style="color:var(--muted,#5a6473)">Share:</span> <span style="color:#e8ecf0">${pct}%</span></div>
-            `;
-            tip.style.display = 'block';
-            const pos = context.chart.canvas.getBoundingClientRect();
-            tip.style.left  = (pos.left + context.tooltip.caretX + 12) + 'px';
-            tip.style.top   = (pos.top  + context.tooltip.caretY - 20) + 'px';
+          callbacks: {
+            label: ctx => 'Exposure: $' + ctx.parsed.y.toLocaleString('en-US', { maximumFractionDigits: 0 }),
+            afterLabel: ctx => 'Premium collected: +$' + prems[ctx.dataIndex].toFixed(2),
           }
         }
+      },
+      scales: {
+        x: { ticks: { color: '#5a6473', font: { size: 11, family: 'Space Mono' } }, grid: { display: false } },
+        y: { ticks: { color: '#5a6473', font: { size: 11 }, callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(128,128,128,0.07)' }, border: { display: false }, beginAtZero: true }
       }
-    },
-    plugins: [{
-      id: 'centerText',
-      afterDraw(chart) {
-        const { ctx, chartArea: { width, height, left, top } } = chart;
-        const cx = left + width / 2, cy = top + height / 2;
-        ctx.save();
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text').trim() || '#e8ecf0';
-        ctx.font = "bold 11px 'Space Mono',monospace";
-        ctx.fillText(fmtAbs(total), cx, cy);
-        ctx.restore();
-      }
-    }]
-  });
-
-  _pieChartInstances[containerId] = chart;
-
-  // Legend hover sync
-  legend.querySelectorAll('.legend-row').forEach((row, i) => {
-    row.addEventListener('mouseenter', (e) => {
-      legend.querySelectorAll('.legend-row').forEach((r, j) => { r.style.opacity = j === i ? '1' : '0.3'; });
-      chart.setDatasetVisibility(0, true);
-      chart.tooltip.setActiveElements([{ datasetIndex: 0, index: i }], { x: 0, y: 0 });
-      chart.update('none');
-      // Show floating tooltip on legend hover
-      const prem = prems[i];
-      const pct  = (values[i] / total * 100).toFixed(1);
-      floatingTip.innerHTML = `
-        <div style="color:${colors[i]};font-weight:700;margin-bottom:4px">${labels[i]}</div>
-        <div><span style="color:#5a6473">Exposure:</span> <span style="color:#e8ecf0">$${values[i].toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>
-        <div><span style="color:#5a6473">Premium:</span> <span style="color:#00e676">+$${prem.toFixed(2)}</span></div>
-        <div><span style="color:#5a6473">Share:</span> <span style="color:#e8ecf0">${pct}%</span></div>
-      `;
-      floatingTip.style.display = 'block';
-      const rect = row.getBoundingClientRect();
-      floatingTip.style.left = (rect.right + 10) + 'px';
-      floatingTip.style.top  = (rect.top - 10) + 'px';
-    });
-    row.addEventListener('mousemove', (e) => {
-      floatingTip.style.left = (e.clientX + 14) + 'px';
-      floatingTip.style.top  = (e.clientY - 20) + 'px';
-    });
-    row.addEventListener('mouseleave', () => {
-      legend.querySelectorAll('.legend-row').forEach(r => { r.style.opacity = '1'; });
-      chart.tooltip.setActiveElements([], {});
-      chart.update('none');
-      floatingTip.style.display = 'none';
-    });
+    }
   });
 }
 
@@ -3808,6 +3741,122 @@ function renderPieChart(containerId, tickerData, palette, isPositive) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// TREEMAP (squarified) — used for "Realized P&L by ticker"
+// ═══════════════════════════════════════════════════════════════════
+
+// Standard squarified treemap layout (Bruls, Huizing, van Wijk).
+// areas: array of positive numbers (already scaled to the pixel area of x0,y0,w0,h0).
+// Returns rects in the SAME order as the input array.
+function _squarify(areas, x0, y0, w0, h0) {
+  const rects = new Array(areas.length);
+  let x = x0, y = y0, w = w0, h = h0;
+  let row = []; // { area, idx }
+  let i = 0;
+
+  function worst(rowArr, length) {
+    if (!rowArr.length) return Infinity;
+    const sum = rowArr.reduce((a, b) => a + b.area, 0);
+    const mx = Math.max(...rowArr.map(r => r.area));
+    const mn = Math.min(...rowArr.map(r => r.area));
+    if (sum <= 0 || mn <= 0) return Infinity;
+    return Math.max((length * length * mx) / (sum * sum), (sum * sum) / (length * length * mn));
+  }
+
+  function layoutRow(rowArr) {
+    const sum = rowArr.reduce((a, b) => a + b.area, 0);
+    if (sum <= 0 || w <= 0 || h <= 0) return;
+    if (w >= h) {
+      const colWidth = sum / h;
+      let yy = y;
+      rowArr.forEach(r => {
+        const rh = r.area / colWidth;
+        rects[r.idx] = { x, y: yy, w: colWidth, h: rh };
+        yy += rh;
+      });
+      x += colWidth;
+      w -= colWidth;
+    } else {
+      const rowHeight = sum / w;
+      let xx = x;
+      rowArr.forEach(r => {
+        const rw = r.area / rowHeight;
+        rects[r.idx] = { x: xx, y, w: rw, h: rowHeight };
+        xx += rw;
+      });
+      y += rowHeight;
+      h -= rowHeight;
+    }
+  }
+
+  while (i < areas.length) {
+    const length = Math.min(w, h);
+    const candidate = { area: areas[i], idx: i };
+    const newRow = row.concat([candidate]);
+    if (row.length === 0 || worst(newRow, length) <= worst(row, length)) {
+      row = newRow;
+      i++;
+    } else {
+      layoutRow(row);
+      row = [];
+    }
+  }
+  if (row.length) layoutRow(row);
+
+  return rects;
+}
+
+function renderTreemap(containerId, items) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  if (!items || !items.length) { container.innerHTML = '<div class="pie-empty">No data</div>'; return; }
+
+  const W = container.clientWidth || 900;
+  const H = container.clientHeight || 560;
+
+  const values = items.map(it => Math.abs(it.value));
+  const total = values.reduce((a, b) => a + b, 0);
+  if (total <= 0) { container.innerHTML = '<div class="pie-empty">No data</div>'; return; }
+
+  const scale = (W * H) / total;
+  const areas = values.map(v => v * scale);
+  const rects = _squarify(areas, 0, 0, W, H);
+
+  const GREEN = getComputedStyle(document.body).getPropertyValue('--green').trim() || '#00c853';
+  const RED   = getComputedStyle(document.body).getPropertyValue('--red').trim()   || '#ff4757';
+
+  container.innerHTML = '';
+  items.forEach((it, i) => {
+    const r = rects[i];
+    if (!r || r.w <= 0 || r.h <= 0) return;
+    const tile = document.createElement('div');
+    tile.className = 'treemap-tile';
+    tile.style.left   = r.x + 'px';
+    tile.style.top    = r.y + 'px';
+    tile.style.width  = Math.max(r.w, 0) + 'px';
+    tile.style.height = Math.max(r.h, 0) + 'px';
+    tile.style.background = it.color || (it.value >= 0 ? GREEN : RED);
+
+    const showText = r.w > 34 && r.h > 22;
+    if (showText) {
+      const label = document.createElement('div');
+      label.className = 'treemap-tile-label';
+      label.textContent = it.label;
+      tile.appendChild(label);
+
+      if (r.h > 34) {
+        const val = document.createElement('div');
+        val.className = 'treemap-tile-value';
+        val.textContent = (it.value >= 0 ? '' : '−') + Math.round(Math.abs(it.value)).toLocaleString();
+        tile.appendChild(val);
+      }
+    }
+
+    tile.title = `${it.label}: ${it.value >= 0 ? '+' : '−'}$${Math.abs(it.value).toLocaleString(undefined,{maximumFractionDigits:0})}`;
+    container.appendChild(tile);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // PROJECTION TAB
 // ═══════════════════════════════════════════════════════════════════
 let _projChart = null;
@@ -3958,11 +4007,27 @@ function switchTab(e, id) {
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
   e.target.classList.add('active');
   document.getElementById(id).classList.add('active');
+  // Treemap is measured in pixels, so it needs a re-layout once its tab
+  // (and therefore its real width) becomes visible.
+  if (id === 'tab-closed' && window._plTreemapData) {
+    renderTreemap('pl-treemap', window._plTreemapData);
+  }
 }
+let _treemapResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_treemapResizeTimer);
+  _treemapResizeTimer = setTimeout(() => {
+    if (window._plTreemapData && document.getElementById('tab-closed')?.classList.contains('active')) {
+      renderTreemap('pl-treemap', window._plTreemapData);
+    }
+  }, 150);
+});
+
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
   document.querySelector('.theme-btn').textContent = isLight ? '🌙 Dark' : '☀ Light';
   document.querySelectorAll('.pie-canvas-wrap canvas').forEach(c=>{ if(c._redraw) c._redraw(); });
+  if (window._plTreemapData) renderTreemap('pl-treemap', window._plTreemapData);
 }
 
 // ── HUB INTEGRATION ──
