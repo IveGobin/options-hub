@@ -225,7 +225,7 @@
   /* ── TREEMAP ── */
   .treemap-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
   .treemap-wrap { position:relative; width:100%; height:560px; }
-  .treemap-tile { position:absolute; box-sizing:border-box; border:2px solid var(--surface); padding:8px 10px; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-start; cursor:default; transition:filter 0.15s; }
+  .treemap-tile { position:absolute; box-sizing:border-box; border:2px solid var(--surface); padding:8px 10px; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-start; cursor:pointer; transition:filter 0.15s; }
   .treemap-tile:hover { filter:brightness(1.12); z-index:2; }
   .treemap-tile-label { font-family:'Space Mono',monospace; font-weight:700; font-size:13px; color:#fff; letter-spacing:0.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .treemap-tile-value { font-family:'Space Mono',monospace; font-size:12px; color:rgba(255,255,255,0.92); margin-top:2px; }
@@ -3851,9 +3851,48 @@ function renderTreemap(containerId, items) {
       }
     }
 
+    // Tap/click reveals ticker + value — essential on mobile where small
+    // tiles have no room for visible text, and handy on desktop too.
+    tile.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showTreemapTooltip(tile, it);
+    });
+
     tile.title = `${it.label}: ${it.value >= 0 ? '+' : '−'}$${Math.abs(it.value).toLocaleString(undefined,{maximumFractionDigits:0})}`;
     container.appendChild(tile);
   });
+}
+
+let _treemapTooltipEl = null;
+function showTreemapTooltip(tile, it) {
+  if (!_treemapTooltipEl) {
+    _treemapTooltipEl = document.createElement('div');
+    _treemapTooltipEl.id = 'treemap-tooltip';
+    _treemapTooltipEl.style.cssText = `
+      position:fixed; pointer-events:none; z-index:9999;
+      background:#111419; border:1px solid #2a3040; border-radius:8px;
+      padding:8px 12px; font-family:'Space Mono',monospace; font-size:13px;
+      color:#e8ecf0; line-height:1.6; box-shadow:0 4px 16px rgba(0,0,0,0.5);
+      white-space:nowrap; display:none;
+    `;
+    document.body.appendChild(_treemapTooltipEl);
+    document.addEventListener('click', () => { _treemapTooltipEl.style.display = 'none'; });
+    window.addEventListener('scroll', () => { _treemapTooltipEl.style.display = 'none'; }, true);
+  }
+
+  const sign = it.value >= 0 ? '+' : '−';
+  const color = it.value >= 0 ? 'var(--green)' : 'var(--red)';
+  _treemapTooltipEl.innerHTML = `<span style="font-weight:700">${escHtml(it.label)}</span> &nbsp; <span style="color:${color}">${sign}$${Math.abs(it.value).toLocaleString(undefined,{maximumFractionDigits:0})}</span>`;
+  _treemapTooltipEl.style.display = 'block';
+
+  const rect = tile.getBoundingClientRect();
+  const tipRect = _treemapTooltipEl.getBoundingClientRect();
+  let left = rect.left + rect.width / 2 - tipRect.width / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
+  let top = rect.top - tipRect.height - 10;
+  if (top < 60) top = rect.bottom + 10; // flip below if it would overlap the header above
+  _treemapTooltipEl.style.left = left + 'px';
+  _treemapTooltipEl.style.top  = top + 'px';
 }
 
 // ═══════════════════════════════════════════════════════════════════
