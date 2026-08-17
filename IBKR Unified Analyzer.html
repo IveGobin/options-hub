@@ -739,6 +739,14 @@
         <div class="pie-card-header"><div class="pie-card-title"><span class="dot" style="background:var(--green)"></span>Realized P&amp;L by ticker</div></div>
         <div class="treemap-wrap" id="pl-treemap"><div class="pie-empty">No data</div></div>
       </div>
+      <div class="table-wrapper" style="margin-top:16px;">
+        <table class="open-table" id="pl-by-ticker-table">
+          <thead>
+            <tr><th>Ticker</th><th style="text-align:right;">Realized P&amp;L</th><th style="text-align:right;">% of total</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
 
   </div><!-- /tab-closed -->
@@ -1903,6 +1911,7 @@ function renderDashboard(data, fileName) {
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
   window._plTreemapData = treemapData;
   renderTreemap('pl-treemap', treemapData);
+  renderPLByTickerTable(treemapData);
 
   // ── STOCKS TABLE ──
   renderStocksTable(data);
@@ -3895,6 +3904,46 @@ function showTreemapTooltip(tile, it) {
   if (top < 60) top = rect.bottom + 10; // flip below if it would overlap the header above
   _treemapTooltipEl.style.left = left + 'px';
   _treemapTooltipEl.style.top  = top + 'px';
+}
+
+// Table beneath the treemap: ticker, realized P&L, and % of total P&L
+// across all tickers (net gains and net losses share the same 100% base,
+// so a losing ticker shows a negative percentage).
+function renderPLByTickerTable(treemapData) {
+  const tbody = document.querySelector('#pl-by-ticker-table tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!treemapData || !treemapData.length) {
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px;">No data</td></tr>';
+    return;
+  }
+
+  const totalPL = treemapData.reduce((sum, it) => sum + it.value, 0);
+
+  treemapData.forEach(it => {
+    const pct = totalPL !== 0 ? (it.value / totalPL * 100) : 0;
+    const color = it.value >= 0 ? 'var(--green)' : 'var(--red)';
+    const sign = it.value >= 0 ? '+' : '−';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-family:'Syne',sans-serif;font-weight:700;">${escHtml(it.label)}</td>
+      <td class="mono" style="text-align:right;color:${color};">${sign}$${Math.abs(it.value).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td class="mono" style="text-align:right;color:${color};">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const totalRow = document.createElement('tr');
+  totalRow.style.borderTop = '1px solid var(--border)';
+  totalRow.style.fontWeight = '700';
+  const totalColor = totalPL >= 0 ? 'var(--green)' : 'var(--red)';
+  totalRow.innerHTML = `
+    <td style="font-family:'Syne',sans-serif;font-weight:700;">Total</td>
+    <td class="mono" style="text-align:right;color:${totalColor};">${totalPL >= 0 ? '+' : '−'}$${Math.abs(totalPL).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    <td class="mono" style="text-align:right;">100.0%</td>
+  `;
+  tbody.appendChild(totalRow);
 }
 
 // ═══════════════════════════════════════════════════════════════════
