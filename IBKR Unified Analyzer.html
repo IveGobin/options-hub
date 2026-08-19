@@ -173,6 +173,7 @@
   .type-badge.P { background:rgba(0,200,83,0.12); color:var(--green); }
   .type-badge.C { background:rgba(255,71,87,0.12); color:var(--red); }
   .premium-pill { background:rgba(200,255,0,0.08); color:var(--accent); border-radius:6px; padding:3px 10px; font-family:'Space Mono',monospace; font-size:12px; font-weight:700; white-space:nowrap; }
+  .premium-pill.debit { background:rgba(255,71,87,0.1); color:var(--red); }
   .unr-pos { color:var(--green); font-family:'Space Mono',monospace; font-size:12px; }
   .unr-neg { color:var(--red);   font-family:'Space Mono',monospace; font-size:12px; }
   .unr-neu { color:var(--muted); font-family:'Space Mono',monospace; font-size:12px; }
@@ -980,6 +981,8 @@ function fmtEur(val) { const v = num(val); return (v<0?'-€':'€') + Math.abs(
 function fmtK(val)   { const v = num(val); return Math.abs(v) >= 1000 ? '$' + (Math.abs(v)/1000).toFixed(1) + 'k' : '$' + Math.abs(v).toFixed(0); }
 function fmtAbs(val) { const v = Math.abs(num(val)); return v >= 1000 ? '$' + (v/1000).toFixed(1)+'k' : '$' + v.toFixed(0); }
 function fmtSign(val,ccy) { const v=num(val); if(v===0) return (ccy||'€')+'0.00'; return (v>0?'+':'−')+(ccy||'€')+Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// Signed premium in $ — credit (short/sold) shows +, debit (long/bought) shows -.
+function fmtPrem(val, decimals) { const v = num(val); const d = decimals===undefined?2:decimals; return (v<0?'-$':'+$') + Math.abs(v).toFixed(d); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // Builds a <tr> for a table's total/summary footer row from an explicit list of cells.
@@ -1257,14 +1260,20 @@ function processIBKR(sections) {
     const parsed = parseOptSym(r[iOpSym]);
     if (!parsed) return null;
     const qty = num(r[iOpQty]);
+    const isLong = qty > 0; // positive qty = bought/long (debit); negative qty = sold/written (credit)
     const costPrice = num(r[iOpCostP]);
     const costBasis = num(r[iOpCostB]);
     const curValue  = num(r[iOpVal]);
     const unrPL     = num(r[iOpUnrPL]);
-    const exposure  = parsed.type==='P' ? Math.abs(qty) * parsed.strike * (num(r[iOpMult])||100) : null;
-    const premCollected = Math.abs(costPrice) * Math.abs(qty) * (num(r[iOpMult])||100);
+    const mult = num(r[iOpMult])||100;
+    const exposure  = parsed.type==='P' ? Math.abs(qty) * parsed.strike * mult : null;
+    // Magnitude of premium changing hands; sign depends on direction:
+    // short (sold) options collect a credit, long (bought) options pay a debit.
+    const premMagnitude = Math.abs(costPrice) * Math.abs(qty) * mult;
+    const premBase = premMagnitude>0 ? premMagnitude : Math.abs(costBasis);
+    const premiumCollected = isLong ? -premBase : premBase;
     return { sym:r[iOpSym].trim(), ticker:parsed.ticker, expiry:parsed.expiry, strike:parsed.strike, type:parsed.type,
-      qty:Math.abs(qty), premiumCollected: premCollected>0?premCollected:Math.abs(costBasis),
+      qty:Math.abs(qty), isLong, premiumCollected,
       currentValue:Math.abs(curValue), unrPL, exposure, openDate:null };
   }).filter(Boolean);
   for (const pos of openPositions) {
@@ -1807,7 +1816,7 @@ function renderDashboard(data, fileName) {
     { label:'Portfolio NAV',    value:'€'+data.navEnd.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}), cls:'blue',  bar:'blue' },
     { label:'Realized options', value:fmt(data.closedNet), cls:data.closedNet>=0?'pos':'neg', bar:data.closedNet>=0?'green':'red' },
     { label:'Unrealized P&L',   value:fmt(data.openUnrPL + data.stockUnrNet * data.eurUsdRate), cls:(data.openUnrPL + data.stockUnrNet * data.eurUsdRate)>=0?'pos':'neg', bar:(data.openUnrPL + data.stockUnrNet * data.eurUsdRate)>=0?'green':'red' },
-    { label:'Premium at risk',  value:fmt(data.openPremiumCollected), cls:'neutral', bar:'accent' },
+    { label:'Premium at risk',  value:fmt(data.openPremiumCollected), cls:data.openPremiumCollected<0?'neg':'neutral', bar:data.openPremiumCollected<0?'red':'accent' },
     { label:'Put exposure',     value:fmtK(data.totalExposure), cls:'neutral', bar:'yellow' },
     { label:'Stock P&L',        value:fmtEur(data.stockTotal), cls:data.stockTotal>=0?'pos':'neg', bar:data.stockTotal>=0?'green':'red' },
     { label:'Cash (EUR equiv)', value:'€'+data.totalCashEUR.toLocaleString(undefined,{minimumFractionDigits:0}), cls:'neutral', bar:'blue' },
@@ -2362,8 +2371,11 @@ function renderOpenTable(openPositions) {
     const dlEl = dl < 0 ? `<span style="color:var(--red)">${dl}d</span>` : dl===0 ? `<span style="color:var(--yellow)">today</span>` : `${dl}d`;
     const unrCls = p.unrPL>0?'unr-pos':p.unrPL<0?'unr-neg':'unr-neu';
     const unrStr = p.unrPL>0?`+$${p.unrPL.toFixed(2)}`:p.unrPL<0?`-$${Math.abs(p.unrPL).toFixed(2)}`:'$0';
+    // "% kept" and the 80%-buyback target only make sense for premium SOLD (credit);
+    // for bought (debit) positions there's no premium to have "kept", so show "—".
     const keptPct = p.premiumCollected > 0 ? ((p.premiumCollected - p.currentValue) / p.premiumCollected) * 100 : null;
     const keptEl = keptPct===null ? '—' : (() => { const cls=keptPct>=75?'high':keptPct>=40?'mid':keptPct>=0?'low':'neg'; return `<span class="kept-pill ${cls}">${keptPct.toFixed(1)}%</span>`; })();
+    const perShare = p.premiumCollected / (p.qty*100);
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>${escHtml(p.ticker)}</strong></td>
@@ -2371,9 +2383,9 @@ function renderOpenTable(openPositions) {
       <td class="mono">${fmtDate(p.expiry)}</td>
       <td class="mono">$${p.strike%1===0?p.strike.toFixed(0):p.strike.toFixed(2)}</td>
       <td class="mono">${p.qty}</td>
-      <td><span class="premium-pill">+$${p.premiumCollected.toFixed(2)}</span></td>
-      <td class="mono" style="color:var(--accent);font-size:11px;">$${(p.premiumCollected/(p.qty*100)).toFixed(2)}/sh</td>
-      <td class="mono" style="color:var(--green);font-weight:600;">$${((p.premiumCollected/(p.qty*100))*0.2).toFixed(2)}</td>
+      <td><span class="premium-pill${p.premiumCollected<0?' debit':''}">${fmtPrem(p.premiumCollected)}</span></td>
+      <td class="mono" style="color:${p.premiumCollected<0?'var(--red)':'var(--accent)'};font-size:11px;">${fmtPrem(perShare)}/sh</td>
+      <td class="mono" style="color:${p.premiumCollected<0?'var(--muted)':'var(--green)'};font-weight:600;">${p.premiumCollected<0?'—':'$'+(perShare*0.2).toFixed(2)}</td>
       <td class="mono" style="color:var(--muted)">$${p.currentValue.toFixed(2)}</td>
       <td class="${unrCls}">${unrStr}</td>
       <td>${keptEl}</td>
@@ -2391,7 +2403,7 @@ function renderOpenTable(openPositions) {
   const totUnrStr = totUnrPL>0?`+$${totUnrPL.toFixed(2)}`:totUnrPL<0?`-$${Math.abs(totUnrPL).toFixed(2)}`:'$0';
   const tfoot = buildTotalRow([
     { html:'TOTAL', colspan:5, style:'color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;' }, // Ticker, Type, Exp.date, Strike, Qty
-    { html:`<span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$${totPrem.toFixed(2)}</span>` },            // Premium collected
+    { html:`<span class="premium-pill${totPrem<0?' debit':''}" style="${totPrem<0?'':'background:rgba(0,180,216,0.1);color:var(--blue)'}">${fmtPrem(totPrem)}</span>` },  // Premium collected
     '',                                                                                                                                        // Per share
     '',                                                                                                                                        // 80%
     { html:`$${totCtC.toFixed(2)}`, class:'mono', style:'color:var(--muted)' },                                                                // Cost to close
@@ -2457,8 +2469,8 @@ function renderPremiumByTickerChart(openByTicker) {
   if (_chartPremiumByTicker) { _chartPremiumByTicker.destroy(); _chartPremiumByTicker = null; }
 
   const sorted = Object.entries(openByTicker)
-    .filter(([, v]) => v > 0)
-    .sort((a, b) => a[1] - b[1]); // ascending so the largest ends up on top (Chart.js horizontal bar draws top-to-bottom)
+    .filter(([, v]) => v !== 0)
+    .sort((a, b) => a[1] - b[1]);
 
   if (!sorted.length) {
     const ctx = canvas.getContext('2d');
@@ -2468,16 +2480,18 @@ function renderPremiumByTickerChart(openByTicker) {
 
   const labels = sorted.map(d => d[0]);
   const values = sorted.map(d => +d[1].toFixed(2));
+  const colors = values.map(v => v < 0 ? 'rgba(255,71,87,0.75)' : 'rgba(0,200,83,0.75)');
+  const hoverColors = values.map(v => v < 0 ? '#ff4757' : '#00c853');
 
   _chartPremiumByTicker = new Chart(canvas, {
     type: 'bar',
     data: {
       labels,
       datasets: [{
-        label: 'Premium collected',
+        label: 'Premium (credit sold / debit bought)',
         data: values,
-        backgroundColor: 'rgba(0,200,83,0.75)',
-        hoverBackgroundColor: '#00c853',
+        backgroundColor: colors,
+        hoverBackgroundColor: hoverColors,
         borderRadius: 6,
         barPercentage: 0.65,
       }]
@@ -2490,12 +2504,12 @@ function renderPremiumByTickerChart(openByTicker) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => 'Premium: +$' + ctx.parsed.x.toLocaleString('en-US', { maximumFractionDigits: 0 }),
+            label: ctx => 'Premium: ' + fmtPrem(ctx.parsed.x),
           }
         }
       },
       scales: {
-        x: { ticks: { color: '#5a6473', font: { size: 11 }, callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(128,128,128,0.07)' }, border: { display: false }, beginAtZero: true },
+        x: { ticks: { color: '#5a6473', font: { size: 11 }, callback: v => (v<0?'-$':'$') + Math.abs(v).toLocaleString() }, grid: { color: 'rgba(128,128,128,0.07)' }, border: { display: false }, beginAtZero: true },
         y: { ticks: { color: '#5a6473', font: { size: 12, family: 'Space Mono', weight: '700' } }, grid: { display: false } }
       }
     }
@@ -2560,7 +2574,7 @@ function renderExpiryDatePie(openPositions) {
         tooltip: {
           callbacks: {
             label: ctx => 'Exposure: $' + ctx.parsed.x.toLocaleString('en-US', { maximumFractionDigits: 0 }),
-            afterLabel: ctx => 'Premium collected: +$' + prems[ctx.dataIndex].toFixed(2),
+            afterLabel: ctx => 'Premium: ' + fmtPrem(prems[ctx.dataIndex]),
           }
         }
       },
@@ -2580,7 +2594,7 @@ function renderMonthlyPremium(openPositions) {
   for (let i=0;i<4;i++) { const d=new Date(now.getFullYear(),now.getMonth()+i,1); months.push({year:d.getFullYear(),month:d.getMonth(),label:d.toLocaleString('en-US',{month:'long',year:'numeric'}),total:0,tickers:{}}); }
   let otherTotal=0, otherTickers={};
   openPositions.forEach(p => {
-    const prem=p.premiumCollected; if(prem<=0) return;
+    const prem=p.premiumCollected; if(prem===0) return;
     const expY=p.expiry.getFullYear(), expM=p.expiry.getMonth();
     let matched=false;
     months.forEach(m => { if(expY===m.year&&expM===m.month) { m.total+=prem; m.tickers[p.ticker]=(m.tickers[p.ticker]||0)+prem; matched=true; } });
@@ -2588,16 +2602,16 @@ function renderMonthlyPremium(openPositions) {
   });
   months.forEach(m => {
     const card = document.createElement('div');
-    card.className = 'month-card'+(m.total>0?' has-data':'');
-    const lines = Object.entries(m.tickers).sort((a,b)=>b[1]-a[1]).map(([t,v])=>`<div class="month-ticker-row"><span class="month-ticker-name">${escHtml(t)}</span><span class="month-ticker-val">+$${v.toFixed(0)}</span></div>`).join('');
-    card.innerHTML = `<div class="month-label">${m.label}</div><div class="month-amount${m.total===0?' empty':''}">${m.total>0?'+$'+m.total.toFixed(0):'—'}</div><div class="month-tickers">${lines||'<div class="month-ticker-row"><span class="month-ticker-name" style="opacity:0.35">—</span></div>'}</div>`;
+    card.className = 'month-card'+(m.total!==0?' has-data':'');
+    const lines = Object.entries(m.tickers).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).map(([t,v])=>`<div class="month-ticker-row"><span class="month-ticker-name">${escHtml(t)}</span><span class="month-ticker-val" style="color:${v<0?'var(--red)':'var(--blue)'}">${fmtPrem(v,0)}</span></div>`).join('');
+    card.innerHTML = `<div class="month-label">${m.label}</div><div class="month-amount${m.total===0?' empty':''}" style="${m.total!==0?'color:'+(m.total<0?'var(--red)':'var(--blue)'):''}">${m.total!==0?fmtPrem(m.total,0):'—'}</div><div class="month-tickers">${lines||'<div class="month-ticker-row"><span class="month-ticker-name" style="opacity:0.35">—</span></div>'}</div>`;
     grid.appendChild(card);
   });
-  if (otherTotal>0) {
+  if (otherTotal!==0) {
     const card = document.createElement('div');
     card.className = 'month-card has-data';
-    const lines = Object.entries(otherTickers).sort((a,b)=>b[1]-a[1]).map(([t,v])=>`<div class="month-ticker-row"><span class="month-ticker-name">${escHtml(t)}</span><span class="month-ticker-val">+$${v.toFixed(0)}</span></div>`).join('');
-    card.innerHTML = `<div class="month-label" style="opacity:0.7">Beyond 4 mo.</div><div class="month-amount">+$${otherTotal.toFixed(0)}</div><div class="month-tickers">${lines}</div>`;
+    const lines = Object.entries(otherTickers).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).map(([t,v])=>`<div class="month-ticker-row"><span class="month-ticker-name">${escHtml(t)}</span><span class="month-ticker-val" style="color:${v<0?'var(--red)':'var(--blue)'}">${fmtPrem(v,0)}</span></div>`).join('');
+    card.innerHTML = `<div class="month-label" style="opacity:0.7">Beyond 4 mo.</div><div class="month-amount" style="color:${otherTotal<0?'var(--red)':'var(--blue)'}">${fmtPrem(otherTotal,0)}</div><div class="month-tickers">${lines}</div>`;
     grid.appendChild(card);
   }
 }
@@ -2625,7 +2639,7 @@ function renderWeeklyCalendar(openPositions) {
   const fridayMap = {};
   fridays.forEach(f => { const k=f.toISOString().slice(0,10); fridayMap[k]={total:0,tickers:{},fridayDate:new Date(f)}; });
   openPositions.forEach(p => {
-    const prem=p.premiumCollected; if(prem<=0) return;
+    const prem=p.premiumCollected; if(prem===0) return;
     const exp=new Date(p.expiry); exp.setHours(0,0,0,0);
     for (const fKey of Object.keys(fridayMap)) {
       const fri=fridayMap[fKey].fridayDate; const mon=new Date(fri); mon.setDate(fri.getDate()-4);
@@ -2644,18 +2658,18 @@ function renderWeeklyCalendar(openPositions) {
     const fKeys=monthGroups[mk]; const monthTotal=fKeys.reduce((s,k)=>s+(fridayMap[k]?.total||0),0);
     const group=document.createElement('div'); group.className='week-month-group';
     const header=document.createElement('div'); header.className='week-month-header';
-    header.innerHTML=`<span>${monthLabels[mk]}</span><span class="week-month-total${monthTotal===0?' empty':''}">${monthTotal>0?'+$'+monthTotal.toFixed(0):'—'}</span>`;
+    header.innerHTML=`<span>${monthLabels[mk]}</span><span class="week-month-total${monthTotal===0?' empty':''}" style="${monthTotal!==0?'color:'+(monthTotal<0?'var(--red)':''):''}">${monthTotal!==0?fmtPrem(monthTotal,0):'—'}</span>`;
     group.appendChild(header);
     const rows=document.createElement('div'); rows.className='week-rows';
     fKeys.forEach(fKey => {
-      const d=fridayMap[fKey]; const hasExp=d.total>0; const fri=d.fridayDate;
+      const d=fridayMap[fKey]; const hasExp=d.total!==0; const fri=d.fridayDate;
       const dl=Math.round((fri-now)/86400000); const isToday=dl===0;
       const weekEl=document.createElement('div');
       weekEl.className='week-row'+(hasExp?' has-exp':' no-exp')+(isToday?' is-today':'');
       const dayLabel=fri.toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric'});
       const dStr=dl===0?'today':dl===1?'tomorrow':`in ${dl}d`;
-      const chips=hasExp?Object.entries(d.tickers).sort((a,b)=>b[1]-a[1]).map(([t,v])=>`<span class="week-ticker-chip">${escHtml(t)}<span>+$${v.toFixed(0)}</span></span>`).join(''):'' ;
-      weekEl.innerHTML=`<div class="week-row-inner"><div class="week-date-line"><span class="week-date">${dayLabel}</span><span class="week-days-left">${dStr}</span></div><div class="week-amount">${hasExp?'+$'+d.total.toFixed(0):'—'}</div>${hasExp?`<div class="week-tickers">${chips}</div>`:''}</div>`;
+      const chips=hasExp?Object.entries(d.tickers).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).map(([t,v])=>`<span class="week-ticker-chip">${escHtml(t)}<span style="${v<0?'color:var(--red)':''}">${fmtPrem(v,0)}</span></span>`).join(''):'' ;
+      weekEl.innerHTML=`<div class="week-row-inner"><div class="week-date-line"><span class="week-date">${dayLabel}</span><span class="week-days-left">${dStr}</span></div><div class="week-amount" style="${hasExp&&d.total<0?'color:var(--red)':''}">${hasExp?fmtPrem(d.total,0):'—'}</div>${hasExp?`<div class="week-tickers">${chips}</div>`:''}</div>`;
       rows.appendChild(weekEl);
     });
     group.appendChild(rows);
@@ -3032,7 +3046,7 @@ function renderCashIncome(d) {
     <div class="earn-card">
       <div class="earn-card-title">Options summary</div>
       <div class="earn-item"><div class="earn-item-icon">✅</div><div><div class="earn-item-label">Realized (closed)</div><div class="earn-item-value" style="color:${d.closedNet>=0?'var(--green)':'var(--red)'};">${d.closedNet>=0?'+':''}$${d.closedNet.toFixed(2)}</div></div><div class="earn-item-tag">${d.closedOptions.length} contracts</div></div>
-      <div class="earn-item"><div class="earn-item-icon">⏳</div><div><div class="earn-item-label">Premium at risk</div><div class="earn-item-value" style="color:var(--accent);">$${d.openPremiumCollected.toFixed(2)}</div></div><div class="earn-item-tag">${d.openPositions.length} open</div></div>
+      <div class="earn-item"><div class="earn-item-icon">⏳</div><div><div class="earn-item-label">Premium at risk</div><div class="earn-item-value" style="color:${d.openPremiumCollected<0?'var(--red)':'var(--accent)'};">${fmtPrem(d.openPremiumCollected)}</div></div><div class="earn-item-tag">${d.openPositions.length} open</div></div>
       <div class="earn-item"><div class="earn-item-icon">📊</div><div><div class="earn-item-label">Win rate</div><div class="earn-item-value" style="color:${d.closedWinRate>=50?'var(--green)':'var(--red)'};">${d.closedWinRate}%</div></div><div class="earn-item-tag">${d.closedWin}W / ${d.closedLose}L</div></div>
     </div>`;
 }
