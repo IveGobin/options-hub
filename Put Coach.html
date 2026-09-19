@@ -363,6 +363,9 @@ input[type="range"]::-moz-range-thumb {
             <div id="axis-rows"></div>
         </div>
 
+        <!-- Put book risk (moneyness proxy + DTE) -->
+        <div id="book-risk" style="margin-top:16px;display:none;"></div>
+
         <!-- Status -->
         <div class="you-status" id="you-status">
             <div class="you-dot"></div>
@@ -415,6 +418,9 @@ input[type="range"]::-moz-range-thumb {
     var gTickerMap  = {};
     var gDateMap    = {};
     var gNotionalUSD = 0;
+    var gPositions  = [];   // short puts from the statement, each with risk weight/status
+    var gRiskAvg    = null; // notional-weighted average risk weight (0.1 .. 1)
+    var gStmtDate   = 0;    // statement date used as "today" for DTE
 
     function getFX() { return parseFloat(el('fx-rate').value) || 1.08; }
 
@@ -665,6 +671,15 @@ input[type="range"]::-moz-range-thumb {
         var greenNotional  = exp.g * nlv;
         var orangeNotional = exp.o * nlv;
 
+        // Risk-weighted exposure: the imported book counts with factor 0.66..1.0 depending on
+        // moneyness/DTE (see putRisk); any extra notional above the imported book counts fully.
+        // Margin stays on the RAW notional — the broker margins the full amount.
+        var csvEUR = gNotionalUSD > 0 ? gNotionalUSD / getFX() : 0;
+        var riskFactor = (csvEUR > 0 && gRiskAvg !== null) ? (0.6 + 0.4 * gRiskAvg) : 1;
+        var notionalEff = csvEUR > 0
+            ? Math.min(notional, csvEUR) * riskFactor + Math.max(0, notional - csvEUR)
+            : notional;
+
         // ── Compute 0..1 scores for each axis ───────────────────────────
         // Convention: score ≥ 0.70 = green, 0.40–0.70 = warn, < 0.40 = danger
 
@@ -694,14 +709,14 @@ input[type="range"]::-moz-range-thumb {
         // 3. EXPOSURE SAFETY
         // Green: ≤ greenNotional, Warn: green–orange, Danger: > orangeNotional
         var expScore;
-        if (notional <= 0) {
+        if (notionalEff <= 0) {
             expScore = 1.0;
-        } else if (notional <= greenNotional) {
-            expScore = 0.70 + (1 - notional / greenNotional) * 0.30;
-        } else if (notional <= orangeNotional) {
-            expScore = 0.40 + ((orangeNotional - notional) / (orangeNotional - greenNotional)) * 0.30;
+        } else if (notionalEff <= greenNotional) {
+            expScore = 0.70 + (1 - notionalEff / greenNotional) * 0.30;
+        } else if (notionalEff <= orangeNotional) {
+            expScore = 0.40 + ((orangeNotional - notionalEff) / (orangeNotional - greenNotional)) * 0.30;
         } else {
-            expScore = Math.max(0, 0.40 - ((notional - orangeNotional) / orangeNotional) * 0.40);
+            expScore = Math.max(0, 0.40 - ((notionalEff - orangeNotional) / orangeNotional) * 0.40);
         }
 
         // 4. MARGIN SAFETY
@@ -750,21 +765,21 @@ input[type="range"]::-moz-range-thumb {
 
         // Zone logic (same as before)
         var liqZone = excess < stopExcess ? 'danger' : excess < targetExcess ? 'warn' : 'safe';
-        var expZone = notional <= greenNotional ? 'safe' : notional <= orangeNotional ? 'warn' : 'danger';
+        var expZone = notionalEff <= greenNotional ? 'safe' : notionalEff <= orangeNotional ? 'warn' : 'danger';
         var zoneRank = { safe: 0, warn: 1, danger: 2 };
         var effectiveLiq = notional > 0 ? liqZone : (excess < stopExcess ? 'danger' : 'safe');
         var zone = zoneRank[effectiveLiq] >= zoneRank[expZone] ? effectiveLiq : expZone;
 
         // Colour slider values
         el('exc-val').style.color = liqZone === 'danger' ? '#e86060' : liqZone === 'warn' ? '#e8a03a' : '#3aad72';
-        el('not-val').style.color = notional > orangeNotional ? '#e86060' : notional > greenNotional ? '#e8a03a' : '#3aad72';
+        el('not-val').style.color = notionalEff > orangeNotional ? '#e86060' : notionalEff > greenNotional ? '#e8a03a' : '#3aad72';
 
         // Draw radar
         drawRadar(scores, targetScores, zone);
 
         // Render axis legend table
         renderAxisLegend({
-            nlv: nlv, excess: excess, notional: notional, vix: vix,
+            nlv: nlv, excess: excess, notional: notional, notionalEff: notionalEff, vix: vix,
             stopExcess: stopExcess, targetExcess: targetExcess,
             greenNotional: greenNotional, orangeNotional: orangeNotional,
             marginUsed: marginUsed,
@@ -773,11 +788,14 @@ input[type="range"]::-moz-range-thumb {
 
         // Render what can I sell
         renderSell({
-            nlv: nlv, excess: excess, notional: notional,
+            nlv: nlv, excess: excess, notional: notional, notionalEff: notionalEff,
             stopExcess: stopExcess, targetExcess: targetExcess,
             greenNotional: greenNotional, orangeNotional: orangeNotional,
             marginUsed: marginUsed, scores: scores
         });
+
+        // Put book quality card (moneyness proxy + DTE)
+        renderBookRisk(csvEUR, riskFactor);
 
         // Status message
         var status   = el('you-status');
@@ -785,7 +803,8 @@ input[type="range"]::-moz-range-thumb {
         var sub      = el('you-sub');
         var bpLeft   = excess - targetExcess;
         var maxCanSell = bpLeft > 0 ? bpLeft / MARGIN : 0;
-        var roomByExp  = Math.max(0, greenNotional - notional);
+        var roomByExp  = Math.max(0, greenNotional - notionalEff);
+        var wtd        = riskFactor < 0.995 ? ' risk-weighted' : '';
         var canSell    = Math.min(maxCanSell, roomByExp);
 
         status.className = 'you-status ' + zone;
@@ -795,13 +814,13 @@ input[type="range"]::-moz-range-thumb {
             sub.textContent = 'Need ' + fmt(stopExcess - excess) + ' more excess to reach hard stop floor';
         } else if (zone === 'danger') {
             headline.textContent = '🔴 Overexposed';
-            sub.textContent = 'Close ' + fmt(notional - orangeNotional) + ' notional to enter caution zone';
+            sub.textContent = 'Close ' + fmt(notionalEff - orangeNotional) + wtd + ' notional to enter caution zone';
         } else if (zone === 'warn' && liqZone === 'warn') {
             headline.textContent = '⚠️ Hold — liquidity low';
             sub.textContent = 'Need ' + fmt(targetExcess - excess) + ' more excess to enter green';
         } else if (zone === 'warn') {
             headline.textContent = '⚠️ Caution — near exposure limit';
-            sub.textContent = 'Close ' + fmt(notional - greenNotional) + ' notional to enter green zone';
+            sub.textContent = 'Close ' + fmt(notionalEff - greenNotional) + wtd + ' notional to enter green zone';
         } else {
             if (canSell > 100) {
                 headline.textContent = '✅ Free to sell';
@@ -811,6 +830,78 @@ input[type="range"]::-moz-range-thumb {
                 sub.textContent = 'Little room to add more at current levels';
             }
         }
+    }
+
+    // ── PUT BOOK RISK CARD ────────────────────────────────────────────────
+    // Flag: near strike / likely ITM, or expiring within 7 days without being clearly deep OTM
+    function isFlagged(p) {
+        return p.status === 'near' || p.status === 'itm' ||
+               (p.dte <= 7 && (p.status === 'otm' || p.status === 'unknown'));
+    }
+
+    function renderBookRisk(csvEUR, riskFactor) {
+        var box = el('book-risk');
+        if (!gPositions.length || gNotionalUSD <= 0) { box.style.display = 'none'; box.innerHTML = ''; return; }
+        box.style.display = 'block';
+
+        var LBL = 'font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);';
+        var stmt = gStmtDate ? new Date(gStmtDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'today';
+        var total = gNotionalUSD;
+
+        // notional share per status
+        var order = ['deep', 'otm', 'near', 'itm', 'unknown'];
+        var share = { deep: 0, otm: 0, near: 0, itm: 0, unknown: 0 };
+        gPositions.forEach(function(p) { share[p.status] += p.notional; });
+
+        var bar = '', legend = '';
+        order.forEach(function(k) {
+            if (share[k] <= 0) return;
+            var pct = share[k] / total * 100;
+            bar += '<div style="width:' + pct.toFixed(2) + '%;background:' + RISK_COLOR[k] + ';height:100%;"></div>';
+            legend += '<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px;">' +
+                '<span style="width:8px;height:8px;border-radius:2px;background:' + RISK_COLOR[k] + ';display:inline-block;"></span>' +
+                RISK_LABEL[k] + ' ' + Math.round(pct) + '%</span>';
+        });
+
+        var flagged = gPositions.filter(isFlagged).sort(function(a, b) {
+            return (b.w * b.notional) - (a.w * a.notional);
+        });
+        var MAXROWS = 8;
+        var rowsHTML = flagged.slice(0, MAXROWS).map(function(p) {
+            var exp = p.expiry.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+            var px  = p.ratio !== null ? '\u00d7' + p.ratio.toFixed(1) + ' of premium' : 'no premium data';
+            return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-top:0.5px solid var(--border);">' +
+                '<div style="min-width:0;">' +
+                    '<div style="font-family:var(--mono);font-size:11px;font-weight:700;">' + escHTML(p.ticker) + ' ' + p.strike + ' P</div>' +
+                    '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;">' + exp + ' \u00b7 ' + p.dte + 'd \u00b7 ' + px + '</div>' +
+                '</div>' +
+                '<div style="text-align:right;flex-shrink:0;">' +
+                    '<span style="font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;background:' + RISK_COLOR[p.status] + '26;color:' + RISK_COLOR[p.status] + ';">' + RISK_LABEL[p.status] + '</span>' +
+                    '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:3px;">' + fmt(p.notional) + ' USD</div>' +
+                '</div></div>';
+        }).join('');
+        var more = flagged.length > MAXROWS
+            ? '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);padding-top:6px;">+' + (flagged.length - MAXROWS) + ' more</div>' : '';
+        var flaggedNotional = flagged.reduce(function(a, p) { return a + p.notional; }, 0);
+
+        var listHTML = flagged.length
+            ? '<div style="' + LBL + 'margin:12px 0 2px;">Needs attention \u00b7 ' + flagged.length + ' put' + (flagged.length > 1 ? 's' : '') +
+              ' \u00b7 ' + Math.round(flaggedNotional / total * 100) + '% of notional</div>' + rowsHTML + more
+            : '<div style="font-family:var(--mono);font-size:11px;color:#3aad72;margin-top:12px;">\u2705 No puts near the strike or expiring within 7 days.</div>';
+
+        box.innerHTML =
+            '<div style="' + LBL + 'margin-bottom:8px;">Put book quality \u00b7 as of ' + stmt + '</div>' +
+            '<div style="padding:12px 14px;border-radius:10px;border:0.5px solid var(--border);background:var(--surface2);">' +
+                '<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--border);">' + bar + '</div>' +
+                '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;line-height:1.7;">' + legend + '</div>' +
+                '<div style="font-family:var(--mono);font-size:11px;margin-top:10px;">' +
+                    'Raw <b>' + fmt(csvEUR) + '</b> EUR \u2192 risk-weighted <b>' + fmt(csvEUR * riskFactor) + '</b> EUR' +
+                    ' <span style="color:var(--muted);">(counts ' + Math.round(riskFactor * 100) + '%)</span></div>' +
+                listHTML +
+                '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5;">' +
+                    'Estimated from option price vs premium collected \u2014 the statement has no underlying prices. ' +
+                    'Margin still uses the raw notional.</div>' +
+            '</div>';
     }
 
     // ── AXIS LEGEND TABLE ─────────────────────────────────────────────────
@@ -847,7 +938,7 @@ input[type="range"]::-moz-range-thumb {
                 name: 'Exposure Safety',
                 score: d.scores[2],
                 tgtScore: d.targetScores[2],
-                value: fmtE(d.notional),
+                value: fmtE(d.notionalEff) + (Math.abs(d.notionalEff - d.notional) > 1 ? ' (raw ' + fmt(d.notional) + ')' : ''),
                 optimal: '≤ ' + fmtE(d.greenNotional),
                 zones: [
                     { label: '🔴 Danger: > ' + fmtE(d.orangeNotional), color: '#e86060' },
@@ -955,6 +1046,7 @@ input[type="range"]::-moz-range-thumb {
         var nlv            = d.nlv;
         var excess         = d.excess;
         var notional       = d.notional;
+        var notionalEff    = d.notionalEff !== undefined ? d.notionalEff : d.notional;
         var greenNotional  = d.greenNotional;
         var orangeNotional = d.orangeNotional;
         var targetExcess   = d.targetExcess;
@@ -963,7 +1055,7 @@ input[type="range"]::-moz-range-thumb {
 
         // How much more notional can we add before hitting the binding constraint?
         // Constraint 1: Exposure — room to greenNotional
-        var roomExposure = Math.max(0, greenNotional - notional);
+        var roomExposure = Math.max(0, greenNotional - notionalEff);
         // Constraint 2: Liquidity — each 1 EUR notional uses MARGIN EUR of margin
         var excessAboveTarget = excess - targetExcess;
         var roomLiquidity = excessAboveTarget > 0 ? excessAboveTarget / MARGIN : 0;
@@ -1097,6 +1189,33 @@ input[type="range"]::-moz-range-thumb {
         });
     }
 
+    // ── PUT RISK MODEL ────────────────────────────────────────────────────
+    // The statement has no underlying price, so "how far OTM" is estimated from
+    // r = current option price / premium collected:
+    //   r <= 0.35  deep OTM   |  r <= 1  OTM  |  r <= 2  near strike  |  r > 2  likely ITM
+    // Weight (0.1 .. 1.0) = how much of the raw notional counts as real risk:
+    //   - grows with r (more pressure = more risk), reaches 1.0 at r >= 2.5
+    //   - a deep OTM put close to expiry is discounted further (little time left to go wrong)
+    //   - anything that is not clearly deep OTM gets no time discount (short DTE near strike = gamma risk)
+    function putRisk(p) {
+        var r = p.ratio;
+        if (r === null) return { w: 0.6, status: 'unknown' };
+        var m  = 0.15 + 0.85 * Math.min(1, r / 2.5);
+        var t0 = 0.6 + 0.4 * Math.min(1, Math.max(0, p.dte) / 45);
+        var k  = Math.max(0, Math.min(1, (r - 0.2) / 0.3));   // 0 = clearly deep OTM, 1 = no discount
+        var t  = t0 + (1 - t0) * k;
+        var status = r <= 0.35 ? 'deep' : r <= 1 ? 'otm' : r <= 2 ? 'near' : 'itm';
+        return { w: m * t, status: status };
+    }
+    var RISK_LABEL = { deep: 'Deep OTM', otm: 'OTM', near: 'Near strike', itm: 'Likely ITM', unknown: 'n/a' };
+    var RISK_COLOR = { deep: '#3aad72', otm: 'rgba(58,173,114,0.55)', near: '#e8a03a', itm: '#e86060', unknown: '#7a756d' };
+
+    function escHTML(t) {
+        return String(t).replace(/[&<>"']/g, function(c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
     // Parse "1,234.56" / "-2" / "" safely (thousands separators are stripped)
     function numIBKR(v) {
         var n = parseFloat(String(v === undefined || v === null ? '' : v).replace(/,/g, ''));
@@ -1127,9 +1246,10 @@ input[type="range"]::-moz-range-thumb {
     function parseIBKRSingle(csv) {
         var out = {
             periodEnd: 0, nlvEUR: null, cashEUR: null, notionalUSD: 0,
-            tickerMap: {}, dateMap: {},
+            tickerMap: {}, dateMap: {}, positions: [],
             openPosSeen: false, putsFound: 0
         };
+        var MONTHS = { JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11 };
         var rows = csv.split(/\r?\n/)
             .map(function(l) { return l.trim(); })
             .filter(function(l) { return l.length > 0; })
@@ -1176,6 +1296,8 @@ input[type="range"]::-moz-range-thumb {
                 var iSym  = ibkrCol(m, ['symbol'], 5);
                 var iQty  = ibkrCol(m, ['quantity'], 6);
                 var iMul  = ibkrCol(m, ['mult', 'multiplier'], 7);
+                var iCost = ibkrCol(m, ['cost price'], 8);
+                var iClos = ibkrCol(m, ['close price'], 10);
 
                 // Skip "Lot" detail rows when the statement has a discriminator column
                 if ((noHeader || m['datadiscriminator'] !== undefined) && (cols[iDisc] || '') !== 'Summary') return;
@@ -1198,7 +1320,26 @@ input[type="range"]::-moz-range-thumb {
                 out.putsFound++;
                 out.tickerMap[ticker] = (out.tickerMap[ticker] || 0) + n;
                 out.dateMap[expDate]  = (out.dateMap[expDate]  || 0) + n;
+
+                var costPx  = Math.abs(numIBKR(cols[iCost]));
+                var closePx = Math.abs(numIBKR(cols[iClos]));
+                out.positions.push({
+                    ticker: ticker, expStr: expDate,
+                    expiry: new Date(2000 + parseInt(sm[4], 10), MONTHS[sm[3]], parseInt(sm[2], 10)),
+                    strike: strike, qty: Math.abs(qty), notional: n,
+                    ratio: (costPx > 0 && !isNaN(closePx)) ? closePx / costPx : null,
+                    dte: 0
+                });
             }
+        });
+
+        // DTE is measured from the statement date (same moment the option prices are from)
+        var ref = out.periodEnd ? new Date(out.periodEnd) : new Date();
+        ref.setHours(0, 0, 0, 0);
+        out.positions.forEach(function(pos) {
+            pos.dte = Math.round((pos.expiry - ref) / 86400000);
+            var rk = putRisk(pos);
+            pos.w = rk.w; pos.status = rk.status;
         });
 
         out.cashEUR = cashExact !== null ? cashExact : cashLoose;
@@ -1228,6 +1369,13 @@ input[type="range"]::-moz-range-thumb {
                 dateMap[k] = (dateMap[k] || 0) + p.dateMap[k];
             });
         });
+
+        gPositions = [];
+        parsed.forEach(function(p) { gPositions = gPositions.concat(p.positions); });
+        gStmtDate = newest.periodEnd || 0;
+        var wSum = 0;
+        gPositions.forEach(function(pos) { wSum += pos.w * pos.notional; });
+        gRiskAvg = notionalUSD > 0 ? wSum / notionalUSD : null;
 
         if (notionalUSD > 0) {
             var maxTicker = Math.max.apply(null, Object.keys(tickerMap).map(function(k){ return tickerMap[k]; }));
@@ -1265,6 +1413,9 @@ input[type="range"]::-moz-range-thumb {
             messages.push('Put notional: ' + fmt(notionalUSD) + ' USD');
             messages.push('Top ticker: ' + bigTicker + ' ' + Math.round(gTickerConc*100) + '%');
             messages.push('Top expiry: ' + bigDate + ' ' + Math.round(gDateConc*100) + '%');
+            var flagged = gPositions.filter(isFlagged).length;
+            messages.push('Risk-weighted: ' + Math.round((0.6 + 0.4 * gRiskAvg) * 100) + '% of raw' +
+                (flagged ? ' \u00b7 ' + flagged + ' flagged' : ''));
         }
 
         if (messages.length === 0) {
