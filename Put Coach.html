@@ -1097,62 +1097,111 @@ input[type="range"]::-moz-range-thumb {
         });
     }
 
-    // Parse a single IBKR CSV and return extracted data object
+    // Parse "1,234.56" / "-2" / "" safely (thousands separators are stripped)
+    function numIBKR(v) {
+        var n = parseFloat(String(v === undefined || v === null ? '' : v).replace(/,/g, ''));
+        return isNaN(n) ? NaN : n;
+    }
+
+    // Build {lower-case column name -> index} from an IBKR "Header" row
+    function ibkrHeaderMap(row) {
+        var m = {};
+        for (var i = 2; i < row.length; i++) {
+            var k = (row[i] || '').trim().toLowerCase();
+            if (k && m[k] === undefined) m[k] = i;
+        }
+        return m;
+    }
+
+    // First matching column name wins; fb is used only when the header is missing entirely
+    function ibkrCol(map, names, fb) {
+        for (var i = 0; i < names.length; i++) {
+            if (map[names[i]] !== undefined) return map[names[i]];
+        }
+        return fb;
+    }
+
+    // Parse a single IBKR CSV and return extracted data object.
+    // Columns are looked up by their header name in each section, so it works
+    // when IBKR adds/removes/reorders columns (e.g. an extra "Account" column).
     function parseIBKRSingle(csv) {
-        var lines = csv.split('\n').map(function(l) { return l.trim(); });
-        var out = { periodEnd: 0, nlvEUR: null, cashEUR: null, notionalUSD: 0, tickerMap: {}, dateMap: {} };
+        var out = {
+            periodEnd: 0, nlvEUR: null, cashEUR: null, notionalUSD: 0,
+            tickerMap: {}, dateMap: {},
+            openPosSeen: false, putsFound: 0
+        };
+        var rows = csv.split(/\r?\n/)
+            .map(function(l) { return l.trim(); })
+            .filter(function(l) { return l.length > 0; })
+            .map(splitCSV);
 
-        // Period end date
-        lines.forEach(function(line) {
-            if (line.startsWith('Statement,Data,Period,')) {
-                var cols = splitCSV(line);
-                var period = cols[3] || '';
-                var parts = period.split(' - ');
-                var endStr = parts[parts.length - 1].trim();
-                var d = new Date(endStr);
+        var headers = {};       // section name -> latest header map (headers can repeat)
+        var cashExact = null, cashLoose = null;
+        var optRe = /^(.+?)\s+(\d{2})([A-Z]{3})(\d{2})\s+([\d.]+)\s+([CP])$/;
+
+        rows.forEach(function(cols) {
+            var sec  = cols[0];
+            var kind = cols[1];
+
+            if (kind === 'Header') { headers[sec] = ibkrHeaderMap(cols); return; }
+            if (kind !== 'Data') return;
+
+            // Period end date (field name / field value)
+            if (sec === 'Statement' && cols[2] === 'Period') {
+                var parts = (cols[3] || '').split(' - ');
+                var d = new Date(parts[parts.length - 1].trim());
                 if (!isNaN(d)) out.periodEnd = d.getTime();
+                return;
+            }
+
+            // NLV / cash — "Current Total" column of Net Asset Value
+            if (sec === 'Net Asset Value') {
+                var nm = headers[sec] || {};
+                var iTot = ibkrCol(nm, ['current total', 'total'], 6);
+                var label = (cols[2] || '').trim();
+                var val = numIBKR(cols[iTot]);
+                if (isNaN(val)) return;
+                if (label === 'Total') out.nlvEUR = val;
+                else if (label.toLowerCase() === 'cash') cashExact = val;
+                else if (label.toLowerCase().indexOf('cash') === 0) cashLoose = val;
+                return;
+            }
+
+            // Open short puts notional
+            if (sec === 'Open Positions') {
+                var m = headers[sec] || {};
+                var noHeader = Object.keys(m).length === 0;
+                var iDisc = ibkrCol(m, ['datadiscriminator'], 2);
+                var iCat  = ibkrCol(m, ['asset category'], 3);
+                var iSym  = ibkrCol(m, ['symbol'], 5);
+                var iQty  = ibkrCol(m, ['quantity'], 6);
+                var iMul  = ibkrCol(m, ['mult', 'multiplier'], 7);
+
+                // Skip "Lot" detail rows when the statement has a discriminator column
+                if ((noHeader || m['datadiscriminator'] !== undefined) && (cols[iDisc] || '') !== 'Summary') return;
+                if (!/option/i.test(cols[iCat] || '')) return;
+                out.openPosSeen = true;
+
+                var qty = numIBKR(cols[iQty]);
+                var sm  = optRe.exec((cols[iSym] || '').trim());
+                if (!sm || sm[6] !== 'P' || isNaN(qty) || qty >= 0) return;
+
+                var mult = numIBKR(cols[iMul]);
+                if (isNaN(mult)) mult = 100;
+                var strike = parseFloat(sm[5]);
+                if (isNaN(strike)) return;
+
+                var ticker  = sm[1].trim();
+                var expDate = sm[2] + sm[3] + sm[4];
+                var n = Math.abs(qty) * mult * strike;
+                out.notionalUSD += n;
+                out.putsFound++;
+                out.tickerMap[ticker] = (out.tickerMap[ticker] || 0) + n;
+                out.dateMap[expDate]  = (out.dateMap[expDate]  || 0) + n;
             }
         });
 
-        // NLV total (col[6] = current total)
-        lines.forEach(function(line) {
-            if (line.startsWith('Net Asset Value,Data,Total,')) {
-                var cols = splitCSV(line);
-                var val = parseFloat(cols[6]);
-                if (!isNaN(val)) out.nlvEUR = val;
-            }
-        });
-
-        // Cash (col[6] = current total)
-        lines.forEach(function(line) {
-            if (line.startsWith('Net Asset Value,Data,Cash')) {
-                var cols = splitCSV(line);
-                var val = parseFloat(cols[6]);
-                if (!isNaN(val)) out.cashEUR = val;
-            }
-        });
-
-        // Open short puts notional
-        lines.forEach(function(line) {
-            if (!line.startsWith('Open Positions,Data,Summary,Equity and Index Options')) return;
-            var cols = splitCSV(line);
-            var symbol = cols[5] || '';
-            var qty    = parseFloat(cols[6]);
-            var mult   = parseFloat(cols[7]);
-            if (qty < 0 && symbol.trim().endsWith(' P')) {
-                var parts  = symbol.trim().split(' ');
-                var ticker  = parts[0];
-                var expDate = parts[1] || 'unknown';
-                var strike  = parseFloat(parts[parts.length - 2]);
-                if (!isNaN(strike) && !isNaN(mult)) {
-                    var n = Math.abs(qty) * mult * strike;
-                    out.notionalUSD += n;
-                    out.tickerMap[ticker] = (out.tickerMap[ticker] || 0) + n;
-                    out.dateMap[expDate]  = (out.dateMap[expDate]  || 0) + n;
-                }
-            }
-        });
-
+        out.cashEUR = cashExact !== null ? cashExact : cashLoose;
         return out;
     }
 
@@ -1221,6 +1270,13 @@ input[type="range"]::-moz-range-thumb {
         if (messages.length === 0) {
             showImportBanner('No recognisable data found in file(s): ' + (fileNames || 'unknown'), true);
             return;
+        }
+
+        if (notionalUSD <= 0) {
+            var sawOpen = parsed.some(function(p){ return p.openPosSeen; });
+            messages.push('\u26a0\ufe0f No short puts recognised' +
+                (sawOpen ? ' (option rows found, but none are short puts)' : ' (no option rows found in Open Positions)') +
+                ' \u2013 ticker/date concentration stay at 0%');
         }
 
         render();
