@@ -1467,6 +1467,15 @@ function processIBKR(sections) {
 
   // Chart data for options by month
   const MONTH_ABBR = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  // FIX: openOptPosMap stores an UNSIGNED abs(costBasis) per leg, which is fine for a
+  // single-leg position but silently ADDS both legs of a multi-leg strategy (spread,
+  // straddle, synthetic long/short, etc.) sharing the same expiry month — e.g. a
+  // synthetic long (long call + short put) shows the sum of both legs' cost basis as
+  // if it were premium collected, instead of the actual net debit/credit paid.
+  // Build a signed-premium lookup (same sign convention as premiumCollected: long =
+  // negative/debit, short = positive/credit) so multi-leg positions net correctly.
+  const openPremBySym = {};
+  openPositions.forEach(p => { openPremBySym[p.sym] = p.premiumCollected; });
   const optByMonth = {};
   for (const o of optionsRU) {
     let key = 'Other';
@@ -1475,7 +1484,11 @@ function processIBKR(sections) {
     else { const t = optTradeMap[o.sym.trim()]; const cd = t && (t.lastCloseDate || t.lastDate); if (cd) { const d=new Date(cd+'T00:00:00'); key=MONTH_ABBR[d.getMonth()]+"'"+String(d.getFullYear()).slice(2); } else { const m=o.sym.match(/(\d{2})([A-Z]{3})(\d{2})/); key=m?m[2]+"'"+m[3]:'Other'; } }
     if (!optByMonth[key]) optByMonth[key] = { closedPL:0, premiumCollected:0, count:0 };
     if (isOpen) {
-      optByMonth[key].premiumCollected += openOptPosMap[o.sym.trim()];
+      // FIX: use signed net premium (nets multi-leg positions correctly) instead of
+      // the old unsigned abs(costBasis) which double-counted offsetting legs.
+      optByMonth[key].premiumCollected += openPremBySym.hasOwnProperty(o.sym.trim())
+        ? openPremBySym[o.sym.trim()]
+        : openOptPosMap[o.sym.trim()];
       // Partially-closed open position: realized P/L already booked (e.g. partial
       // buyback) belongs to the month it was realized, not the expiry month.
       const t = optTradeMap[o.sym.trim()];
