@@ -636,7 +636,7 @@
       <div class="table-wrapper">
         <table class="open-table">
           <thead><tr>
-            <th>Ticker</th><th>Type</th><th>Exp. date</th><th>Strike</th><th>Qty</th>
+            <th>#</th><th>Ticker</th><th>Type</th><th>Exp. date</th><th>Strike</th><th>Qty</th>
             <th>Premium collected</th><th>Per share</th><th>80%</th><th>Cost to close</th>
             <th>Unrealized P&amp;L</th><th>% Kept</th><th>Exposure</th><th>Days left</th>
           </tr></thead>
@@ -2402,9 +2402,9 @@ function togglePLByTickerTable() {
 function renderOpenTable(openPositions) {
   const tbody = document.getElementById('open-tbody');
   tbody.innerHTML = '';
-  if (!openPositions.length) { tbody.innerHTML = `<tr><td colspan="13" class="empty-state">No open option positions found.</td></tr>`; return; }
+  if (!openPositions.length) { tbody.innerHTML = `<tr><td colspan="14" class="empty-state">No open option positions found.</td></tr>`; return; }
   const sorted = [...openPositions].sort((a,b) => a.expiry - b.expiry);
-  sorted.forEach(p => {
+  sorted.forEach((p, idx) => {
     const dl = daysLeft(new Date(p.expiry));
     const dlEl = dl < 0 ? `<span style="color:var(--red)">${dl}d</span>` : dl===0 ? `<span style="color:var(--yellow)">today</span>` : `${dl}d`;
     const unrCls = p.unrPL>0?'unr-pos':p.unrPL<0?'unr-neg':'unr-neu';
@@ -2416,6 +2416,7 @@ function renderOpenTable(openPositions) {
     const perShare = p.premiumCollected / (p.qty*100);
     const tr = document.createElement('tr');
     tr.innerHTML = `
+      <td class="mono" style="color:var(--muted);">${idx+1}</td>
       <td><strong>${escHtml(p.ticker)}</strong></td>
       <td><span class="type-badge ${p.type}">${p.type}</span></td>
       <td class="mono">${fmtDate(p.expiry)}</td>
@@ -2440,7 +2441,7 @@ function renderOpenTable(openPositions) {
   const totUnrCls = totUnrPL>0?'unr-pos':totUnrPL<0?'unr-neg':'unr-neu';
   const totUnrStr = totUnrPL>0?`+$${totUnrPL.toFixed(2)}`:totUnrPL<0?`-$${Math.abs(totUnrPL).toFixed(2)}`:'$0';
   const tfoot = buildTotalRow([
-    { html:'TOTAL', colspan:5, style:'color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;' }, // Ticker, Type, Exp.date, Strike, Qty
+    { html:`TOTAL · ${openPositions.length}`, colspan:6, style:'color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;' }, // #, Ticker, Type, Exp.date, Strike, Qty
     { html:`<span class="premium-pill${totPrem<0?' debit':''}" style="${totPrem<0?'':'background:rgba(0,180,216,0.1);color:var(--blue)'}">${fmtPrem(totPrem)}</span>` },  // Premium collected
     '',                                                                                                                                        // Per share
     '',                                                                                                                                        // 80%
