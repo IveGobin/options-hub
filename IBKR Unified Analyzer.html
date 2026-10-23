@@ -200,6 +200,11 @@
   table.stock-table tbody td.pos { color:var(--green); }
   table.stock-table tbody td.neg { color:var(--red); }
   table.stock-table tbody td.dim { color:var(--muted); font-size:11px; }
+  table.stock-table tbody tr.stock-group-row td { text-align:left; font-family:'Space Mono',monospace; font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); background:var(--surface2); padding:9px 12px; border-top:2px solid var(--border); font-weight:700; }
+  table.stock-table tbody tr.stock-group-row td::before { content:none; }
+  table.stock-table tbody tr.stock-sold td { opacity:0.5; }
+  table.stock-table tbody tr.stock-sold:hover td { opacity:0.9; }
+  .stock-sold-badge { background:rgba(128,128,128,0.18); color:var(--muted); border-radius:4px; padding:1px 5px; font-size:9px; font-family:'Space Mono',monospace; letter-spacing:0.08em; margin-left:6px; vertical-align:middle; }
   table.stock-table tbody tr.summary-row td { border-top:1px solid var(--border); font-weight:700; background:var(--surface2); }
 
   /* ── PIE CHARTS ── */
@@ -464,6 +469,8 @@
   table.databar-table td { padding:0; border-bottom:1px solid var(--border); }
   table.databar-table tr:last-child td { border-bottom:none; }
   .databar-row-inner { position:relative; display:flex; align-items:center; padding:8px 10px; min-height:40px; box-sizing:border-box; }
+  table.databar-table tr.databar-group td { padding:10px 10px 6px; font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); background:var(--surface2); font-family:'Space Mono',monospace; font-weight:700; }
+  table.databar-table tr.databar-sold .databar-row-inner { opacity:0.55; }
   .databar-label-cell { width:90px; vertical-align:top; padding-top:8px; }
   .databar-seg { position:absolute; top:4px; bottom:4px; border-radius:4px; }
   .databar-label { position:relative; z-index:1; font-weight:700; font-size:13px; font-family:'Space Mono',monospace; }
@@ -1437,9 +1444,9 @@ function processIBKR(sections) {
   }
 
   // ── STOCK SUMMARY ──
-  const stockRealNet = stocks.reduce((s,o)=>s+o.realTotal,0);
-  const stockUnrNet  = stocks.reduce((s,o)=>s+o.unrTotal,0);
-  const stockTotal   = stocks.reduce((s,o)=>s+o.total,0);
+  let stockRealNet = stocks.reduce((s,o)=>s+o.realTotal,0);
+  let stockUnrNet  = stocks.reduce((s,o)=>s+o.unrTotal,0);
+  let stockTotal   = stocks.reduce((s,o)=>s+o.total,0);
 
   // ── OPTIONS SUMMARY (open) ──
   const openPremiumCollected = openPositions.reduce((s,p)=>s+p.premiumCollected,0);
@@ -1509,40 +1516,109 @@ function processIBKR(sections) {
   const keyToNum = k => { const mo=monthOrder.indexOf(k.substring(0,3)); const yr=parseInt(k.substring(4))||0; return yr*12+mo; };
   const sortedMonths = Object.keys(optByMonth).sort((a,b)=>keyToNum(a)-keyToNum(b));
 
-  // ── STOCKS TABLE (trades-based, instrument currency) ──
-  // Realized P/L: sum of Trades SubTotal "Realized P/L" per symbol across all loaded
-  // files (full history — includes symbols closed in older statements that no longer
-  // appear in the newest R&U summary). Values are in the instrument's currency.
-  const stockSubStats = {};
-  for (const r of (sections['Trades']||[]).filter(r2 => r2[1]==='SubTotal' && r2[3]==='Stocks')) {
-    const key = normSym((r[itSym]||'').trim());
-    if (!key) continue;
-    if (!stockSubStats[key]) stockSubStats[key] = { ccy:(r[4]||'').trim()||'USD', netQty:0, basis:0, realPL:0 };
-    stockSubStats[key].netQty += num(r[itQty]);
-    stockSubStats[key].basis  += num(r[itBasis]);
-    stockSubStats[key].realPL += num(r[itRealPL]);
-  }
-  // Current qty & price from Mark-to-Market Performance Summary (newest file, instrument ccy)
+  // ── STOCKS TABLE (FIFO lot matching, instrument currency) ──
+  // IBKR's own "Realized P/L" follows the account's lot-matching method, which is not
+  // necessarily FIFO (it may close newer / higher-cost lots first). So realized and
+  // unrealized P&L are recomputed here from the individual stock trades of ALL loaded
+  // files, always matching sells against the OLDEST open lots first.
+  //   buy cost      = |proceeds| + |commission|
+  //   sell proceeds = proceeds − |commission|
+  // Shares bought/delivered through option assignment get the net option premium rolled
+  // into the price (strike − premium/sh for puts, strike + premium/sh for calls), the same
+  // way IBKR treats it in its cost basis.
   const mtmStockMap = {};
   for (const r of getData(sections,'Mark-to-Market Performance Summary').filter(r2=>r2[2]==='Stocks')) {
     mtmStockMap[normSym((r[3]||'').trim())] = { curQty:num(r[5]), curPrice:num(r[7]) };
   }
-  // Unrealized P/L: prefer Open Positions "Unrealized P/L" (authoritative — IBKR adjusts
-  // cost basis for premium of assigned options, which raw trade Basis does not reflect).
-  // Fallback: MTM current qty × current price − Σ SubTotal Basis.
-  const openStockUnrMap = {};
-  for (const p of openStocks) openStockUnrMap[p.normSym||p.sym] = p.unrPL;
+  const eurPerRate = eurUsdRate > 0 ? eurUsdRate : 1;     // USD per 1 EUR
+  const toEurAmt = (v, ccy) => ccy === 'EUR' ? v : v / eurPerRate;
+
+  // Net premium rolled into the stock = Basis of the assigned (short) option's closing row.
+  const assignPrem = {};
+  for (const r of tradesRaw) {
+    if (!(r[itCode]||'').split(';').map(c=>c.trim()).includes('A')) continue;
+    const q = num(r[itQty]);
+    const parsed = parseOptSym((r[itSym]||'').trim());
+    if (!parsed || q <= 0) continue;
+    const k = `${(parsed.ticker||'').trim().toUpperCase()}|${(r[itDate]||'').substring(0,10)}|${parsed.strike}`;
+    if (!assignPrem[k]) assignPrem[k] = { prem:0, shares:0 };
+    assignPrem[k].prem   += Math.abs(num(r[itBasis]));
+    assignPrem[k].shares += q*100;
+  }
+
+  const itPrice = ci(tCols,'t. price',8);
+  const stockOrders = getData(sections,'Trades')
+    .filter(r2 => r2[2]==='Order' && r2[3]==='Stocks' && (r2[itSym]||'').trim())
+    .map(r2 => ({ r:r2, ts:r2[itDate]||'' }))
+    .sort((a,b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);   // stable → same-second trades keep file order
+
+  const fifoBook = {};
+  for (const { r, ts } of stockOrders) {
+    const key  = normSym((r[itSym]||'').trim());
+    const book = fifoBook[key] || (fifoBook[key] = { ccy:(r[4]||'').trim()||'USD', lots:[], realized:0, trades:[] });
+    const qty = num(r[itQty]), proceeds = num(r[itProc]), comm = Math.abs(num(r[itComm]));
+    const price = num(r[itPrice]);
+    const codes = (r[itCode]||'').split(';').map(c=>c.trim());
+    const dateStr = ts.substring(0,10);
+    let perShare = 0;
+    if (codes.includes('A')) {
+      const a = assignPrem[`${key.toUpperCase()}|${dateStr}|${Math.abs(price)}`];
+      if (a && a.shares) perShare = a.prem / a.shares;
+    }
+    const t = { date:ts, qty, price, proceeds, comm:-comm, code:(r[itCode]||'').trim(), realPL:0, matched:[], untracked:0 };
+    if (qty > 0) {
+      const cost = Math.abs(proceeds) + comm - perShare*qty;
+      book.lots.push({ date:dateStr, qty, remaining:qty, unit:cost/qty });
+    } else if (qty < 0) {
+      const q = -qty;
+      const net = Math.abs(proceeds) - comm + perShare*q;
+      let need = q, cost = 0;
+      while (need > 1e-9 && book.lots.length) {
+        const lot = book.lots[0];
+        const m = Math.min(lot.remaining, need);
+        cost += m*lot.unit;
+        t.matched.push({ date:lot.date, qty:m, unit:lot.unit });
+        lot.remaining -= m; need -= m;
+        if (lot.remaining <= 1e-9) book.lots.shift();
+      }
+      if (need > 1e-9) {
+        // Sold more than the loaded statements show being bought (transfer-in, short sale…):
+        // fall back to IBKR's own basis for the unmatched part.
+        cost += Math.abs(num(r[itBasis])) * need / q;
+        t.untracked = need;
+      }
+      t.realPL = net - cost;
+      book.realized += t.realPL;
+    }
+    book.trades.push(t);
+  }
+
   const stocksTable = [];
   const _stSeen = new Set();
-  for (const key of Object.keys(stockSubStats)) {
-    const st = stockSubStats[key];
-    let unr = 0;
-    if (openStockUnrMap.hasOwnProperty(key)) unr = openStockUnrMap[key];
-    else if (Math.abs(st.netQty) > 1e-6) {
-      const m = mtmStockMap[key];
-      if (m) unr = m.curQty*m.curPrice - st.basis;
+  for (const key of Object.keys(fifoBook)) {
+    const b  = fifoBook[key];
+    const op = openStocks.find(p => (p.normSym||p.sym) === key);
+    const mtm = mtmStockMap[key];
+    let qtyHeld  = b.lots.reduce((s,l)=>s+l.remaining,0);
+    let costHeld = b.lots.reduce((s,l)=>s+l.remaining*l.unit,0);
+    const lastPrice = op ? op.closePrice : (mtm && mtm.curQty ? mtm.curPrice : 0);
+    let unr = 0, mismatch = false;
+    if (op && Math.abs(op.qty - qtyHeld) > 1e-6) {
+      // Loaded history does not explain the statement's open quantity → trust IBKR's figures.
+      mismatch = true;
+      qtyHeld = op.qty; costHeld = op.costBasis; unr = op.unrPL;
+    } else if (qtyHeld > 1e-6 && lastPrice) {
+      unr = qtyHeld*lastPrice - costHeld;
     }
-    stocksTable.push({ sym:key, ccy:st.ccy, realTotal:+st.realPL.toFixed(2), unrTotal:+unr.toFixed(2), total:+(st.realPL+unr).toFixed(2), eurBase:false });
+    const held = qtyHeld > 1e-6;
+    const lots = mismatch ? [] : b.lots.map(l => ({ date:l.date, qty:l.remaining, unit:l.unit }));
+    const real = b.realized;
+    const value = held ? qtyHeld*lastPrice : 0;
+    stocksTable.push({
+      sym:key, ccy:b.ccy, realTotal:+real.toFixed(2), unrTotal:+unr.toFixed(2), total:+(real+unr).toFixed(2), eurBase:false,
+      held, qty:qtyHeld, avgCost: held ? costHeld/qtyHeld : 0, lastPrice, value, lots, mismatch,
+      realEur:toEurAmt(real,b.ccy), unrEur:toEurAmt(unr,b.ccy), totalEur:toEurAmt(real+unr,b.ccy), valueEur:toEurAmt(value,b.ccy)
+    });
     _stSeen.add(key);
   }
   // Symbols with P&L in R&U but no trades in the loaded files (e.g. transferred in):
@@ -1550,26 +1626,25 @@ function processIBKR(sections) {
   for (const s of stocks) {
     const key = normSym((s.sym||'').trim());
     if (_stSeen.has(key)) continue;
-    stocksTable.push({ sym:key, ccy:'EUR', realTotal:s.realTotal, unrTotal:s.unrTotal, total:s.total, eurBase:true });
-  }
-  stocksTable.sort((a,b)=>b.total-a.total);
-
-  // ── STOCK TRADE MAP (for transaction drill-down) ──
-  const stockTradeMap = {};
-  for (const r of getData(sections,'Trades').filter(r2 => r2[2]==='Order' && r2[3]==='Stocks')) {
-    const sym = (r[itSym]||'').trim();
-    if (!sym) continue;
-    if (!stockTradeMap[sym]) stockTradeMap[sym] = [];
-    stockTradeMap[sym].push({
-      date: r[itDate] || '',
-      qty: num(r[itQty]),
-      price: num(r[ci(tCols,'t. price',8)]),
-      proceeds: num(r[itProc]),
-      comm: num(r[itComm]),
-      realPL: num(r[itRealPL]),
-      code: (r[itCode]||'').trim()
+    const op = openStocks.find(p => (p.normSym||p.sym) === key);
+    const held = !!op && op.qty > 0;
+    stocksTable.push({
+      sym:key, ccy:'EUR', realTotal:s.realTotal, unrTotal:s.unrTotal, total:s.total, eurBase:true,
+      held, qty:op?op.qty:0, avgCost:op?op.costPrice:0, lastPrice:op?op.closePrice:0, value:op?op.value:0, lots:[], mismatch:false,
+      realEur:s.realTotal, unrEur:s.unrTotal, totalEur:s.total, valueEur:held ? toEurAmt(op.value, op.ccy) : 0
     });
   }
+  // Still-held positions first (largest market value on top), then closed ones (best P&L first).
+  stocksTable.sort((a,b) => (a.held !== b.held) ? (a.held ? -1 : 1) : a.held ? b.valueEur - a.valueEur : b.totalEur - a.totalEur);
+
+  // Headline stock figures follow the FIFO table (EUR equivalent, full loaded history).
+  stockRealNet = stocksTable.reduce((s,r)=>s+r.realEur,0);
+  stockUnrNet  = stocksTable.reduce((s,r)=>s+r.unrEur,0);
+  stockTotal   = stockRealNet + stockUnrNet;
+
+  // ── STOCK TRADE MAP (for transaction drill-down, carries FIFO realized P&L per sell) ──
+  const stockTradeMap = {};
+  for (const key of Object.keys(fifoBook)) stockTradeMap[key] = fifoBook[key].trades;
 
   return {
     period, acctName, acctId, generated, twr,
@@ -2805,14 +2880,27 @@ function renderStocksTable(data) {
   }
 
   tbody.innerHTML = '';
-  (data.stocksTable || data.stocks).forEach(s => {
+  const _stRows = data.stocksTable || data.stocks;
+  let _grp = null;
+  _stRows.forEach(s => {
+    if (s.held !== _grp) {
+      _grp = s.held;
+      const grpRows = _stRows.filter(x => x.held === s.held);
+      const grpVal  = grpRows.reduce((a,x)=>a+(x.valueEur||0),0);
+      const hdr = document.createElement('tr');
+      hdr.className = 'stock-group-row';
+      hdr.innerHTML = s.held
+        ? `<td colspan="10">Open positions — still held (${grpRows.length}) · market value ≈ €${Math.round(grpVal).toLocaleString()}</td>`
+        : `<td colspan="10">Closed positions — fully sold (${grpRows.length})</td>`;
+      tbody.appendChild(hdr);
+    }
     const op  = openStockMap[s.sym];
     const ccy = s.ccy || (op ? op.ccy : 'USD');
     const cs  = s.eurBase ? '€' : (ccy === 'EUR' ? '€' : '$');
-    const qty = op ? op.qty.toLocaleString() : '<span style="color:var(--muted)">sold</span>';
-    const costP = op ? cs + op.costPrice.toFixed(2) : '—';
-    const lastP = op ? cs + op.closePrice.toFixed(2) : '—';
-    const mktV  = op ? cs + Math.round(op.value).toLocaleString() : '—';
+    const qty = s.held ? s.qty.toLocaleString(undefined,{maximumFractionDigits:4}) : '<span style="color:var(--muted)">sold</span>';
+    const costP = s.held ? cs + s.avgCost.toFixed(2) : '—';
+    const lastP = s.held && s.lastPrice ? cs + s.lastPrice.toFixed(2) : '—';
+    const mktV  = s.held ? cs + Math.round(s.value).toLocaleString() : '—';
     const rCls  = s.realTotal >= 0 ? 'pos' : s.realTotal < 0 ? 'neg' : 'neu';
     const uCls  = s.unrTotal >= 0 ? 'pos' : s.unrTotal < 0 ? 'neg' : 'neu';
     const tCls  = s.total >= 0 ? 'pos' : s.total < 0 ? 'neg' : 'neu';
@@ -2820,10 +2908,10 @@ function renderStocksTable(data) {
     const hasTrades = trades.length > 0;
 
     const tr = document.createElement('tr');
-    tr.className = hasTrades ? 'stock-row-expandable' : '';
+    tr.className = (hasTrades ? 'stock-row-expandable' : '') + (s.held ? '' : ' stock-sold');
     tr.title = hasTrades ? 'Click to show transactions' : '';
     tr.innerHTML = `
-      <td>${escHtml(s.sym)}</td>
+      <td>${escHtml(s.sym)}${s.held ? '' : '<span class="stock-sold-badge">SOLD</span>'}</td>
       <td style="text-align:left;color:var(--muted);font-family:'Syne',sans-serif;font-size:12px;">${escHtml(data.instrMap[s.sym]||'')}</td>
       <td class="neu">${s.eurBase ? ccy+' <span style="color:var(--muted)" title="No trades in loaded files — values from R&U summary in base currency (EUR)">*</span>' : ccy}</td>
       <td class="neu">${qty}</td>
@@ -2850,6 +2938,12 @@ function renderStocksTable(data) {
         const dateStr = t.date.substring(0, 10);
         const qtyStr = (isBuy ? '+' : '') + t.qty.toLocaleString();
         const realStr = t.realPL !== 0 ? ((t.realPL > 0 ? '+' : '') + cs + Math.abs(t.realPL).toFixed(2)) : '—';
+        let lotsCell = '<span style="color:var(--muted)">—</span>';
+        if (t.matched && t.matched.length) {
+          const parts = t.matched.map(m => `${+m.qty.toFixed(4)} @ ${cs}${m.unit.toFixed(2)} (${m.date})`);
+          lotsCell = `<span title="${escHtml(parts.join(' | '))}">${parts.slice(0,3).join('<br>')}${parts.length > 3 ? `<br>+${parts.length-3} more lots` : ''}</span>`;
+          if (t.untracked > 0) lotsCell += `<br><span style="color:var(--yellow)">+${+t.untracked.toFixed(4)} sh not in loaded history</span>`;
+        }
         const realCls = t.realPL > 0 ? 'style="color:var(--green)"' : t.realPL < 0 ? 'style="color:var(--red)"' : 'style="color:var(--muted)"';
         let priceCell = `${cs}${Math.abs(t.price).toFixed(3)}`;
         let assignBadge = '';
@@ -2874,6 +2968,7 @@ function renderStocksTable(data) {
           <td>${cs}${Math.abs(t.proceeds).toFixed(2)}</td>
           <td style="color:var(--red)">${t.comm !== 0 ? cs + t.comm.toFixed(2) : '—'}</td>
           <td ${realCls}>${realStr}</td>
+          <td style="text-align:left;color:var(--muted);font-size:10px;white-space:nowrap;">${lotsCell}</td>
           <td>${badge}</td>
         </tr>`;
       }).join('');
@@ -2883,11 +2978,19 @@ function renderStocksTable(data) {
           <div class="stock-tx-title">Transaction history — ${escHtml(s.sym)} (${trades.length} trade${trades.length !== 1 ? 's' : ''})</div>
           <table class="tx-table">
             <thead><tr>
-              <th>Date</th><th>Qty</th><th>Price</th><th>Proceeds</th><th>Commission</th><th>Realized P&L (${ccy})</th><th>Code</th>
+              <th>Date</th><th>Qty</th><th>Price</th><th>Proceeds</th><th>Commission</th><th>Realized P&L (${ccy}, FIFO)</th><th style="text-align:left;">FIFO lots sold</th><th>Code</th>
             </tr></thead>
             <tbody>${txRows}</tbody>
           </table>
-          ${hasAssign ? `<div style="margin-top:8px;font-size:10px;color:var(--muted);">→ <span style="color:var(--yellow)">yellow price</span> = effective price after net option premium (strike − premium/sh for assigned puts, strike + premium/sh for assigned calls). The avg cost in the header row uses this premium-adjusted basis, matching IBKR's Open Positions cost basis.</div>` : ''}
+          ${(s.lots && s.lots.length) ? `<div class="stock-tx-title" style="margin-top:14px;">Open lots (FIFO) — shares you still hold</div>
+          <table class="tx-table">
+            <thead><tr><th>Bought</th><th>Qty</th><th>Cost / share</th><th>Unrealized P&L (${ccy})</th></tr></thead>
+            <tbody>${s.lots.map(l => {
+              const u = s.lastPrice ? l.qty*(s.lastPrice - l.unit) : null;
+              return `<tr><td class="dep-date">${l.date}</td><td>${+l.qty.toFixed(4)} sh</td><td>${cs}${l.unit.toFixed(3)}</td><td style="color:${u===null?'var(--muted)':u>=0?'var(--green)':'var(--red)'}">${u===null?'—':(u>=0?'+':'−')+cs+Math.abs(u).toFixed(2)}</td></tr>`;
+            }).join('')}</tbody>
+          </table>` : ''}
+          ${hasAssign ? `<div style="margin-top:8px;font-size:10px;color:var(--muted);">→ <span style="color:var(--yellow)">yellow price</span> = effective price after net option premium (strike − premium/sh for assigned puts, strike + premium/sh for assigned calls). Realized / unrealized P&L is calculated FIFO (oldest lots are sold first) using this premium-adjusted basis.</div>` : ''}
         </div>
       </td>`;
 
@@ -3165,28 +3268,38 @@ function renderOptByMonthDatabar(data) {
 function renderStockPLDatabar(data) {
   const tbody = document.getElementById('stock-databar-tbody');
   if (!tbody) return;
-  if (!data.stocks || !data.stocks.length) { tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:var(--muted);padding:20px;">No data</td></tr>'; return; }
+  const src = data.stocksTable || [];
+  if (!src.length) { tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:var(--muted);padding:20px;">No data</td></tr>'; return; }
 
-  const rows = data.stocks
-    .map(s => ({ label:s.sym, real:+s.realTotal.toFixed(2), unr:+s.unrTotal.toFixed(2), total:+(s.realTotal+s.unrTotal).toFixed(2) }))
-    .sort((a,b) => a.total - b.total);
+  // FIFO figures (EUR equivalent). Rows arrive sorted: held positions first (by market value),
+  // then fully sold ones (by total P&L).
+  const rows = src.map(s => ({ label:s.sym, held:s.held, valueEur:s.valueEur||0,
+    real:+s.realEur.toFixed(2), unr:+s.unrEur.toFixed(2), total:+(s.realEur+s.unrEur).toFixed(2) }));
   const maxAbs = Math.max(...rows.map(r => Math.abs(r.real) + Math.abs(r.unr)), 0.01);
 
-  tbody.innerHTML = rows.map(r => {
+  let grp = null, html = '';
+  rows.forEach(r => {
+    if (r.held !== grp) {
+      grp = r.held;
+      const n = rows.filter(x => x.held === r.held).length;
+      html += `<tr class="databar-group"><td colspan="2">${r.held ? `Open positions — still held (${n})` : `Closed positions — fully sold (${n})`}</td></tr>`;
+    }
     const cls = r.total>=0 ? 'pos' : 'neg';
     const segs = _databarSegsHtml(r.real, r.unr, maxAbs);
     const parts = [];
+    if (r.held) parts.push(`<span style="color:var(--muted)">Value €${Math.round(r.valueEur).toLocaleString()}</span>`);
     if (r.real !== 0) parts.push(`<span class="b-real${r.real<0?' neg':''}">Real ${fmtSign(r.real,'€')}</span>`);
     if (r.unr  !== 0) parts.push(`<span class="b-open${r.unr<0?' neg':''}">Unreal ${fmtSign(r.unr,'€')}</span>`);
     const breakdown = parts.length>1 ? `<span class="databar-breakdown">${parts.join(' <span style="opacity:0.4">&middot;</span> ')}</span>` : '';
-    return `<tr>
+    html += `<tr class="${r.held ? '' : 'databar-sold'}">
       <td class="databar-label-cell"><div class="databar-row-inner"><span class="databar-label">${escHtml(r.label)}</span></div></td>
       <td><div class="databar-row-inner">
         ${segs}
         <span class="databar-val-wrap"><span class="databar-val ${cls}">${fmtSign(r.total,'€')}</span>${breakdown}</span>
       </div></td>
     </tr>`;
-  }).join('');
+  });
+  tbody.innerHTML = html;
 }
 
 function renderCharts(data) {
