@@ -472,6 +472,7 @@
   table.databar-table tr.databar-group td { padding:10px 10px 6px; font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); background:var(--surface2); font-family:'Space Mono',monospace; font-weight:700; }
   table.databar-table tr.databar-sold .databar-row-inner { opacity:0.55; }
   .databar-label-cell { width:90px; vertical-align:top; padding-top:8px; }
+  .databar-posval { display:block; font-size:10px; font-weight:400; color:var(--muted); margin-top:1px; }
   .databar-seg { position:absolute; top:4px; bottom:4px; border-radius:4px; }
   .databar-label { position:relative; z-index:1; font-weight:700; font-size:13px; font-family:'Space Mono',monospace; }
   .databar-val-wrap { position:relative; z-index:1; width:100%; text-align:right; padding-right:4px; }
@@ -3287,12 +3288,11 @@ function renderStockPLDatabar(data) {
     const cls = r.total>=0 ? 'pos' : 'neg';
     const segs = _databarSegsHtml(r.real, r.unr, maxAbs);
     const parts = [];
-    if (r.held) parts.push(`<span style="color:var(--muted)">Value €${Math.round(r.valueEur).toLocaleString()}</span>`);
     if (r.real !== 0) parts.push(`<span class="b-real${r.real<0?' neg':''}">Real ${fmtSign(r.real,'€')}</span>`);
     if (r.unr  !== 0) parts.push(`<span class="b-open${r.unr<0?' neg':''}">Unreal ${fmtSign(r.unr,'€')}</span>`);
     const breakdown = parts.length>1 ? `<span class="databar-breakdown">${parts.join(' <span style="opacity:0.4">&middot;</span> ')}</span>` : '';
     html += `<tr class="${r.held ? '' : 'databar-sold'}">
-      <td class="databar-label-cell"><div class="databar-row-inner"><span class="databar-label">${escHtml(r.label)}</span></div></td>
+      <td class="databar-label-cell"><div class="databar-row-inner"><span class="databar-label">${escHtml(r.label)}${r.held ? `<span class="databar-posval">€${Math.round(r.valueEur).toLocaleString()}</span>` : ''}</span></div></td>
       <td><div class="databar-row-inner">
         ${segs}
         <span class="databar-val-wrap"><span class="databar-val ${cls}">${fmtSign(r.total,'€')}</span>${breakdown}</span>
