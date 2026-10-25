@@ -1008,6 +1008,35 @@
 // ═══════════════════════════════════════════════════════════════════
 // UTILS
 // ═══════════════════════════════════════════════════════════════════
+// ── Daily USD-per-EUR table (tecajna_lista_usd.json, HNB format "1,038900") ──
+let _fxTable = null, _fxLastKey = null;
+// Local file first (works when served over http); raw GitHub as fallback for file:// where fetch of local files is blocked.
+const _fxReady = fetch('./tecajna_lista_usd.json')
+  .then(r => { if (!r.ok) throw 0; return r.json(); })
+  .catch(() => fetch('https://raw.githubusercontent.com/IveGobin/options-hub/main/tecajna_lista_usd.json').then(r => { if (!r.ok) throw 0; return r.json(); }))
+  .then(obj => {
+    _fxTable = {};
+    // Skip obviously bad quotes (>5% jump vs. the previous good day, e.g. 1.63 amid 1.14) so the lookup falls back to the last sane rate.
+    let prev = null;
+    for (const [k, v] of Object.entries(obj).sort((a,b) => a[0] < b[0] ? -1 : 1)) {
+      const n = parseFloat(String(v).replace(',', '.'));
+      if (!(n > 0)) continue;
+      if (prev && Math.abs(n/prev - 1) > 0.05) continue;
+      prev = n; _fxTable[k] = n; _fxLastKey = k;
+    }
+  }).catch(() => { _fxTable = null; });
+function hasFxTable() { return !!_fxTable; }
+function fxRateOn(dateStr) {
+  if (!_fxTable || !dateStr) return null;
+  const d = dateStr.substring(0,10);
+  if (d > _fxLastKey) return _fxTable[_fxLastKey];
+  const t = new Date(d + 'T00:00:00Z').getTime();
+  for (let i = 0; i <= 10; i++) {
+    const v = _fxTable[new Date(t - i*86400000).toISOString().substring(0,10)];
+    if (v != null) return v;
+  }
+  return null;
+}
 function num(v) { if (v === '--' || v === '' || v === undefined || v === null) return 0; const n = parseFloat(String(v).replace(/,/g,'')); return isNaN(n) ? 0 : n; }
 function fmt(val) { const v = num(val); if (Math.abs(v) >= 1000) return (v<0?'-':'') + '$' + Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); return (v<0?'-$':'$') + Math.abs(v).toFixed(2); }
 function fmtEur(val) { const v = num(val); return (v<0?'-€':'€') + Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -1533,6 +1562,8 @@ function processIBKR(sections) {
   }
   const eurPerRate = eurUsdRate > 0 ? eurUsdRate : 1;     // USD per 1 EUR
   const toEurAmt = (v, ccy) => ccy === 'EUR' ? v : v / eurPerRate;
+  // Per-date conversion (tecajna_lista_usd.json): USD per EUR on the given day, null if unavailable.
+  const rateOn = (dateStr, ccy) => ccy === 'EUR' ? 1 : fxRateOn(dateStr);
 
   // Net premium rolled into the stock = Basis of the assigned (short) option's closing row.
   const assignPrem = {};
@@ -1556,7 +1587,7 @@ function processIBKR(sections) {
   const fifoBook = {};
   for (const { r, ts } of stockOrders) {
     const key  = normSym((r[itSym]||'').trim());
-    const book = fifoBook[key] || (fifoBook[key] = { ccy:(r[4]||'').trim()||'USD', lots:[], realized:0, trades:[] });
+    const book = fifoBook[key] || (fifoBook[key] = { ccy:(r[4]||'').trim()||'USD', lots:[], realized:0, realizedEur:0, trades:[] });
     const qty = num(r[itQty]), proceeds = num(r[itProc]), comm = Math.abs(num(r[itComm]));
     const price = num(r[itPrice]);
     const codes = (r[itCode]||'').split(';').map(c=>c.trim());
@@ -1567,17 +1598,19 @@ function processIBKR(sections) {
       if (a && a.shares) perShare = a.prem / a.shares;
     }
     const t = { date:ts, qty, price, proceeds, comm:-comm, code:(r[itCode]||'').trim(), realPL:0, matched:[], untracked:0 };
+    const dayRate = rateOn(dateStr, book.ccy) || eurPerRate;   // USD per EUR on trade day
     if (qty > 0) {
       const cost = Math.abs(proceeds) + comm - perShare*qty;
-      book.lots.push({ date:dateStr, qty, remaining:qty, unit:cost/qty });
+      book.lots.push({ date:dateStr, qty, remaining:qty, unit:cost/qty, unitEur:cost/qty/dayRate });
     } else if (qty < 0) {
       const q = -qty;
       const net = Math.abs(proceeds) - comm + perShare*q;
-      let need = q, cost = 0;
+      let need = q, cost = 0, costEur = 0;
       while (need > 1e-9 && book.lots.length) {
         const lot = book.lots[0];
         const m = Math.min(lot.remaining, need);
         cost += m*lot.unit;
+        costEur += m*lot.unitEur;
         t.matched.push({ date:lot.date, qty:m, unit:lot.unit });
         lot.remaining -= m; need -= m;
         if (lot.remaining <= 1e-9) book.lots.shift();
@@ -1585,11 +1618,15 @@ function processIBKR(sections) {
       if (need > 1e-9) {
         // Sold more than the loaded statements show being bought (transfer-in, short sale…):
         // fall back to IBKR's own basis for the unmatched part.
-        cost += Math.abs(num(r[itBasis])) * need / q;
+        const fb = Math.abs(num(r[itBasis])) * need / q;
+        cost += fb;
+        costEur += fb / dayRate;
         t.untracked = need;
       }
       t.realPL = net - cost;
+      t.realEur = net/dayRate - costEur;
       book.realized += t.realPL;
+      book.realizedEur += t.realEur;
     }
     book.trades.push(t);
   }
@@ -1604,21 +1641,28 @@ function processIBKR(sections) {
     let costHeld = b.lots.reduce((s,l)=>s+l.remaining*l.unit,0);
     const lastPrice = op ? op.closePrice : (mtm && mtm.curQty ? mtm.curPrice : 0);
     let unr = 0, mismatch = false;
+    let costHeldEur = b.lots.reduce((s,l)=>s+l.remaining*l.unitEur,0);
+    let unrEur = null;
     if (op && Math.abs(op.qty - qtyHeld) > 1e-6) {
       // Loaded history does not explain the statement's open quantity → trust IBKR's figures.
       mismatch = true;
       qtyHeld = op.qty; costHeld = op.costBasis; unr = op.unrPL;
     } else if (qtyHeld > 1e-6 && lastPrice) {
       unr = qtyHeld*lastPrice - costHeld;
+      // Unrealized in EUR: today's value at the statement rate vs. cost at each lot's purchase-day rate.
+      if (b.ccy !== 'EUR' && hasFxTable()) unrEur = toEurAmt(qtyHeld*lastPrice, b.ccy) - costHeldEur;
     }
+    const realEurFifo = hasFxTable() || b.ccy === 'EUR' ? b.realizedEur : null;
     const held = qtyHeld > 1e-6;
     const lots = mismatch ? [] : b.lots.map(l => ({ date:l.date, qty:l.remaining, unit:l.unit }));
     const real = b.realized;
     const value = held ? qtyHeld*lastPrice : 0;
+    const rEur = realEurFifo != null ? realEurFifo : toEurAmt(real,b.ccy);
+    const uEur = unrEur != null ? unrEur : toEurAmt(unr,b.ccy);
     stocksTable.push({
       sym:key, ccy:b.ccy, realTotal:+real.toFixed(2), unrTotal:+unr.toFixed(2), total:+(real+unr).toFixed(2), eurBase:false,
       held, qty:qtyHeld, avgCost: held ? costHeld/qtyHeld : 0, lastPrice, value, lots, mismatch,
-      realEur:toEurAmt(real,b.ccy), unrEur:toEurAmt(unr,b.ccy), totalEur:toEurAmt(real+unr,b.ccy), valueEur:toEurAmt(value,b.ccy)
+      realEur:rEur, unrEur:uEur, totalEur:rEur+uEur, valueEur:toEurAmt(value,b.ccy)
     });
     _stSeen.add(key);
   }
@@ -1882,7 +1926,7 @@ function loadFiles(files) {
     reader.onload = e => {
       results[idx] = { text: e.target.result.replace(/^\uFEFF/, ''), name: file.name };
       done++;
-      if (done === fileArr.length) {
+      if (done === fileArr.length) _fxReady.then(() => {
         try {
           const parsed = results.map(r => ({ sections: parseIBKR(r.text), name: r.name }));
           // Validate all are IBKR files
@@ -1897,10 +1941,11 @@ function loadFiles(files) {
           const label = fileArr.length === 1 ? fileArr[0].name : fileArr.length + ' files merged';
           const data = processIBKR(merged);
           renderDashboard(data, label);
+          if (!_fxTable) document.getElementById('error-box').innerHTML = '<div class="error-msg">⚠ tecajna_lista_usd.json nije učitan — EUR iznosi za dionice koriste jedan tečaj iz izvještaja, ne tečaj na dan kupnje/prodaje.</div>';
         } catch(err) {
           document.getElementById('error-box').innerHTML = '<div class="error-msg">⚠ ' + escHtml(err.message) + '</div>';
         }
-      }
+      });
     };
     reader.readAsText(file);
   });
