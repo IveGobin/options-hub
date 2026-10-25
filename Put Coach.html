@@ -139,7 +139,7 @@ input[type="range"]::-moz-range-thumb {
 .radar-leg-item { display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: var(--mono); color: var(--muted); }
 .radar-leg-dot { width: 10px; height: 3px; border-radius: 2px; flex-shrink: 0; }
 
-/* Margin cube: isometric stack of opaque blocks; missing blocks = margin used */
+/* Margin cube: isometric stack of opaque blocks; transparent outlines = margin used */
 .mcube-wrap {
     --c: 0,255,65; --pulse: 3s;
     position: relative; margin: 16px auto 0; width: 100%; max-width: 280px;
@@ -151,8 +151,9 @@ input[type="range"]::-moz-range-thumb {
     transform-style: preserve-3d;
     transform: rotateX(-30deg) rotateY(-45deg);
 }
-.mc { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-style: preserve-3d; display: none; }
-.mc.on { display: block; }
+.mc { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-style: preserve-3d; }
+/* used margin: transparent outline only */
+.mc:not(.on) .mc-f { background: none; border: 1px solid rgba(var(--c),.18); color: transparent; }
 .mc-f {
     position: absolute; width: var(--s); height: var(--s);
     left: calc(var(--s) / -2); top: calc(var(--s) / -2);
@@ -396,9 +397,9 @@ input[type="range"]::-moz-range-thumb {
         </div>
         <div class="radar-legend">
             <div class="radar-leg-item"><div class="radar-leg-dot" style="background:#00ff41;height:8px;width:8px;border-radius:2px;"></div>Excess liquidity left</div>
-            <div class="radar-leg-item"><div class="radar-leg-dot" style="border:1px dashed rgba(0,255,65,.5);height:8px;width:8px;border-radius:2px;"></div>Margin used (missing)</div>
+            <div class="radar-leg-item"><div class="radar-leg-dot" style="border:1px solid rgba(0,255,65,.5);height:8px;width:8px;border-radius:2px;"></div>Margin used</div>
         </div>
-        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);text-align:center;margin-top:6px;">Full cube = net liquidation value · missing blocks = margin used</div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);text-align:center;margin-top:6px;">Full cube = net liquidation value · transparent blocks = margin used</div>
 
         <!-- Axis legend table -->
         <div id="axis-legend" style="margin-top:14px;">
