@@ -390,7 +390,7 @@ input[type="range"]::-moz-range-thumb {
 
         <!-- Margin cube: full cube = NLV, filled part = excess liquidity -->
         <div class="div"></div>
-        <div style="font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:center;">Margin used by short puts</div>
+        <div style="font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:center;">Margin left <span id="mcube-pct" style="font-weight:700;"></span></div>
         <div class="mcube-wrap" id="mcube-wrap" aria-hidden="true" style="margin-top:10px;">
             <div class="mcube-scene" id="mcube-scene"></div>
         </div>
@@ -612,7 +612,11 @@ input[type="range"]::-moz-range-thumb {
         var n = Math.round(freePct / 100 * 64);
 
         var wrap = el('mcube-wrap');
-        wrap.style.setProperty('--c', freePct >= 60 ? '0,255,65' : freePct >= 30 ? '255,176,0' : '255,50,50');
+        var rgb = freePct >= 60 ? '0,255,65' : freePct >= 30 ? '255,176,0' : '255,50,50';
+        wrap.style.setProperty('--c', rgb);
+        var pctEl = el('mcube-pct');
+        pctEl.textContent = freePct.toFixed(0) + '%';
+        pctEl.style.color = 'rgb(' + rgb + ')';
         wrap.style.setProperty('--pulse', freePct < 10 ? '1.2s' : freePct < 30 ? '2s' : '3s');
 
         mcCells.forEach(function(c) { c.el.classList.toggle('on', c.rank < n); });
