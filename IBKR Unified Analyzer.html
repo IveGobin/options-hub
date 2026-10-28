@@ -3052,17 +3052,18 @@ function renderStocksTable(data) {
     tbody.appendChild(txRow);
   });
 
-  // TOTAL: rows are in mixed currencies — sum as EUR equivalent using the statement's FX rate
+  // TOTAL: rows are in mixed currencies — sum the FIFO EUR figures (per-lot FX), same as the Stock P&L card.
+  // Fallback for legacy rows without EUR fields: statement's FX rate.
   const _rate = data.eurUsdRate > 0 ? data.eurUsdRate : 1;
   const toEur = (v, row) => (row.eurBase || row.ccy === 'EUR') ? v : v / _rate;
   const rowsArr = data.stocksTable || data.stocks;
-  const totR = rowsArr.reduce((a,r)=>a+toEur(r.realTotal,r),0);
-  const totU = rowsArr.reduce((a,r)=>a+toEur(r.unrTotal,r),0);
-  const totT = rowsArr.reduce((a,r)=>a+toEur(r.total,r),0);
+  const totR = rowsArr.reduce((a,r)=>a+(r.realEur != null ? r.realEur : toEur(r.realTotal,r)),0);
+  const totU = rowsArr.reduce((a,r)=>a+(r.unrEur  != null ? r.unrEur  : toEur(r.unrTotal,r)),0);
+  const totT = totR + totU;
   const summaryRow = document.createElement('tr');
   summaryRow.className = 'summary-row';
   summaryRow.innerHTML = `
-    <td colspan="7">TOTAL (€ equiv. @ ${_rate.toFixed(4)})</td>
+    <td colspan="7">TOTAL (€ equiv., FIFO per-lot FX)</td>
     <td class="${totR >= 0 ? 'pos' : 'neg'}">${(totR >= 0 ? '+' : '−')}€${Math.abs(totR).toFixed(2)}</td>
     <td class="${totU >= 0 ? 'pos' : 'neg'}">${(totU >= 0 ? '+' : '−')}€${Math.abs(totU).toFixed(2)}</td>
     <td class="${totT >= 0 ? 'pos' : 'neg'}">${(totT >= 0 ? '+' : '−')}€${Math.abs(totT).toFixed(2)}</td>`;
