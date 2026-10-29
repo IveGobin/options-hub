@@ -272,6 +272,152 @@ function renderOpenCards(openPositions) {
 
 function renderAssignedTable(assignedPositions) {""")
 
+# ════════════════════════════════════════════════════════════════════
+# Closed P&L: stat grid, ticker list instead of the quarter matrix, trade cards grouped by month
+# ════════════════════════════════════════════════════════════════════
+rep("""        <div class="matrix-scroll">
+          <table class="pnl-matrix">
+            <thead id="closed-matrix-head"></thead>
+            <tbody id="closed-matrix-body"></tbody>
+          </table>
+        </div>""", """        <div class="matrix-scroll">
+          <table class="pnl-matrix">
+            <thead id="closed-matrix-head"></thead>
+            <tbody id="closed-matrix-body"></tbody>
+          </table>
+        </div>
+        <div class="cl-cards" id="matrix-cards"></div>""")
+rep("""        <div class="table-wrapper">
+          <table class="detail-table">""", """        <div class="cl-cards" id="detail-cards"></div>
+        <div class="table-wrapper" id="detail-table-wrap">
+          <table class="detail-table">""")
+
+rep("</style>", """  /* ── Mobile preview: Closed P&L ── */
+  .cl-cards { display:none; flex-direction:column; gap:8px; }
+  @media(max-width:700px) {
+    #closed-stat-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    #closed-stat-row .stat-badge { min-width:0; padding:10px 12px; }
+    #closed-stat-row .stat-badge-value { font-size:17px; white-space:nowrap; }
+    #tab-closed .matrix-scroll, #detail-table-wrap { display:none; }
+    .cl-cards { display:flex; }
+  }
+  body.force-cards #tab-closed .matrix-scroll, body.force-cards #detail-table-wrap { display:none; }
+  body.force-cards .cl-cards { display:flex; max-width:480px; }
+  .mx-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 14px; }
+  .mx-head { display:flex; justify-content:space-between; align-items:baseline; gap:10px; font-family:'Space Mono',monospace; }
+  .mx-head strong { font-size:13px; }
+  .mx-head .mx-total { font-weight:700; font-size:14px; white-space:nowrap; }
+  .mx-bar { height:4px; background:var(--surface2); border-radius:2px; margin-top:7px; }
+  .mx-bar > div { height:100%; border-radius:2px; }
+  .mx-qs { display:flex; flex-wrap:wrap; gap:3px 12px; margin-top:6px; font-family:'Space Mono',monospace; font-size:10.5px; color:var(--muted); }
+  .cl-cards .pos { color:var(--green); } .cl-cards .neg { color:var(--red); } .cl-cards .neu { color:var(--muted); }
+  .mx-partial { font-size:9px; color:var(--muted); border:1px solid var(--muted); border-radius:3px; padding:0 4px; margin-left:6px; vertical-align:middle; font-weight:400; }
+  .cl-sort { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); margin:6px 0 2px; }
+  .cl-sort select { background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:'Space Mono',monospace; font-size:11px; padding:4px 8px; }
+  .tc-card { padding:10px 14px; }
+  .tc-card .oc-sub { display:flex; justify-content:space-between; gap:8px; align-items:center; flex-wrap:wrap; }
+</style>""")
+
+# ticker list from the same quarter aggregation as the matrix
+rep("""  totRow.innerHTML=totCells; body.appendChild(totRow);
+}""", """  totRow.innerHTML=totCells; body.appendChild(totRow);
+  renderMatrixCards(sortedTickers, sortedQ, qLabels);
+}
+
+// Mobile list of the quarter matrix: ticker total, size bar and only the quarters with a result.
+function renderMatrixCards(sortedTickers, sortedQ, qLabels) {
+  const box = document.getElementById('matrix-cards');
+  if (!box) return;
+  const maxAbs = Math.max(...sortedTickers.map(([,d]) => Math.abs(d.total)), 0.01);
+  const qList = d => sortedQ.filter(qk => d[qk]).map(qk => `<span>${escHtml(qLabels[qk])} <span class="${pnlCls(d[qk])}">${fmtPnl(toDisp(d[qk], 'USD'), dispSym())}</span></span>`).join('');
+  let html = sortedTickers.map(([ticker, d]) => `<div class="mx-card">
+      <div class="mx-head"><strong>${escHtml(ticker)}${d.hasPartial ? '<span class="mx-partial" title="Partially closed — position still open">partial</span>' : ''}</strong>
+        <span class="mx-total ${pnlCls(d.total)}">${fmtPnl(toDisp(d.total, 'USD'), dispSym())}</span></div>
+      <div class="mx-bar"><div style="width:${(Math.abs(d.total) / maxAbs * 100).toFixed(1)}%;background:${pnlColor(d.total)}"></div></div>
+      <div class="mx-qs">${qList(d.qData)}</div>
+    </div>`).join('');
+  const colSums = {}; let grand = 0;
+  sortedQ.forEach(qk => { colSums[qk] = sortedTickers.reduce((s,[,d]) => s + (d.qData[qk] || 0), 0); grand += colSums[qk]; });
+  if (sortedTickers.length) html += `<div class="mx-card oc-total">
+      <div class="mx-head"><strong>Total · ${sortedTickers.length} tickers</strong><span class="mx-total ${pnlCls(grand)}">${fmtPnl(toDisp(grand, 'USD'), dispSym())}</span></div>
+      <div class="mx-qs">${qList(colSums)}</div>
+    </div>`;
+  box.innerHTML = html;
+}""")
+
+# trade cards from the same filtered/sorted rows as the detail table
+rep("""    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:20px;">No closed option trades found.</td></tr>`;
+    return;""", """    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:20px;">No closed option trades found.</td></tr>`;
+    renderDetailCards(rows);
+    return;""")
+rep("""  ], 'border-top:1px solid var(--border);font-weight:700;background:var(--surface2);');
+  tbody.appendChild(tfoot);
+}""", """  ], 'border-top:1px solid var(--border);font-weight:700;background:var(--surface2);');
+  tbody.appendChild(tfoot);
+  renderDetailCards(rows);
+}
+
+// Mobile cards of the closed-trade detail table. Grouped by month when sorted by a date.
+const DETAIL_CARD_SORTS = [['closeDate',-1,'Newest closed'],['closeDate',1,'Oldest closed'],['openDate',1,'Open date'],['profit',-1,'Best profit'],['profit',1,'Worst profit']];
+function setDetailCardSort(v) {
+  const [k, d] = v.split(':');
+  window._detailSortKey = k; window._detailSortDir = +d;
+  renderDetailTable();
+}
+function renderDetailCards(rows) {
+  const box = document.getElementById('detail-cards');
+  if (!box) return;
+  const key = window._detailSortKey, dir = window._detailSortDir;
+  const cur = key + ':' + dir;
+  const opts = DETAIL_CARD_SORTS.map(([k,d,l]) => `<option value="${k}:${d}"${cur === k+':'+d ? ' selected' : ''}>${l}</option>`).join('')
+    + (DETAIL_CARD_SORTS.some(([k,d]) => cur === k+':'+d) ? '' : `<option value="${cur}" selected>${escHtml(key)} ${dir > 0 ? '↑' : '↓'}</option>`);
+  let html = `<div class="cl-sort"><label>Sort</label><select onchange="setDetailCardSort(this.value)">${opts}</select></div>`;
+  if (!rows.length) { box.innerHTML = html + '<div class="empty-state">No closed option trades found.</div>'; return; }
+  const fmtD = d => d instanceof Date ? d.toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '—';
+  const fmtY = d => d instanceof Date ? " '" + String(d.getFullYear()).slice(2) : '';
+  const pct = v => v === null || v === undefined ? '—' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + '%';
+  const groupKey = (key === 'closeDate' || key === 'openDate') ? key : null;
+  const monthOf = r => r[groupKey] instanceof Date ? r[groupKey].toLocaleString('en-US', { month:'long', year:'numeric' }) : '—';
+  let lastG = null;
+  rows.forEach((r, i) => {
+    if (groupKey) {
+      const g = monthOf(r);
+      if (g !== lastG) {
+        lastG = g;
+        const gRows = []; for (let j = i; j < rows.length && monthOf(rows[j]) === g; j++) gRows.push(rows[j]);
+        const gProfit = gRows.reduce((s,x) => s + x.profit, 0);
+        html += `<div class="oc-group"><span>${g} (${gRows.length})</span><span class="oc-group-sum ${pnlCls(gProfit)}">${dPnl(gProfit, 'USD')}</span></div>`;
+      }
+    }
+    const held = r.openDate instanceof Date && r.closeDate instanceof Date ? Math.round((r.closeDate - r.openDate) / 86400000) : null;
+    html += `<div class="oc-card tc-card">
+      <div class="oc-head">
+        <span class="oc-title"><span class="type-badge ${r.type}">${r.type}</span><strong>${escHtml(r.ticker)}</strong><span class="oc-strike">${fmtNative(r.strike, '$', r.strike%1===0?0:2)} ×${r.qty}</span></span>
+        <span class="${pnlCls(r.profit)}" style="font-family:'Space Mono',monospace;font-weight:700;white-space:nowrap;">${dPnl(r.profit, 'USD')}</span>
+      </div>
+      <div class="oc-sub"><span>${fmtD(r.openDate)} → ${fmtD(r.closeDate)}${fmtY(r.closeDate)}${held !== null ? ' · ' + held + 'd' : ''}</span>
+        <span><span class="status-pill ${r.status.toLowerCase()}">${r.status}</span> <span class="${pnlCls(r.profit)}">${pct(r.profitPct)}</span></span></div>
+      <details class="sc-more"><summary>Details</summary>
+        <div class="sc-grid">
+          <span>Contract</span><span>${escHtml(r.sym)}</span>
+          <span>Premium collected</span><span class="pos">${dPnl(r.premium, 'USD')}</span>
+          <span>Paid to close</span><span class="${r.buyback>0?'neg':''}">${r.buyback>0 ? dPnl(-Math.abs(r.buyback), 'USD') : '—'}</span>
+          <span>Open fee</span><span class="neg">${r.openFee!==0 ? dPnl(-Math.abs(r.openFee), 'USD') : '—'}</span>
+          <span>Close fee</span><span class="neg">${r.closeFee!==0 ? dPnl(-Math.abs(r.closeFee), 'USD') : '—'}</span>
+        </div>
+      </details>
+    </div>`;
+  });
+  const totalProfit  = rows.reduce((s,r)=>s+r.profit,0);
+  const totalPremium = rows.reduce((s,r)=>s+r.premium,0);
+  const fees = rows.reduce((s,r)=>s+r.openFee+r.closeFee,0);
+  html += `<div class="oc-card oc-total">
+    <div class="oc-head"><span class="oc-title"><strong>TOTAL · ${rows.length} trades</strong></span><span class="${pnlCls(totalProfit)}" style="font-family:'Space Mono',monospace;font-weight:700;">${dPnl(totalProfit, 'USD')}</span></div>
+    <div class="oc-meta"><span>Premium <b>${dPnl(totalPremium, 'USD')}</b></span><span>Fees <b>${dPnl(-Math.abs(fees), 'USD')}</b></span><span>Avg <b>${pct(totalPremium > 0 ? totalProfit / totalPremium * 100 : null)}</b></span></div>
+  </div>`;
+  box.innerHTML = html;
+}""")
+
 with open(DST, 'w', encoding='utf-8', newline='') as f:
     f.write(s)
 print(f'Napravljeno: {DST.name}')
