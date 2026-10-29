@@ -202,9 +202,21 @@
   table.stock-table tbody td.dim { color:var(--muted); font-size:11px; }
   table.stock-table tbody tr.stock-group-row td { text-align:left; font-family:'Space Mono',monospace; font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); background:var(--surface2); padding:9px 12px; border-top:2px solid var(--border); font-weight:700; }
   table.stock-table tbody tr.stock-group-row td::before { content:none; }
+  /* keep the group label in view while the table is scrolled horizontally */
+  .stock-group-label { position:sticky; left:12px; display:inline-block; white-space:normal; max-width:calc(100vw - 80px); line-height:1.5; }
+  /* sticky Symbol column */
+  table.stock-table thead th:first-child,
+  table.stock-table tbody tr:not(.stock-group-row):not(.stock-tx-row):not(.summary-note-row) td:first-child { position:sticky; left:0; z-index:2; box-shadow:1px 0 0 var(--border); }
+  table.stock-table thead th:first-child { background:var(--surface); z-index:3; }
+  table.stock-table tbody tr:not(.stock-group-row):not(.stock-tx-row):not(.summary-note-row) td:first-child { background:var(--surface); }
+  table.stock-table tbody tr:not(.stock-group-row):not(.stock-tx-row):not(.summary-note-row):hover td:first-child { background:var(--surface2); }
+  table.stock-table tbody tr.summary-row td:first-child { background:var(--surface2); }
+  table.stock-table tbody tr.stock-sold td:first-child, table.stock-table tbody tr.stock-sold:hover td:first-child { opacity:1; }
+  table.stock-table tbody tr.stock-sold td:first-child .stock-sym { opacity:0.5; }
+  table.stock-table tbody tr.stock-sold:hover td:first-child .stock-sym { opacity:0.9; }
   table.stock-table tbody tr.stock-sold td { opacity:0.5; }
   table.stock-table tbody tr.stock-sold:hover td { opacity:0.9; }
-  .stock-sold-badge { background:rgba(128,128,128,0.18); color:var(--muted); border-radius:4px; padding:1px 5px; font-size:9px; font-family:'Space Mono',monospace; letter-spacing:0.08em; margin-left:6px; vertical-align:middle; }
+  .stock-sold-badge { background:rgba(128,128,128,0.18); color:var(--muted); border-radius:4px; padding:1px 5px; font-size:9px; font-family:'Space Mono',monospace; letter-spacing:0.08em; margin-left:8px; vertical-align:middle; display:inline-block; }
   table.stock-table tbody tr.summary-note-row td { text-align:right; font-size:11px; color:var(--muted); padding:6px 12px 10px; border:0; }
   table.stock-table tbody tr.summary-note-row:hover { background:transparent; }
   .info-tip { cursor:help; margin-left:4px; opacity:0.8; }
@@ -238,6 +250,8 @@
   .treemap-tile:hover { filter:brightness(1.12); z-index:2; }
   .treemap-tile-label { font-family:'Space Mono',monospace; font-weight:700; font-size:13px; color:#fff; letter-spacing:0.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .treemap-tile-value { font-family:'Space Mono',monospace; font-size:12px; color:rgba(255,255,255,0.92); margin-top:2px; }
+  /* phone: the sticky top bar would take ~250px of a 390px-wide screen and blur content below it */
+  @media(max-width:700px) { .top-bar { position:static; padding:14px 16px 12px; } .top-bar h1 { font-size:17px; } }
   @media(max-width:700px) { .treemap-wrap { height:auto; min-height:420px; } }
 
   /* ── MONTHLY GRID ── */
@@ -2975,8 +2989,8 @@ function renderStocksTable(data) {
       const hdr = document.createElement('tr');
       hdr.className = 'stock-group-row';
       hdr.innerHTML = s.held
-        ? `<td colspan="${NCOL}">Open positions — still held (${grpRows.length}) · market value ≈ ${fmtMoney(grpVal, '€', 0)}</td>`
-        : `<td colspan="${NCOL}">Closed positions — fully sold (${grpRows.length})</td>`;
+        ? `<td colspan="${NCOL}"><span class="stock-group-label">Open positions — still held (${grpRows.length}) · market value ≈ ${fmtMoney(grpVal, '€', 0)}</span></td>`
+        : `<td colspan="${NCOL}"><span class="stock-group-label">Closed positions — fully sold (${grpRows.length})</span></td>`;
       tbody.appendChild(hdr);
     }
     const op  = openStockMap[s.sym];
@@ -2997,7 +3011,7 @@ function renderStocksTable(data) {
     tr.className = (hasTrades ? 'stock-row-expandable' : '') + (s.held ? '' : ' stock-sold');
     tr.title = hasTrades ? 'Click to show transactions' : '';
     tr.innerHTML = `
-      <td>${escHtml(s.sym)}${s.held ? '' : '<span class="stock-sold-badge">SOLD</span>'}</td>
+      <td><span class="stock-sym">${escHtml(s.sym)}${s.held ? '' : '<span class="stock-sold-badge">SOLD</span>'}</span></td>
       <td style="text-align:left;color:var(--muted);font-family:'Syne',sans-serif;font-size:12px;">${escHtml(data.instrMap[s.sym]||'')}</td>
       <td class="neu">${s.eurBase ? ccy+' <span style="color:var(--muted)" title="No trades in loaded files — values from R&U summary in base currency (EUR)">*</span>' : ccy}</td>
       <td class="neu">${qty}</td>
