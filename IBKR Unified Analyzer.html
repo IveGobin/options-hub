@@ -3014,6 +3014,9 @@ function renderMatrix(filterYear) {
 // figures at the statement rate), rounded to cents so every total
 // shown in the app is the exact sum of the displayed row values. Legacy rows without EUR fields use the statement rate.
 const STOCK_ECON_TIP = 'Economic view, not tax. EUR figures use the FX rate on each purchase/sale day (FIFO) so they include currency effect; IBKR reports that part separately under Forex. Option premium from assigned puts/calls is included in share cost basis.';
+// Currency of a stock row / its symbol — one helper for the rows, lots, tx tables and their headers.
+function rowCcy(row, op) { return row.eurBase ? 'EUR' : (row.ccy || (op && op.ccy) || 'USD'); }
+function cs(row, op) { return rowCcy(row, op) === 'EUR' ? '€' : '$'; }
 function stockEurFigures(data) {
   const rate = data.eurUsdRate > 0 ? data.eurUsdRate : 1;
   const r2 = v => Math.round(v * 100) / 100;
@@ -3076,12 +3079,12 @@ function renderStocksTable(data) {
       tbody.appendChild(hdr);
     }
     const op  = openStockMap[s.sym];
-    const ccy = s.ccy || (op ? op.ccy : 'USD');
-    const cs  = s.eurBase ? '€' : (ccy === 'EUR' ? '€' : '$');
+    const ccy = rowCcy(s, op);
+    const sym = cs(s, op);
     const qty = s.held ? s.qty.toLocaleString(undefined,{maximumFractionDigits:4}) : '<span style="color:var(--muted)">sold</span>';
-    const costP = s.held ? fmtMoney(s.avgCost, cs) : '—';
-    const lastP = s.held && s.lastPrice ? fmtMoney(s.lastPrice, cs) : '—';
-    const mktV  = s.held ? dMoney(s.valueEur != null ? s.valueEur : s.value, s.valueEur != null ? 'EUR' : symCcy(cs), 0) : '—';
+    const costP = s.held ? fmtMoney(s.avgCost, sym) : '—';
+    const lastP = s.held && s.lastPrice ? fmtMoney(s.lastPrice, sym) : '—';
+    const mktV  = s.held ? dMoney(s.valueEur != null ? s.valueEur : s.value, s.valueEur != null ? 'EUR' : symCcy(sym), 0) : '—';
     const rCls  = pnlCls(s.realTotal);
     const uCls  = pnlCls(s.unrTotal);
     const tCls  = pnlCls(s.total);
@@ -3100,9 +3103,9 @@ function renderStocksTable(data) {
       <td class="neu">${costP}</td>
       <td class="neu">${lastP}</td>
       <td class="neu">${mktV}</td>
-      <td class="${rCls}">${fmtPnl(s.realTotal, cs)}</td>
-      <td class="${uCls}">${fmtPnl(s.unrTotal, cs)}</td>
-      <td class="${tCls}">${fmtPnl(s.total, cs)}</td>
+      <td class="${rCls}">${fmtPnl(s.realTotal, sym)}</td>
+      <td class="${uCls}">${fmtPnl(s.unrTotal, sym)}</td>
+      <td class="${tCls}">${fmtPnl(s.total, sym)}</td>
       <td class="${pnlCls(eurRow.real)}">${fmtPnl(eurRow.real, dispSym())}</td>
       <td class="${pnlCls(eurRow.unr)}">${fmtPnl(eurRow.unr, dispSym())}</td>
       <td class="${pnlCls(eurRow.total)}">${fmtPnl(eurRow.total, dispSym())}</td>`;
@@ -3122,15 +3125,15 @@ function renderStocksTable(data) {
         const isAssign = codes.includes('A');
         const dateStr = t.date.substring(0, 10);
         const qtyStr = (isBuy ? '+' : '') + t.qty.toLocaleString();
-        const realStr = fmtPnl(t.realPL, cs);
+        const realStr = fmtPnl(t.realPL, sym);
         let lotsCell = '<span style="color:var(--muted)">—</span>';
         if (t.matched && t.matched.length) {
-          const parts = t.matched.map(m => `${+m.qty.toFixed(4)} @ ${cs}${m.unit.toFixed(2)} (${m.date})`);
+          const parts = t.matched.map(m => `${+m.qty.toFixed(4)} @ ${sym}${m.unit.toFixed(2)} (${m.date})`);
           lotsCell = `<span title="${escHtml(parts.join(' | '))}">${parts.slice(0,3).join('<br>')}${parts.length > 3 ? `<br>+${parts.length-3} more lots` : ''}</span>`;
           if (t.untracked > 0) lotsCell += `<br><span style="color:var(--yellow)">+${+t.untracked.toFixed(4)} sh not in loaded history</span>`;
         }
         const realCls = `style="color:${pnlColor(t.realPL)}"`;
-        let priceCell = `${cs}${Math.abs(t.price).toFixed(3)}`;
+        let priceCell = `${sym}${Math.abs(t.price).toFixed(3)}`;
         let assignBadge = '';
         if (isAssign) {
           const a = assignLookup[`${symKey}|${dateStr}|${Math.abs(t.price)}`];
@@ -3139,8 +3142,8 @@ function renderStocksTable(data) {
             // Put assignment = buy at strike (effective cost lower by premium);
             // call assignment = sell at strike (effective proceeds higher by premium).
             const eff = isBuy ? Math.abs(t.price) - a.perShare : Math.abs(t.price) + a.perShare;
-            priceCell = `${cs}${Math.abs(t.price).toFixed(3)} <span style="color:var(--muted)">→</span> <span style="color:var(--yellow)" title="Strike ${isBuy ? '−' : '+'} net option premium (${cs}${a.perShare.toFixed(3)}/sh)">${cs}${eff.toFixed(3)}</span><div style="color:var(--yellow);font-size:9px;opacity:0.85;white-space:nowrap;">effective price (strike ${isBuy ? '−' : '+'} premium)</div>`;
-            assignBadge = `<span class="tx-assign-badge" title="Shares delivered via option assignment — premium of ${cs}${a.prem.toFixed(2)} rolled into cost basis">ASSIGNED</span>`;
+            priceCell = `${sym}${Math.abs(t.price).toFixed(3)} <span style="color:var(--muted)">→</span> <span style="color:var(--yellow)" title="Strike ${isBuy ? '−' : '+'} net option premium (${sym}${a.perShare.toFixed(3)}/sh)">${sym}${eff.toFixed(3)}</span><div style="color:var(--yellow);font-size:9px;opacity:0.85;white-space:nowrap;">effective price (strike ${isBuy ? '−' : '+'} premium)</div>`;
+            assignBadge = `<span class="tx-assign-badge" title="Shares delivered via option assignment — premium of ${sym}${a.prem.toFixed(2)} rolled into cost basis">ASSIGNED</span>`;
           } else {
             assignBadge = '<span class="tx-assign-badge">ASSIGNED</span>';
           }
@@ -3150,8 +3153,8 @@ function renderStocksTable(data) {
           <td class="dep-date">${dateStr}</td>
           <td class="${isBuy ? 'tx-buy' : 'tx-sell'}">${qtyStr} sh</td>
           <td>${priceCell}</td>
-          <td>${fmtMoney(Math.abs(t.proceeds), cs)}</td>
-          <td style="color:${pnlColor(t.comm)}">${fmtPnl(t.comm, cs)}</td>
+          <td>${fmtMoney(Math.abs(t.proceeds), sym)}</td>
+          <td style="color:${pnlColor(t.comm)}">${fmtPnl(t.comm, sym)}</td>
           <td ${realCls}>${realStr}</td>
           <td style="text-align:left;color:var(--muted);font-size:10px;white-space:nowrap;">${lotsCell}</td>
           <td>${badge}</td>
@@ -3172,7 +3175,7 @@ function renderStocksTable(data) {
             <thead><tr><th>Bought</th><th>Qty</th><th title="For shares received by assignment this is the effective price (strike − premium), see note below">Cost / share</th><th>Unrealized P&L (${ccy})</th></tr></thead>
             <tbody>${s.lots.map(l => {
               const u = s.lastPrice ? l.qty*(s.lastPrice - l.unit) : null;
-              return `<tr><td class="dep-date">${l.date}</td><td>${+l.qty.toFixed(4)} sh</td><td>${cs}${l.unit.toFixed(3)}</td><td style="color:${pnlColor(u)}">${fmtPnl(u, cs)}</td></tr>`;
+              return `<tr><td class="dep-date">${l.date}</td><td>${+l.qty.toFixed(4)} sh</td><td>${sym}${l.unit.toFixed(3)}</td><td style="color:${pnlColor(u)}">${fmtPnl(u, sym)}</td></tr>`;
             }).join('')}</tbody>
           </table>` : ''}
           ${hasAssign ? `<div style="margin-top:8px;font-size:10px;color:var(--muted);">→ <span style="color:var(--yellow)">yellow price</span> = effective price (strike − premium) after net option premium (strike − premium/sh for assigned puts, strike + premium/sh for assigned calls). Realized / unrealized P&L is calculated FIFO (oldest lots are sold first) using this premium-adjusted basis.</div>` : ''}
