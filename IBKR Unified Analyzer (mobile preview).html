@@ -658,6 +658,13 @@
   .mx-bar > div { height:100%; border-radius:2px; }
   .mx-qs { display:flex; flex-wrap:wrap; gap:3px 12px; margin-top:6px; font-family:'Space Mono',monospace; font-size:10.5px; color:var(--muted); }
   .cl-cards .pos { color:var(--green); } .cl-cards .neg { color:var(--red); } .cl-cards .neu { color:var(--muted); }
+  .mx-acc { padding:0; }
+  .mx-acc > summary { list-style:none; cursor:pointer; padding:10px 14px; }
+  .mx-acc > summary::-webkit-details-marker { display:none; }
+  .mx-acc[open] .oc-chev { transform:rotate(-135deg); margin-top:3px; }
+  .mx-body { padding:2px 14px 12px; border-top:1px solid var(--border); }
+  .mx-qhead { font-family:'Space Mono',monospace; font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-top:10px; }
+  .mx-body .sc-grid { margin-top:6px; }
   .mx-partial { font-size:9px; color:var(--muted); border:1px solid var(--muted); border-radius:3px; padding:0 4px; margin-left:6px; vertical-align:middle; font-weight:400; }
   .cl-sort { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); margin:6px 0 2px; }
   .cl-sort select { background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:'Space Mono',monospace; font-size:11px; padding:4px 8px; }
@@ -688,7 +695,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.6 · m6</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.6 · m7</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -3278,19 +3285,24 @@ function renderMatrixCards(sortedTickers, sortedQ, qLabels) {
   const box = document.getElementById('matrix-cards');
   if (!box) return;
   const maxAbs = Math.max(...sortedTickers.map(([,d]) => Math.abs(d.total)), 0.01);
-  const qList = d => sortedQ.filter(qk => d[qk]).map(qk => `<span>${escHtml(qLabels[qk])} <span class="${pnlCls(d[qk])}">${fmtPnl(toDisp(d[qk], 'USD'), dispSym())}</span></span>`).join('');
-  let html = sortedTickers.map(([ticker, d]) => `<div class="mx-card">
-      <div class="mx-head"><strong>${escHtml(ticker)}${d.hasPartial ? '<span class="mx-partial" title="Partially closed — position still open">partial</span>' : ''}</strong>
-        <span class="mx-total ${pnlCls(d.total)}">${fmtPnl(toDisp(d.total, 'USD'), dispSym())}</span></div>
-      <div class="mx-bar"><div style="width:${(Math.abs(d.total) / maxAbs * 100).toFixed(1)}%;background:${pnlColor(d.total)}"></div></div>
-      <div class="mx-qs">${qList(d.qData)}</div>
-    </div>`).join('');
+  // Quarter breakdown for the expanded card: one row per quarter with a result.
+  const qGrid = d => `<div class="sc-grid">${sortedQ.filter(qk => d[qk]).map(qk => `<span>${escHtml(qLabels[qk])}</span><span class="${pnlCls(d[qk])}">${fmtPnl(toDisp(d[qk], 'USD'), dispSym())}</span>`).join('')}</div>`;
+  const nQ = d => sortedQ.filter(qk => d[qk]).length;
+  const card = (title, total, qData, extraCls, bar) => `<details class="mx-card mx-acc ${extraCls}">
+      <summary>
+        <div class="mx-head"><strong>${title}</strong>
+          <span class="oc-right"><span class="mx-total ${pnlCls(total)}">${fmtPnl(toDisp(total, 'USD'), dispSym())}</span><span class="oc-chev"></span></span></div>
+        ${bar}
+      </summary>
+      <div class="mx-body"><div class="mx-qhead">By quarter · ${nQ(qData)}</div>${qGrid(qData)}</div>
+    </details>`;
+  let html = sortedTickers.map(([ticker, d]) => card(
+      escHtml(ticker) + (d.hasPartial ? '<span class="mx-partial" title="Partially closed — position still open">partial</span>' : ''),
+      d.total, d.qData, '',
+      `<div class="mx-bar"><div style="width:${(Math.abs(d.total) / maxAbs * 100).toFixed(1)}%;background:${pnlColor(d.total)}"></div></div>`)).join('');
   const colSums = {}; let grand = 0;
   sortedQ.forEach(qk => { colSums[qk] = sortedTickers.reduce((s,[,d]) => s + (d.qData[qk] || 0), 0); grand += colSums[qk]; });
-  if (sortedTickers.length) html += `<div class="mx-card oc-total">
-      <div class="mx-head"><strong>Total · ${sortedTickers.length} tickers</strong><span class="mx-total ${pnlCls(grand)}">${fmtPnl(toDisp(grand, 'USD'), dispSym())}</span></div>
-      <div class="mx-qs">${qList(colSums)}</div>
-    </div>`;
+  if (sortedTickers.length) html += card(`Total · ${sortedTickers.length} tickers`, grand, colSums, 'oc-total', '');
   box.innerHTML = html;
 }
 
