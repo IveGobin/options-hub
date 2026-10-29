@@ -86,6 +86,9 @@
   }
   .top-bar h1 { font-size:20px; font-weight:800; letter-spacing:-0.02em; }
   .top-bar h1 span { color:var(--blue); }
+  .ccy-toggle { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .ccy-toggle button { background:transparent; border:0; padding:6px 10px; color:var(--muted); font-family:'Space Mono',monospace; font-size:11px; cursor:pointer; }
+  .ccy-toggle button.active { background:var(--blue); color:#fff; }
   .top-bar-right { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .file-chip {
     display:flex; align-items:center; gap:6px; background:var(--surface2);
@@ -580,6 +583,7 @@
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
+      <div class="ccy-toggle" role="group" aria-label="Display currency" title="Display currency for all P&amp;L, value and total figures"><button type="button" data-ccy="EUR" onclick="setDisp('EUR')">EUR</button><button type="button" data-ccy="USD" onclick="setDisp('USD')">USD</button></div>
       <button class="theme-btn" onclick="toggleTheme()">☀ Light</button>
       <button class="reset-btn" onclick="resetApp()">↩ New file</button>
     </div>
@@ -617,12 +621,12 @@
         <div class="snap-stats" id="snap-stats"></div>
         <div class="snap-charts">
           <div class="snap-chart-card">
-            <div class="snap-chart-title">Portfolio Allocation</div>
+            <div class="snap-chart-title" data-unit="disp">Portfolio Allocation</div>
             <div style="position:relative;height:200px;"><canvas id="portfolioPieChart"></canvas></div>
             <div id="portfolioPieLegend" style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px;font-size:12px;"></div>
           </div>
           <div class="snap-chart-card">
-            <div class="snap-chart-title">Cash Earned by Source</div>
+            <div class="snap-chart-title" data-unit="disp">Cash Earned by Source</div>
             <div style="position:relative;height:200px;"><canvas id="incomePieChart"></canvas></div>
             <div id="incomePieLegend" style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px;font-size:12px;"></div>
           </div>
@@ -631,17 +635,17 @@
     </div>
 
     <div class="section">
-      <div class="section-title">NAV Flow — how your portfolio value changed</div>
+      <div class="section-title" data-unit="disp">NAV Flow — how your portfolio value changed</div>
       <div class="nav-flow-scroll"><div class="nav-flow-strip" id="nav-flow-strip"></div></div>
       <div class="nav-breakdown" id="nav-breakdown"></div>
       <div class="nav-verify" id="nav-verify"></div>
     </div>
 
     <div class="section">
-      <div class="section-title">Portfolio growth by month</div>
+      <div class="section-title" data-unit="disp">Portfolio growth by month</div>
       <div class="chart-card">
         <div class="chart-legend" style="margin-bottom:10px;">
-          <span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--blue);"></span>Portfolio value (estimated)</span>
+          <span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--blue);"></span><span data-unit="disp">Portfolio value (estimated)</span></span>
           <span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--muted);"></span>Net deposits (cost basis)</span>
         </div>
         <div style="position:relative;height:280px;"><canvas id="navGrowthChart"></canvas></div>
@@ -662,8 +666,8 @@
         <table class="open-table">
           <thead><tr>
             <th>#</th><th>Ticker</th><th>Type</th><th>Exp. date</th><th>Strike</th><th>Qty</th>
-            <th>Premium collected</th><th>Per share</th><th>80%</th><th>Cost to close</th>
-            <th>Unrealized P&amp;L</th><th>% Kept</th><th>Exposure</th><th>Days left</th>
+            <th data-unit="disp">Premium collected</th><th data-unit="usd">Per share</th><th data-unit="usd">80% / share</th><th data-unit="disp">Cost to close</th>
+            <th data-unit="disp">Unrealized P&amp;L</th><th>% Kept</th><th data-unit="disp">Exposure</th><th>Days left</th>
           </tr></thead>
           <tbody id="open-tbody"></tbody>
         </table>
@@ -671,7 +675,7 @@
     </div>
 
     <div class="section">
-      <div class="section-title">Premium at risk — share by ticker</div>
+      <div class="section-title" data-unit="disp">Premium at risk — share by ticker</div>
       <div class="chart-card">
         <div class="pie-card-title" style="margin-bottom:10px;"><span class="dot" style="background:var(--blue)"></span>Open positions — premium by ticker</div>
         <div style="position:relative;height:280px;"><canvas id="premiumByTickerChart"></canvas></div>
@@ -679,7 +683,7 @@
     </div>
 
     <div class="section">
-      <div class="section-title">Value expiring by date — premium breakdown</div>
+      <div class="section-title" data-unit="disp">Value expiring by date — premium breakdown</div>
       <div class="chart-card">
         <div class="pie-card-title" style="margin-bottom:10px;"><span class="dot" style="background:var(--blue)"></span>Open positions — total value at expiry by date</div>
         <div style="position:relative;height:280px;"><canvas id="expiryDateChart"></canvas></div>
@@ -687,7 +691,7 @@
     </div>
 
     <div class="section">
-      <div class="section-title">Premium at risk — next 4 months by expiry</div>
+      <div class="section-title" data-unit="disp">Premium at risk — next 4 months by expiry</div>
       <div class="monthly-grid" id="monthly-grid"></div>
     </div>
 
@@ -705,7 +709,7 @@
   <div id="tab-closed" class="tab-pane">
 
     <div class="section">
-      <div class="section-title">Closed positions — P&amp;L by ticker</div>
+      <div class="section-title" data-unit="disp">Closed positions — P&amp;L by ticker</div>
       <div class="stat-row" id="closed-stat-row"></div>
       <div class="table-wrapper" style="margin-top:16px;">
         <div class="matrix-toolbar">
@@ -754,11 +758,11 @@
                 <th onclick="sortDetail('qty')">Qty</th>
                 <th onclick="sortDetail('openDate')">Open Date</th>
                 <th onclick="sortDetail('closeDate')">Close Date</th>
-                <th onclick="sortDetail('premium')">Premium Collected</th>
-                <th onclick="sortDetail('buyback')">Paid to Close</th>
-                <th onclick="sortDetail('openFee')">Open Fee</th>
-                <th onclick="sortDetail('closeFee')">Close Fee</th>
-                <th onclick="sortDetail('profit')">Profit</th>
+                <th onclick="sortDetail('premium')" data-unit="disp">Premium Collected</th>
+                <th onclick="sortDetail('buyback')" data-unit="disp">Paid to Close</th>
+                <th onclick="sortDetail('openFee')" data-unit="disp">Open Fee</th>
+                <th onclick="sortDetail('closeFee')" data-unit="disp">Close Fee</th>
+                <th onclick="sortDetail('profit')" data-unit="disp">Profit</th>
                 <th onclick="sortDetail('profitPct')">Profit %</th>
                 <th onclick="sortDetail('status')">Status</th>
               </tr>
@@ -775,8 +779,8 @@
         <table class="open-table">
           <thead><tr>
             <th>Ticker</th><th>Type</th><th>Strike</th><th>Qty assigned</th>
-            <th>Assign date</th><th>Premium collected</th><th>Per share</th>
-            <th>Effective cost</th><th>P&amp;L at assign</th>
+            <th>Assign date</th><th data-unit="disp">Premium collected</th><th data-unit="usd">Per share</th>
+            <th data-unit="usd">Effective cost / share</th><th data-unit="disp">P&amp;L at assign</th>
           </tr></thead>
           <tbody id="assigned-tbody"></tbody>
         </table>
@@ -784,20 +788,20 @@
     </div>
 
     <div class="section">
-      <div class="section-title">P&amp;L distribution — closed options by ticker</div>
+      <div class="section-title" data-unit="disp">P&amp;L distribution — closed options by ticker</div>
       <div class="treemap-card">
         <div class="pie-card-header"><div class="pie-card-title"><span class="dot" style="background:var(--green)"></span>Realized P&amp;L by ticker</div></div>
         <div class="treemap-wrap" id="pl-treemap"><div class="pie-empty">No data</div></div>
       </div>
       <div class="detail-toggle" id="pl-table-toggle" onclick="togglePLByTickerTable()" style="margin-top:12px;">
         <span class="detail-toggle-arrow">▶</span>
-        <span class="detail-toggle-label">Realized P&amp;L — Table By Ticker</span>
+        <span class="detail-toggle-label" data-unit="disp">Realized P&amp;L — Table By Ticker</span>
       </div>
       <div class="detail-collapsible" id="pl-table-collapsible">
         <div class="table-wrapper" style="margin-top:10px;">
           <table class="open-table" id="pl-by-ticker-table">
             <thead>
-              <tr><th>Ticker</th><th style="text-align:right;">Realized P&amp;L</th><th style="text-align:right;">% of total</th></tr>
+              <tr><th>Ticker</th><th style="text-align:right;" data-unit="disp">Realized P&amp;L</th><th style="text-align:right;">% of total</th></tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -815,9 +819,9 @@
         <table class="stock-table">
           <thead><tr>
             <th>Symbol</th><th style="text-align:left;">Description</th><th>CCY</th>
-            <th>Qty</th><th>Avg cost</th><th>Last price</th><th>Market value</th>
+            <th>Qty</th><th>Avg cost</th><th>Last price</th><th data-unit="disp">Market value</th>
             <th>Realized P&amp;L (native)</th><th>Unrealized P&amp;L (native)</th><th>Total P&amp;L (native)</th>
-            <th>Realized (€)</th><th>Unrealized (€)</th><th>Total (€)</th>
+            <th data-unit="disp">Realized</th><th data-unit="disp">Unrealized</th><th data-unit="disp">Total</th>
           </tr></thead>
           <tbody id="stock-tbody"></tbody>
         </table>
@@ -857,15 +861,15 @@
     <div class="section-title" style="font-size:10px;font-weight:700;color:#888;letter-spacing:0.1em;text-transform:uppercase;padding:0 0 0.5rem;">Stocks</div>
 
     <div class="section">
-      <div class="section-title" id="ua-section-stock-pl">Stock P&amp;L by position</div>
+      <div class="section-title" id="ua-section-stock-pl" data-unit-suffix>Stock P&amp;L by position</div>
       <div class="chart-card">
-        <div class="pie-card-title" style="margin-bottom:10px;"><span class="dot" style="background:var(--blue)"></span><span id="ua-chart-stock-sub">Total P&amp;L (realized + unrealized, EUR)</span></div>
+        <div class="pie-card-title" style="margin-bottom:10px;"><span class="dot" style="background:var(--blue)"></span><span id="ua-chart-stock-sub" data-unit-suffix>Total P&amp;L (realized + unrealized, EUR)</span></div>
         <div class="databar-legend">
           <div class="databar-legend-item"><span class="databar-swatch solid"></span>Realized</div>
           <div class="databar-legend-item"><span class="databar-swatch hatch"></span>Unrealized</div>
         </div>
         <table class="databar-table">
-          <thead><tr><th>Ticker</th><th class="num">Total P&amp;L (EUR)</th></tr></thead>
+          <thead><tr><th>Ticker</th><th class="num" data-unit="disp">Total P&amp;L</th></tr></thead>
           <tbody id="stock-databar-tbody"></tbody>
         </table>
       </div>
@@ -875,7 +879,7 @@
     <div class="section-title" style="font-size:10px;font-weight:700;color:#888;letter-spacing:0.1em;text-transform:uppercase;padding:1.5rem 0 0.5rem;">Options</div>
 
     <div class="section">
-      <div class="section-title" id="ua-section-opt-pl">Options P&amp;L by month</div>
+      <div class="section-title" id="ua-section-opt-pl" data-unit-suffix>Options P&amp;L by month</div>
       <div class="chart-card">
         <div class="pie-card-title" style="margin-bottom:10px;"><span class="dot" style="background:var(--blue)"></span><span id="ua-chart-opt-sub">Closed P&amp;L + open premium, by month</span></div>
         <div class="databar-legend">
@@ -883,7 +887,7 @@
           <div class="databar-legend-item"><span class="databar-swatch hatch"></span>Open premium (unrealized)</div>
         </div>
         <table class="databar-table">
-          <thead><tr><th>Month</th><th class="num">Total P&amp;L (USD)</th></tr></thead>
+          <thead><tr><th>Month</th><th class="num" data-unit="disp">Total P&amp;L</th></tr></thead>
           <tbody id="opt-databar-tbody"></tbody>
         </table>
       </div>
@@ -893,10 +897,10 @@
     <div class="section-title" style="font-size:10px;font-weight:700;color:#888;letter-spacing:0.1em;text-transform:uppercase;padding:1.5rem 0 0.5rem;">Exposure</div>
 
     <div class="section">
-      <div class="section-title" id="ua-section-exp">Peak Options Exposure by Month</div>
+      <div class="section-title" id="ua-section-exp" data-unit-suffix>Peak Options Exposure by Month</div>
       <div class="chart-card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-          <div class="chart-card-title" style="margin:0;" id="ua-chart-exp-title">Cumulative options exposure by month</div>
+          <div class="chart-card-title" style="margin:0;" id="ua-chart-exp-title" data-unit-suffix>Cumulative options exposure by month</div>
           <div class="chart-legend">
             <span class="chart-legend-item"><span class="chart-legend-dot" style="background:#a78bfa;"></span><span id="ua-chart-exp-legend">Put exposure</span></span>
           </div>
@@ -908,10 +912,10 @@
     </div>
 
     <div class="section">
-      <div class="section-title" id="ua-section-exp-total">Total Exposure Till Now</div>
+      <div class="section-title" id="ua-section-exp-total" data-unit-suffix>Total Exposure Till Now</div>
       <div class="chart-card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-          <div class="chart-card-title" style="margin:0;" id="ua-chart-exptotal-title">Running total of all put exposure ever opened</div>
+          <div class="chart-card-title" style="margin:0;" id="ua-chart-exptotal-title" data-unit-suffix>Running total of all put exposure ever opened</div>
           <div class="chart-legend">
             <span class="chart-legend-item"><span class="chart-legend-dot" style="background:#ffd32a;"></span><span id="ua-chart-exptotal-legend">Cumulative put exposure</span></span>
           </div>
@@ -1069,13 +1073,42 @@ function fmtPnl(v, sym, dec=2) {
 function fmtMoney(v, sym, dec=2) { const n = num(v); return (n < 0 && Math.round(-n * Math.pow(10, dec)) > 0 ? '−' : '') + (sym || '') + fmtNum(n, dec); }
 function pnlCls(v) { const n = num(v); return n > 0.004 ? 'pos' : n < -0.004 ? 'neg' : 'neu'; }
 function pnlColor(v) { const c = pnlCls(v); return c === 'pos' ? 'var(--green)' : c === 'neg' ? 'var(--red)' : 'var(--muted)'; }
-function fmt(val) { const v = num(val); return v === 0 ? '—' : fmtMoney(v, '$'); }
-function fmtEur(val) { return fmtMoney(val, '€'); }
-function fmtK(val)   { const v = num(val); return Math.abs(v) >= 1000 ? '$' + (Math.abs(v)/1000).toFixed(1) + 'k' : '$' + Math.abs(v).toFixed(0); }
-function fmtAbs(val) { const v = Math.abs(num(val)); return v >= 1000 ? '$' + (v/1000).toFixed(1)+'k' : '$' + v.toFixed(0); }
-function fmtSign(val,ccy) { return fmtPnl(val, ccy||'€'); }
-// Signed premium in $ — credit (short/sold) shows +, debit (long/bought) shows −.
-function fmtPrem(val, decimals) { return fmtPnl(val, '$', decimals===undefined?2:decimals); }
+// ── Display currency (account base currency EUR by default). Amounts are stored in their source currency
+// ('EUR' or 'USD') and converted for display with the statement rate; per-lot EUR figures are used as-is. ──
+let DISP = 'EUR';
+try { if (localStorage.getItem('ibkr_disp') === 'USD') DISP = 'USD'; } catch(e) {}
+let DISP_RATE = 1.10;   // USD per 1 EUR (statement rate), set in renderDashboard
+const dispSym = () => DISP === 'USD' ? '$' : '€';
+const symCcy = c => (c === '$' || c === 'USD') ? 'USD' : 'EUR';
+function toDisp(v, from) { const n = num(v); return from === DISP ? n : (from === 'USD' ? n / DISP_RATE : n * DISP_RATE); }
+function dMoney(v, from, dec=2) { return fmtMoney(toDisp(v, from), dispSym(), dec); }
+function dPnl(v, from, dec=2)   { return fmtPnl(toDisp(v, from), dispSym(), dec); }
+function dCompact(v, from) { const n = Math.abs(toDisp(v, from)); return dispSym() + (n >= 1000 ? (n/1000).toFixed(1) + 'k' : n.toFixed(0)); }
+// Legacy wrappers: source currency is implied by the name (fmt/fmtK/fmtAbs/fmtPrem: USD amounts; fmtEur: EUR amounts)
+function fmt(val) { return num(val) === 0 ? '—' : dMoney(val, 'USD'); }
+function fmtEur(val) { return dMoney(val, 'EUR'); }
+function fmtK(val)   { return dCompact(val, 'USD'); }
+function fmtAbs(val) { return dCompact(val, 'USD'); }
+function fmtSign(val,ccy) { return dPnl(val, symCcy(ccy || '€')); }
+// Signed premium — credit (short/sold) shows +, debit (long/bought) shows −.
+function fmtPrem(val, decimals) { return dPnl(val, 'USD', decimals===undefined?2:decimals); }
+// Per-contract / per-share option prices stay in the instrument's currency (USD).
+function fmtNative(val, sym, dec=2) { return fmtMoney(val, sym || '$', dec); }
+function setDisp(c) {
+  DISP = c === 'USD' ? 'USD' : 'EUR';
+  try { localStorage.setItem('ibkr_disp', DISP); } catch(e) {}
+  const r = window._lastRender;
+  if (r) renderDashboard(r.data, r.fileName, true);
+  else syncDispToggle();
+}
+function syncDispToggle() { document.querySelectorAll('.ccy-toggle button').forEach(b => b.classList.toggle('active', b.dataset.ccy === DISP)); }
+// Header cells tagged data-unit="disp" get "(EUR)" / "(USD)" appended; data-unit="usd" always says USD.
+function applyUnitLabels() {
+  document.querySelectorAll('[data-unit]').forEach(el => {
+    if (el.dataset.base === undefined) el.dataset.base = el.textContent;
+    el.textContent = el.dataset.base + ' (' + (el.dataset.unit === 'disp' ? DISP : el.dataset.unit.toUpperCase()) + ')';
+  });
+}
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // Builds a <tr> for a table's total/summary footer row from an explicit list of cells.
@@ -1987,7 +2020,10 @@ function loadFiles(files) {
 // ═══════════════════════════════════════════════════════════════════
 let _chartOpt = null, _chartStock = null, _chartPortPie = null, _chartIncomePie = null, _chartExp = null, _chartExpTotal = null, _chartNavGrowth = null;
 
-function renderDashboard(data, fileName) {
+function renderDashboard(data, fileName, keepView) {
+  DISP_RATE = data.eurUsdRate > 0 ? data.eurUsdRate : 1.10;
+  window._lastRender = { data, fileName };
+  syncDispToggle(); applyUnitLabels();
   document.getElementById('drop-screen').style.display = 'none';
   document.getElementById('dashboard').style.display   = 'block';
   document.getElementById('file-name-text').textContent = fileName;
@@ -2002,14 +2038,16 @@ function renderDashboard(data, fileName) {
   // ── KPI STRIP ──
   const kpiGrid = document.getElementById('kpi-grid');
   kpiGrid.innerHTML = '';
+  const stockFig = stockEurFigures(data);   // same rounded figures as the Stocks tab TOTAL row and the Charts tab
+  const unrAll = toDisp(data.openUnrPL, 'USD') + stockFig.unr;
   const kpis = [
-    { label:'Portfolio NAV',    value:'€'+data.navEnd.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}), cls:'blue',  bar:'blue' },
-    { label:'Realized options', value:fmt(data.closedNet), cls:data.closedNet>=0?'pos':'neg', bar:data.closedNet>=0?'green':'red' },
-    { label:'Unrealized P&L',   value:fmt(data.openUnrPL + data.stockUnrNet * data.eurUsdRate), cls:(data.openUnrPL + data.stockUnrNet * data.eurUsdRate)>=0?'pos':'neg', bar:(data.openUnrPL + data.stockUnrNet * data.eurUsdRate)>=0?'green':'red' },
+    { label:'Portfolio NAV',    value:dMoney(data.navEnd, 'EUR'), cls:'blue',  bar:'blue' },
+    { label:'Realized options', value:fmtPnl(toDisp(data.closedNet, 'USD'), dispSym()), cls:pnlCls(data.closedNet), bar:data.closedNet>=0?'green':'red' },
+    { label:'Unrealized P&L (options + stocks)', value:fmtPnl(unrAll, dispSym()), cls:pnlCls(unrAll), bar:unrAll>=0?'green':'red' },
     { label:'Premium at risk',  value:fmt(data.openPremiumCollected), cls:data.openPremiumCollected<0?'neg':'neutral', bar:data.openPremiumCollected<0?'red':'accent' },
     { label:'Put exposure',     value:fmtK(data.totalExposure), cls:'neutral', bar:'yellow' },
-    { label:'Stock P&L',        value:fmtEur(data.stockTotal), cls:data.stockTotal>=0?'pos':'neg', bar:data.stockTotal>=0?'green':'red' },
-    { label:'Cash (EUR equiv)', value:'€'+data.totalCashEUR.toLocaleString(undefined,{minimumFractionDigits:0}), cls:'neutral', bar:'blue' },
+    { label:'Stock P&L (realized + unrealized)', value:fmtPnl(stockFig.total, dispSym()), cls:pnlCls(stockFig.total), bar:stockFig.total>=0?'green':'red' },
+    { label:'Cash (EUR+USD equiv.)', value:dMoney(data.totalCashEUR, 'EUR', 0), cls:'neutral', bar:'blue' },
     { label:'Win rate',         value:(data.closedWinRate||0)+'%', cls:data.closedWinRate>=50?'pos':'neg', bar:data.closedWinRate>=50?'green':'red' },
   ];
   kpis.forEach(k => {
@@ -2020,10 +2058,10 @@ function renderDashboard(data, fileName) {
   });
 
   // ── PORTFOLIO SNAPSHOT ──
-  document.getElementById('snap-nav-value').textContent = '€'+data.navEnd.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('snap-nav-value').textContent = dMoney(data.navEnd, 'EUR');
   document.getElementById('snap-meta').innerHTML =
     `<span style="color:var(--muted)">Started at</span>
-     <span style="font-family:'Space Mono',monospace;color:var(--text);">€${data.navStart.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+     <span style="font-family:'Space Mono',monospace;color:var(--text);">${dMoney(data.navStart, 'EUR')}</span>
      <span style="color:var(--border)">·</span>
      <span style="color:var(--muted)">${escHtml(data.period)}</span>`;
   const twrBlock = document.getElementById('snap-twr-block');
@@ -2035,12 +2073,12 @@ function renderDashboard(data, fileName) {
   }
   const snapStats = document.getElementById('snap-stats');
   const statItems = [
-    { label:'Organic P&L', val:(data.organicPL>=0?'+':'')+'€'+Math.abs(data.organicPL).toLocaleString(undefined,{minimumFractionDigits:2}), color:data.organicPL>=0?'var(--green)':'var(--red)', sub:'trading gains' },
-    { label:'Cash deposited', val:'+€'+data.totalDeposits.toLocaleString(undefined,{minimumFractionDigits:2}), color:'var(--blue)', sub:`${data.deposits.length} transfers` },
-    { label:'Options income', val:(data.closedNet>=0?'+':'')+'$'+Math.abs(data.closedNet).toLocaleString(undefined,{minimumFractionDigits:2}), color:data.closedNet>=0?'var(--green)':'var(--red)', sub:`${data.closedOptions.length} closed` },
-    { label:'Stock P&L', val:(data.stockTotal>=0?'+':'')+'€'+Math.abs(data.stockTotal).toLocaleString(undefined,{minimumFractionDigits:2}), color:data.stockTotal>=0?'var(--green)':'var(--red)', sub:'realized + unr.' },
-    { label:'Commissions', val:'€'+Math.abs(data.totalComm).toLocaleString(undefined,{minimumFractionDigits:2}), color:'var(--red)', sub:'total paid' },
-    { label:'Cash on account', val:'€'+data.totalCashEUR.toLocaleString(undefined,{minimumFractionDigits:0}), color:'var(--text)', sub:'EUR+USD equiv.', wide:true },
+    { label:'Organic P&L', val:dPnl(data.organicPL, 'EUR'), color:pnlColor(data.organicPL), sub:'trading gains' },
+    { label:'Cash deposited', val:dPnl(data.totalDeposits, 'EUR'), color:'var(--blue)', sub:`${data.deposits.length} transfers` },
+    { label:'Options income', val:dPnl(data.closedNet, 'USD'), color:pnlColor(data.closedNet), sub:`${data.closedOptions.length} closed` },
+    { label:'Stock P&L', val:fmtPnl(stockFig.total, dispSym()), color:pnlColor(stockFig.total), sub:'realized + unr.' },
+    { label:'Commissions', val:dMoney(Math.abs(data.totalComm), 'EUR'), color:'var(--red)', sub:'total paid' },
+    { label:'Cash on account', val:dMoney(data.totalCashEUR, 'EUR', 0), color:'var(--text)', sub:'EUR+USD equiv.', wide:true },
   ];
   snapStats.innerHTML = statItems.map(s =>
     `<div class="snap-stat" style="${s.wide?'grid-column:1/-1;':''}">
@@ -2112,7 +2150,7 @@ function renderDashboard(data, fileName) {
   // ── REALIZED P&L TREEMAP (combined positive + negative, sized by ticker) ──
   const treemapData = Object.entries(netTickerMap)
     .filter(([,v]) => v !== 0)
-    .map(([ticker, value]) => ({ label: ticker, value }))
+    .map(([ticker, value]) => ({ label: ticker, value: toDisp(value, 'USD') }))   // USD -> display currency
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
   window._plTreemapData = treemapData;
   renderTreemap('pl-treemap', treemapData);
@@ -2139,7 +2177,7 @@ function renderDashboard(data, fileName) {
   // Init projection tab with live data
   projInitFromData(data);
 
-  window.scrollTo(0,0);
+  if (!keepView) window.scrollTo(0,0);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2195,10 +2233,11 @@ function renderNavFlow(d) {
       nbTotal('Total costs', d.navCosts));
 
   const ok = d.navDiff < 0.05;
-  const verStr = ok ? `✓ Reconciles to €${d.navEnd.toLocaleString(undefined,{minimumFractionDigits:2})}` : `⚠ Off by €${d.navDiff.toFixed(2)}`;
+  const E = v => dMoney(v, 'EUR');
+  const verStr = ok ? `✓ Reconciles to ${E(d.navEnd)}` : `⚠ Off by ${E(d.navDiff)}`;
   document.getElementById('nav-verify').innerHTML =
     `<span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);">
-      €${d.navStart.toLocaleString(undefined,{minimumFractionDigits:2})} + €${d.navDeposits.toFixed(2)} + €${d.navMtM.toFixed(2)} + €${d.navIncome.toFixed(2)} − €${Math.abs(d.navCosts).toFixed(2)}${Math.abs(d.navFX)>0.001?' + €'+d.navFX.toFixed(2):''} = <strong style="color:var(--text);">€${d.navEnd.toLocaleString(undefined,{minimumFractionDigits:2})}</strong>
+      ${E(d.navStart)} + ${E(d.navDeposits)} + ${E(d.navMtM)} + ${E(d.navIncome)} − ${E(Math.abs(d.navCosts))}${Math.abs(d.navFX)>0.001?' + '+E(d.navFX):''} = <strong style="color:var(--text);">${E(d.navEnd)}</strong>
     </span>
     <span class="verify-badge ${ok?'ok':'warn'}">${verStr}</span>`;
 }
@@ -2305,7 +2344,7 @@ function renderNavGrowthChart(data) {
       datasets: [
         {
           label: 'Portfolio value (estimated)',
-          data: navSeries,
+          data: navSeries.map(v => toDisp(v, 'EUR')),
           borderColor: blue,
           backgroundColor: 'rgba(0,180,216,0.12)',
           fill: true,
@@ -2316,7 +2355,7 @@ function renderNavGrowthChart(data) {
         },
         {
           label: 'Net deposits (cost basis)',
-          data: depSeries,
+          data: depSeries.map(v => toDisp(v, 'EUR')),
           borderColor: muted,
           backgroundColor: 'transparent',
           borderDash: [5,4],
@@ -2335,7 +2374,7 @@ function renderNavGrowthChart(data) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => ' ' + ctx.dataset.label + ': €' + ctx.parsed.y.toLocaleString(undefined,{maximumFractionDigits:0})
+            label: ctx => ' ' + ctx.dataset.label + ': ' + dispSym() + ctx.parsed.y.toLocaleString(undefined,{maximumFractionDigits:0})
           }
         }
       },
@@ -2343,7 +2382,7 @@ function renderNavGrowthChart(data) {
         x: { grid: { color: border }, ticks: { color: muted, font: { size: 11 } } },
         y: {
           grid: { color: border },
-          ticks: { color: muted, font: { size: 11 }, callback: v => '€' + v.toLocaleString(undefined,{maximumFractionDigits:0}) }
+          ticks: { color: muted, font: { size: 11 }, callback: v => dispSym() + v.toLocaleString(undefined,{maximumFractionDigits:0}) }
         }
       }
     }
@@ -2471,7 +2510,6 @@ function renderDetailTable() {
     if (!(d instanceof Date)) return '—';
     return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
   };
-  const fmtAbs = v => `$${Math.abs(v).toFixed(2)}`;
   // Format profit %: always show sign explicitly, never strip minus
   const fmtPct = pct => {
     if (pct === null || pct === undefined) return '—';
@@ -2481,22 +2519,21 @@ function renderDetailTable() {
 
   rows.forEach(r => {
     const profCls = r.profit > 0 ? 'pos' : r.profit < 0 ? 'neg' : '';
-    const profSign = r.profit >= 0 ? '+' : '-';
     const pctStr  = fmtPct(r.profitPct);
     const statusCls = r.status.toLowerCase();
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${escHtml(r.ticker)}</td>
       <td class="dim">${escHtml(r.sym)}</td>
-      <td>$${r.strike%1===0?r.strike.toFixed(0):r.strike.toFixed(2)}</td>
+      <td>${fmtNative(r.strike, '$', r.strike%1===0?0:2)}</td>
       <td>${r.qty}</td>
       <td class="dim">${fmtD(r.openDate)}</td>
       <td class="dim">${fmtD(r.closeDate)}</td>
-      <td class="pos">+${fmtAbs(r.premium)}</td>
-      <td class="${r.buyback>0?'neg':'dim'}">${r.buyback>0?'-'+fmtAbs(r.buyback):'$0.00'}</td>
-      <td class="neg">${r.openFee!==0?'-'+fmtAbs(r.openFee):'$0.00'}</td>
-      <td class="neg">${r.closeFee!==0?'-'+fmtAbs(r.closeFee):'$0.00'}</td>
-      <td class="${profCls}">${profSign}${fmtAbs(r.profit)}</td>
+      <td class="pos">${dPnl(r.premium, 'USD')}</td>
+      <td class="${r.buyback>0?'neg':'dim'}">${r.buyback>0 ? dPnl(-Math.abs(r.buyback), 'USD') : '—'}</td>
+      <td class="neg">${r.openFee!==0 ? dPnl(-Math.abs(r.openFee), 'USD') : '—'}</td>
+      <td class="neg">${r.closeFee!==0 ? dPnl(-Math.abs(r.closeFee), 'USD') : '—'}</td>
+      <td class="${profCls}">${dPnl(r.profit, 'USD')}</td>
       <td class="${profCls}">${pctStr}</td>
       <td><span class="status-pill ${statusCls}">${r.status}</span></td>`;
     tbody.appendChild(tr);
@@ -2507,7 +2544,6 @@ function renderDetailTable() {
   const totalPremium = rows.reduce((s,r)=>s+r.premium,0);
   const avgPct = totalPremium > 0 ? (totalProfit/totalPremium*100) : null;
   const totCls  = totalProfit>=0?'pos':'neg';
-  const totSign = totalProfit>=0?'+':'-';
   const totalOpenFee  = rows.reduce((s,r)=>s+r.openFee,0);
   const totalCloseFee = rows.reduce((s,r)=>s+r.closeFee,0);
   const tfoot = buildTotalRow([
@@ -2517,11 +2553,11 @@ function renderDetailTable() {
     '',                                                                                                        // Qty
     '',                                                                                                        // Open Date
     '',                                                                                                        // Close Date
-    { html:`+$${totalPremium.toFixed(2)}`, class:'pos' },                                                      // Premium Collected
+    { html:dPnl(totalPremium, 'USD'), class:'pos' },                                                      // Premium Collected
     '',                                                                                                        // Paid to Close
-    { html:`-$${Math.abs(totalOpenFee).toFixed(2)}`, class:'neg' },                                            // Open Fee
-    { html:`-$${Math.abs(totalCloseFee).toFixed(2)}`, class:'neg' },                                           // Close Fee
-    { html:`${totSign}$${Math.abs(totalProfit).toFixed(2)}`, class:totCls },                                   // Profit
+    { html:dPnl(-Math.abs(totalOpenFee), 'USD'), class:'neg' },                                            // Open Fee
+    { html:dPnl(-Math.abs(totalCloseFee), 'USD'), class:'neg' },                                           // Close Fee
+    { html:dPnl(totalProfit, 'USD'), class:totCls },                                   // Profit
     { html:fmtPct(avgPct), class:totCls },                                                                     // Profit %
     '',                                                                                                        // Status
   ], 'border-top:1px solid var(--border);font-weight:700;background:var(--surface2);');
@@ -2560,7 +2596,7 @@ function renderOpenTable(openPositions) {
     const dl = daysLeft(new Date(p.expiry));
     const dlEl = dl < 0 ? `<span style="color:var(--red)">${dl}d</span>` : dl===0 ? `<span style="color:var(--yellow)">today</span>` : `${dl}d`;
     const unrCls = p.unrPL>0?'unr-pos':p.unrPL<0?'unr-neg':'unr-neu';
-    const unrStr = p.unrPL>0?`+$${p.unrPL.toFixed(2)}`:p.unrPL<0?`-$${Math.abs(p.unrPL).toFixed(2)}`:'$0';
+    const unrStr = dPnl(p.unrPL, 'USD');
     // "% kept" and the 80%-buyback target only make sense for premium SOLD (credit);
     // for bought (debit) positions there's no premium to have "kept", so show "—".
     const keptPct = p.premiumCollected > 0 ? ((p.premiumCollected - p.currentValue) / p.premiumCollected) * 100 : null;
@@ -2572,12 +2608,12 @@ function renderOpenTable(openPositions) {
       <td><strong>${escHtml(p.ticker)}</strong></td>
       <td><span class="type-badge ${p.type}">${p.type}</span></td>
       <td class="mono">${fmtDate(p.expiry)}</td>
-      <td class="mono">$${p.strike%1===0?p.strike.toFixed(0):p.strike.toFixed(2)}</td>
+      <td class="mono">${fmtNative(p.strike, '$', p.strike%1===0?0:2)}</td>
       <td class="mono">${p.qty}</td>
       <td><span class="premium-pill${p.premiumCollected<0?' debit':''}">${fmtPrem(p.premiumCollected)}</span></td>
-      <td class="mono" style="color:${p.premiumCollected<0?'var(--red)':'var(--accent)'};font-size:11px;">${fmtPrem(perShare)}/sh</td>
-      <td class="mono" style="color:${p.premiumCollected<0?'var(--muted)':'var(--green)'};font-weight:600;">${p.premiumCollected<0?'—':'$'+(perShare*0.2).toFixed(2)}</td>
-      <td class="mono" style="color:var(--muted)">$${p.currentValue.toFixed(2)}</td>
+      <td class="mono" style="color:${p.premiumCollected<0?'var(--red)':'var(--accent)'};font-size:11px;">${fmtPnl(perShare, '$')}/sh</td>
+      <td class="mono" style="color:${p.premiumCollected<0?'var(--muted)':'var(--green)'};font-weight:600;">${p.premiumCollected<0?'—':fmtNative(perShare*0.2, '$')}</td>
+      <td class="mono" style="color:var(--muted)">${dMoney(p.currentValue, 'USD')}</td>
       <td class="${unrCls}">${unrStr}</td>
       <td>${keptEl}</td>
       <td class="mono">${p.exposure!==null?fmtK(p.exposure):'—'}</td>
@@ -2591,13 +2627,13 @@ function renderOpenTable(openPositions) {
   const totKept  = totPrem>0 ? ((totPrem-totCtC)/totPrem)*100 : null;
   const totKCls  = totKept===null?'':totKept>=75?'high':totKept>=40?'mid':totKept>=0?'low':'neg';
   const totUnrCls = totUnrPL>0?'unr-pos':totUnrPL<0?'unr-neg':'unr-neu';
-  const totUnrStr = totUnrPL>0?`+$${totUnrPL.toFixed(2)}`:totUnrPL<0?`-$${Math.abs(totUnrPL).toFixed(2)}`:'$0';
+  const totUnrStr = dPnl(totUnrPL, 'USD');
   const tfoot = buildTotalRow([
     { html:`TOTAL · ${openPositions.length}`, colspan:6, style:'color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;' }, // #, Ticker, Type, Exp.date, Strike, Qty
     { html:`<span class="premium-pill${totPrem<0?' debit':''}" style="${totPrem<0?'':'background:rgba(0,180,216,0.1);color:var(--blue)'}">${fmtPrem(totPrem)}</span>` },  // Premium collected
     '',                                                                                                                                        // Per share
     '',                                                                                                                                        // 80%
-    { html:`$${totCtC.toFixed(2)}`, class:'mono', style:'color:var(--muted)' },                                                                // Cost to close
+    { html:dMoney(totCtC, 'USD'), class:'mono', style:'color:var(--muted)' },                                                                // Cost to close
     { html:totUnrStr, class:totUnrCls },                                                                                                       // Unrealized P&L
     { html:totKept!==null?`<span class="kept-pill ${totKCls}">${totKept.toFixed(1)}%</span>`:'—' },                                            // % Kept
     { html:fmtK(totExp), class:'mono' },                                                                                                        // Exposure
@@ -2618,13 +2654,13 @@ function renderAssignedTable(assignedPositions) {
     tr.innerHTML = `
       <td><strong>${escHtml(p.ticker)}</strong></td>
       <td><span class="type-badge ${p.type}">${p.type}</span></td>
-      <td class="mono">$${p.strike%1===0?p.strike.toFixed(0):p.strike.toFixed(2)}</td>
+      <td class="mono">${fmtNative(p.strike, '$', p.strike%1===0?0:2)}</td>
       <td class="mono">${p.sharesAssigned} sh <span style="color:var(--muted);font-size:11px;">(${p.qtyContracts} contracts)</span></td>
       <td class="mono">${p.assignDate?fmtDate(p.assignDate):'—'}</td>
-      <td><span class="premium-pill">+$${p.premCollected.toFixed(2)}</span></td>
-      <td class="mono" style="color:var(--accent);font-size:11px;">$${p.perShare.toFixed(2)}/sh</td>
-      <td class="mono" style="color:var(--yellow);">$${p.effectiveCost.toFixed(2)}/sh</td>
-      <td class="${plCls}">${p.realAtAssign>=0?'+':'−'}$${Math.abs(p.realAtAssign).toFixed(2)}</td>`;
+      <td><span class="premium-pill">${dPnl(p.premCollected, 'USD')}</span></td>
+      <td class="mono" style="color:var(--accent);font-size:11px;">${fmtNative(p.perShare, '$')}/sh</td>
+      <td class="mono" style="color:var(--yellow);">${fmtNative(p.effectiveCost, '$')}/sh</td>
+      <td class="${plCls}">${dPnl(p.realAtAssign, 'USD')}</td>`;
     tbody.appendChild(tr);
   });
   // Total row
@@ -2637,10 +2673,10 @@ function renderAssignedTable(assignedPositions) {
     { html:'TOTAL', colspan:3, style:'color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:12px 16px;' }, // Ticker, Type, Strike
     { html:`${totShares} sh <span style="color:var(--muted);font-size:11px;">(${totContr} contracts)</span>`, class:'mono' },                // Qty assigned
     '',                                                                                                                                       // Assign date
-    { html:`<span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">+$${totPrem.toFixed(2)}</span>` },           // Premium collected
+    { html:`<span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">${dPnl(totPrem, 'USD')}</span>` },           // Premium collected
     '',                                                                                                                                       // Per share
     '',                                                                                                                                       // Effective cost
-    { html:`${totPL>=0?'+':'−'}$${Math.abs(totPL).toFixed(2)}`, class:totPlCls },                                                             // P&L at assign
+    { html:dPnl(totPL, 'USD'), class:totPlCls },                                                             // P&L at assign
   ], 'border-top:1px solid var(--border);');
   tbody.appendChild(tfoot);
 }
@@ -2670,7 +2706,7 @@ function renderPremiumByTickerChart(openByTicker) {
   }
 
   const labels = sorted.map(d => d[0]);
-  const values = sorted.map(d => +d[1].toFixed(2));
+  const values = sorted.map(d => +toDisp(d[1], 'USD').toFixed(2));   // display currency
   const colors = values.map(v => v < 0 ? 'rgba(255,71,87,0.75)' : 'rgba(0,200,83,0.75)');
   const hoverColors = values.map(v => v < 0 ? '#ff4757' : '#00c853');
 
@@ -2702,12 +2738,12 @@ function renderPremiumByTickerChart(openByTicker) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => 'Premium: ' + fmtPrem(ctx.parsed.x),
+            label: ctx => 'Premium: ' + fmtPnl(ctx.parsed.x, dispSym()),
           }
         }
       },
       scales: {
-        x: { ticks: { color: '#5a6473', font: { size: 11 }, callback: v => (v<0?'-$':'$') + Math.abs(v).toLocaleString() }, grid: { color: 'rgba(128,128,128,0.07)' }, border: { display: false }, beginAtZero: true },
+        x: { ticks: { color: '#5a6473', font: { size: 11 }, callback: v => (v<0?'−':'') + dispSym() + Math.abs(v).toLocaleString() }, grid: { color: 'rgba(128,128,128,0.07)' }, border: { display: false }, beginAtZero: true },
         y: { ticks: { color: '#5a6473', font: { size: 12, family: 'Space Mono', weight: '700' }, autoSkip: false }, grid: { display: false },
           afterFit: (scale) => { scale.width = Math.max(scale.width, 64); } }
       }
@@ -2748,8 +2784,8 @@ function renderExpiryDatePie(openPositions) {
   }
 
   const labels = sorted.map(d => d[0]);
-  const values = sorted.map(d => d[1]);
-  const prems  = labels.map(l => premByDate[l] || 0);
+  const values = sorted.map(d => Math.round(toDisp(d[1], 'USD')));   // display currency
+  const prems  = labels.map(l => premByDate[l] || 0);                // USD, converted by fmtPrem
 
   const rowHeight = 30;
   const chartHeight = Math.max(280, labels.length * rowHeight + 40);
@@ -2776,13 +2812,13 @@ function renderExpiryDatePie(openPositions) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => 'Exposure: $' + ctx.parsed.x.toLocaleString('en-US', { maximumFractionDigits: 0 }),
+            label: ctx => 'Exposure: ' + dispSym() + ctx.parsed.x.toLocaleString('en-US', { maximumFractionDigits: 0 }),
             afterLabel: ctx => 'Premium: ' + fmtPrem(prems[ctx.dataIndex]),
           }
         }
       },
       scales: {
-        x: { ticks: { color: '#5a6473', font: { size: 11 }, callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(128,128,128,0.07)' }, border: { display: false }, beginAtZero: true },
+        x: { ticks: { color: '#5a6473', font: { size: 11 }, callback: v => dispSym() + v.toLocaleString() }, grid: { color: 'rgba(128,128,128,0.07)' }, border: { display: false }, beginAtZero: true },
         y: { ticks: { color: '#5a6473', font: { size: 12, family: 'Space Mono', weight: '700' }, autoSkip: false }, grid: { display: false },
           afterFit: (scale) => { scale.width = Math.max(scale.width, 108); } }
       }
@@ -2931,7 +2967,8 @@ function renderMatrix(filterYear) {
 // ═══════════════════════════════════════════════════════════════════
 // STOCKS TABLE (with expandable transaction history)
 // ═══════════════════════════════════════════════════════════════════
-// Per-row EUR figures (FIFO per-lot FX; equal to native for EUR rows), rounded to cents so every total
+// Per-row figures in the display currency (EUR: FIFO per-lot FX, equal to native for EUR rows; USD: those EUR
+// figures at the statement rate), rounded to cents so every total
 // shown in the app is the exact sum of the displayed row values. Legacy rows without EUR fields use the statement rate.
 const STOCK_ECON_TIP = 'Economic view, not tax. EUR figures use the FX rate on each purchase/sale day (FIFO) so they include currency effect; IBKR reports that part separately under Forex. Option premium from assigned puts/calls is included in share cost basis.';
 function stockEurFigures(data) {
@@ -2940,11 +2977,13 @@ function stockEurFigures(data) {
   const rows = (data.stocksTable || data.stocks).map(r => {
     const isEur = r.eurBase || r.ccy === 'EUR';
     const toEur = v => isEur ? v : v / rate;
-    const real = r2(r.realEur != null ? r.realEur : toEur(r.realTotal));
-    const unr  = r2(r.unrEur  != null ? r.unrEur  : toEur(r.unrTotal));
+    const realE = r.realEur != null ? r.realEur : toEur(r.realTotal);
+    const unrE  = r.unrEur  != null ? r.unrEur  : toEur(r.unrTotal);
+    const real = r2(toDisp(realE, 'EUR'));
+    const unr  = r2(toDisp(unrE, 'EUR'));
     const total = r2(real + unr);
     // currency effect = per-lot EUR result minus the native result converted at the statement rate
-    const fx = isEur ? 0 : (real + unr) - r.total / rate;
+    const fx = isEur ? 0 : toDisp((realE + unrE) - r.total / rate, 'EUR');
     return { row: r, real, unr, total, fx };
   });
   const sum = k => r2(rows.reduce((a, x) => a + x[k], 0));
@@ -2989,7 +3028,7 @@ function renderStocksTable(data) {
       const hdr = document.createElement('tr');
       hdr.className = 'stock-group-row';
       hdr.innerHTML = s.held
-        ? `<td colspan="${NCOL}"><span class="stock-group-label">Open positions — still held (${grpRows.length}) · market value ≈ ${fmtMoney(grpVal, '€', 0)}</span></td>`
+        ? `<td colspan="${NCOL}"><span class="stock-group-label">Open positions — still held (${grpRows.length}) · market value ≈ ${dMoney(grpVal, 'EUR', 0)}</span></td>`
         : `<td colspan="${NCOL}"><span class="stock-group-label">Closed positions — fully sold (${grpRows.length})</span></td>`;
       tbody.appendChild(hdr);
     }
@@ -2999,7 +3038,7 @@ function renderStocksTable(data) {
     const qty = s.held ? s.qty.toLocaleString(undefined,{maximumFractionDigits:4}) : '<span style="color:var(--muted)">sold</span>';
     const costP = s.held ? fmtMoney(s.avgCost, cs) : '—';
     const lastP = s.held && s.lastPrice ? fmtMoney(s.lastPrice, cs) : '—';
-    const mktV  = s.held ? fmtMoney(s.value, cs, 0) : '—';
+    const mktV  = s.held ? dMoney(s.valueEur != null ? s.valueEur : s.value, s.valueEur != null ? 'EUR' : symCcy(cs), 0) : '—';
     const rCls  = pnlCls(s.realTotal);
     const uCls  = pnlCls(s.unrTotal);
     const tCls  = pnlCls(s.total);
@@ -3021,9 +3060,9 @@ function renderStocksTable(data) {
       <td class="${rCls}">${fmtPnl(s.realTotal, cs)}</td>
       <td class="${uCls}">${fmtPnl(s.unrTotal, cs)}</td>
       <td class="${tCls}">${fmtPnl(s.total, cs)}</td>
-      <td class="${pnlCls(eurRow.real)}">${fmtPnl(eurRow.real, '€')}</td>
-      <td class="${pnlCls(eurRow.unr)}">${fmtPnl(eurRow.unr, '€')}</td>
-      <td class="${pnlCls(eurRow.total)}">${fmtPnl(eurRow.total, '€')}</td>`;
+      <td class="${pnlCls(eurRow.real)}">${fmtPnl(eurRow.real, dispSym())}</td>
+      <td class="${pnlCls(eurRow.unr)}">${fmtPnl(eurRow.unr, dispSym())}</td>
+      <td class="${pnlCls(eurRow.total)}">${fmtPnl(eurRow.total, dispSym())}</td>`;
 
     const txRow = document.createElement('tr');
     txRow.className = 'stock-tx-row';
@@ -3113,14 +3152,14 @@ function renderStocksTable(data) {
   const summaryRow = document.createElement('tr');
   summaryRow.className = 'summary-row';
   summaryRow.innerHTML = `
-    <td colspan="10">TOTAL (€, FIFO per-lot FX)</td>
-    <td class="${pnlCls(eurFig.real)}">${fmtPnl(eurFig.real, '€')}</td>
-    <td class="${pnlCls(eurFig.unr)}">${fmtPnl(eurFig.unr, '€')}</td>
-    <td class="${pnlCls(eurFig.total)}">${fmtPnl(eurFig.total, '€')}</td>`;
+    <td colspan="10">TOTAL (${DISP}, FIFO per-lot FX)</td>
+    <td class="${pnlCls(eurFig.real)}">${fmtPnl(eurFig.real, dispSym())}</td>
+    <td class="${pnlCls(eurFig.unr)}">${fmtPnl(eurFig.unr, dispSym())}</td>
+    <td class="${pnlCls(eurFig.total)}">${fmtPnl(eurFig.total, dispSym())}</td>`;
   tbody.appendChild(summaryRow);
   const fxRow = document.createElement('tr');
   fxRow.className = 'summary-note-row';
-  fxRow.innerHTML = `<td colspan="${NCOL}"><span class="stock-fx-note">of which currency effect: <strong style="color:${pnlColor(eurFig.fx)}">${eurFig.fx === 0 ? '€0.00' : fmtPnl(eurFig.fx, '€')}</strong>
+  fxRow.innerHTML = `<td colspan="${NCOL}"><span class="stock-fx-note">of which currency effect: <strong style="color:${pnlColor(eurFig.fx)}">${fmtPnl(eurFig.fx, dispSym())}</strong>
     <span class="info-tip" tabindex="0" title="${escHtml(STOCK_ECON_TIP)}">ⓘ</span></span></td>`;
   tbody.appendChild(fxRow);
 }
@@ -3142,22 +3181,22 @@ function renderDeposits(data) {
   document.getElementById('dep-summary-grid').innerHTML = `
     <div class="dep-summary-card">
       <div class="dep-summary-label">Total deposited</div>
-      <div class="dep-summary-value" style="color:var(--green);">+€${totalIn.toLocaleString(undefined,{minimumFractionDigits:2})}</div>
+      <div class="dep-summary-value" style="color:var(--green);">${dPnl(totalIn, 'EUR')}</div>
       <div class="dep-summary-sub">${deps.filter(r=>parseFloat(String(r[depCols.amount]).replace(/,/g,''))>0).length} transfers</div>
     </div>
     <div class="dep-summary-card">
       <div class="dep-summary-label">Total withdrawn</div>
-      <div class="dep-summary-value" style="color:${totalOut<0?'var(--red)':'var(--muted)'};">${totalOut<0?'−€'+Math.abs(totalOut).toLocaleString(undefined,{minimumFractionDigits:2}):'€0.00'}</div>
+      <div class="dep-summary-value" style="color:${totalOut<0?'var(--red)':'var(--muted)'};">${totalOut<0 ? dPnl(totalOut, 'EUR') : '—'}</div>
       <div class="dep-summary-sub">${deps.filter(r=>parseFloat(String(r[depCols.amount]).replace(/,/g,''))<0).length} transfers</div>
     </div>
     <div class="dep-summary-card">
       <div class="dep-summary-label">Net cash added</div>
-      <div class="dep-summary-value" style="color:${netTotal>=0?'var(--blue)':'var(--red)'};">${netTotal>=0?'+':''}€${netTotal.toLocaleString(undefined,{minimumFractionDigits:2})}</div>
+      <div class="dep-summary-value" style="color:${netTotal>=0?'var(--blue)':'var(--red)'};">${dPnl(netTotal, 'EUR')}</div>
       <div class="dep-summary-sub">${deps.length} transactions total</div>
     </div>
     <div class="dep-summary-card">
       <div class="dep-summary-label">Avg deposit size</div>
-      <div class="dep-summary-value" style="font-size:20px;">€${deps.length?Math.round(totalIn/deps.filter(r=>parseFloat(String(r[depCols.amount]).replace(/,/g,''))>0).length).toLocaleString():'0'}</div>
+      <div class="dep-summary-value" style="font-size:20px;">${deps.length ? dMoney(totalIn/deps.filter(r=>parseFloat(String(r[depCols.amount]).replace(/,/g,''))>0).length, 'EUR', 0) : '—'}</div>
       <div class="dep-summary-sub">per transfer</div>
     </div>`;
 
@@ -3180,7 +3219,7 @@ function renderDeposits(data) {
     const d = new Date(m + '-01');
     const lbl = d.toLocaleString('en-US', {month:'short', year:'2-digit'});
     const color = val >= 0 ? 'var(--blue)' : 'var(--red)';
-    const valStr = val >= 0 ? '+€'+val.toLocaleString(undefined,{minimumFractionDigits:0}) : '−€'+Math.abs(val).toLocaleString(undefined,{minimumFractionDigits:0});
+    const valStr = dPnl(val, 'EUR', 0);
     return `<div class="dep-bar-row">
       <div class="dep-bar-label">${lbl}</div>
       <div class="dep-bar-track"><div class="dep-bar-fill" style="width:${pct}%;background:${color};"></div></div>
@@ -3215,7 +3254,7 @@ function renderDeposits(data) {
         <span class="dep-year-count">${rows.length} transaction${rows.length!==1?'s':''}</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <span class="dep-year-total" style="color:${yearTotal>=0?'var(--blue)':'var(--red)'};">${yearTotal>=0?'+':''}€${yearTotal.toLocaleString(undefined,{minimumFractionDigits:2})}</span>
+        <span class="dep-year-total" style="color:${yearTotal>=0?'var(--blue)':'var(--red)'};">${dPnl(yearTotal, 'EUR')}</span>
         <span style="color:var(--muted);font-size:12px;" class="dep-chevron">▼</span>
       </div>`;
 
@@ -3225,7 +3264,7 @@ function renderDeposits(data) {
     const tableRows = rows.slice().sort((a,b) => b[depCols.date].localeCompare(a[depCols.date])).map(r => {
       const amt = parseFloat(String(r[depCols.amount]).replace(/,/g,''));
       const isDeposit = amt >= 0;
-      const amtStr = isDeposit ? '+€'+amt.toLocaleString(undefined,{minimumFractionDigits:2}) : '−€'+Math.abs(amt).toLocaleString(undefined,{minimumFractionDigits:2});
+      const amtStr = fmtPnl(amt, (r[depCols.currency]||'EUR') === 'USD' ? '$' : '€');   // transfer amounts stay in their own currency
       return `<tr>
         <td class="dep-date">${r[depCols.date]||'—'}</td>
         <td class="dep-desc">${escHtml(r[depCols.description]||'—')}</td>
@@ -3234,12 +3273,12 @@ function renderDeposits(data) {
       </tr>`;
     }).join('');
 
-    const yearRowTotal = yearTotal>=0?'+€'+yearTotal.toLocaleString(undefined,{minimumFractionDigits:2}):'−€'+Math.abs(yearTotal).toLocaleString(undefined,{minimumFractionDigits:2});
+    const yearRowTotal = dPnl(yearTotal, 'EUR');
 
     rowsWrap.innerHTML = `<table class="dep-table">
-      <thead><tr><th>Date</th><th>Description</th><th>Currency</th><th>Amount</th></tr></thead>
+      <thead><tr><th>Date</th><th>Description</th><th>Currency</th><th>Amount (native)</th></tr></thead>
       <tbody>${tableRows}</tbody>
-      <tfoot><tr><td colspan="3">Year total</td><td class="dep-amount">${yearRowTotal}</td></tr></tfoot>
+      <tfoot><tr><td colspan="3">Year total (${DISP})</td><td class="dep-amount">${yearRowTotal}</td></tr></tfoot>
     </table>`;
 
     let isOpen = true;
@@ -3265,44 +3304,45 @@ function renderDeposits(data) {
 // ═══════════════════════════════════════════════════════════════════
 function renderCashIncome(d) {
   const cashGrid = document.getElementById('cash-grid');
+  const E = v => dMoney(v, 'EUR');
   cashGrid.innerHTML = `
     <div class="cash-card">
-      <div class="cash-card-title">EUR account</div>
-      <div class="cash-row"><span>Ending cash</span><span>€${d.endCashEUR.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
-      <div class="cash-row"><span>Settled cash</span><span>€${d.settledCashEUR.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
+      <div class="cash-card-title">EUR account (EUR)</div>
+      <div class="cash-row"><span>Ending cash</span><span>${fmtMoney(d.endCashEUR, '€')}</span></div>
+      <div class="cash-row"><span>Settled cash</span><span>${fmtMoney(d.settledCashEUR, '€')}</span></div>
     </div>
     <div class="cash-card">
-      <div class="cash-card-title">USD account</div>
-      <div class="cash-row"><span>Ending cash</span><span>$${d.endCashUSD.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
-      <div class="cash-row"><span>Settled cash</span><span>$${d.settledCashUSD.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
-      <div class="cash-row collateral"><span>Collateral (lent stocks) ⚠ nije slobodan</span><span>$${d.collateralUSD.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
-      <div class="cash-row"><span>Net cash (bez kolaterala)</span><span>$${d.endCashUSD.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
+      <div class="cash-card-title">USD account (USD)</div>
+      <div class="cash-row"><span>Ending cash</span><span>${fmtMoney(d.endCashUSD, '$')}</span></div>
+      <div class="cash-row"><span>Settled cash</span><span>${fmtMoney(d.settledCashUSD, '$')}</span></div>
+      <div class="cash-row collateral"><span>Collateral (lent stocks) ⚠ nije slobodan</span><span>${fmtMoney(d.collateralUSD, '$')}</span></div>
+      <div class="cash-row"><span>Net cash (bez kolaterala)</span><span>${fmtMoney(d.endCashUSD, '$')}</span></div>
     </div>
     <div class="cash-card highlight">
-      <div class="cash-card-title blue">Total (EUR equivalent)</div>
-      <div class="cash-row"><span>EUR cash</span><span>€${d.fxEURcash.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
-      <div class="cash-row"><span>USD cash (in EUR)</span><span>€${d.fxUSDinEUR.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
-      <div class="cash-row collateral"><span>Collateral (in EUR) ⚠ nije slobodan</span><span>€${d.collateralBase.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
-      <div class="cash-row total"><span>Slobodan cash</span><span>€${d.totalCashEUR.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
+      <div class="cash-card-title blue">Total (${DISP} equivalent)</div>
+      <div class="cash-row"><span>EUR cash</span><span>${E(d.fxEURcash)}</span></div>
+      <div class="cash-row"><span>USD cash (in ${DISP})</span><span>${E(d.fxUSDinEUR)}</span></div>
+      <div class="cash-row collateral"><span>Collateral (in ${DISP}) ⚠ nije slobodan</span><span>${E(d.collateralBase)}</span></div>
+      <div class="cash-row total"><span>Slobodan cash</span><span>${E(d.totalCashEUR)}</span></div>
     </div>`;
 
   const earnGrid = document.getElementById('earn-grid');
   earnGrid.innerHTML = `
     <div class="earn-card">
       <div class="earn-card-title">Investment income</div>
-      <div class="earn-item"><div class="earn-item-icon">📈</div><div><div class="earn-item-label">Dividends</div><div class="earn-item-value" style="color:${d.divEur>=0?'var(--green)':'var(--red)'};">€${d.divEur.toFixed(2)}</div></div><div class="earn-item-tag">payout</div></div>
-      <div class="earn-item"><div class="earn-item-icon">🔗</div><div><div class="earn-item-label">Stock Lending (SYEP)</div><div class="earn-item-value" style="color:${d.lendVal>0?'var(--green)':'var(--muted)'};">€${d.lendVal.toFixed(2)}</div></div></div>
-      <div class="earn-item"><div class="earn-item-icon">💰</div><div><div class="earn-item-label">Total inflow</div><div class="earn-item-value" style="color:var(--green);">€${d.totalInflow.toFixed(2)}</div></div></div>
+      <div class="earn-item"><div class="earn-item-icon">📈</div><div><div class="earn-item-label">Dividends</div><div class="earn-item-value" style="color:${d.divEur>=0?'var(--green)':'var(--red)'};">${E(d.divEur)}</div></div><div class="earn-item-tag">payout</div></div>
+      <div class="earn-item"><div class="earn-item-icon">🔗</div><div><div class="earn-item-label">Stock Lending (SYEP)</div><div class="earn-item-value" style="color:${d.lendVal>0?'var(--green)':'var(--muted)'};">${E(d.lendVal)}</div></div></div>
+      <div class="earn-item"><div class="earn-item-icon">💰</div><div><div class="earn-item-label">Total inflow</div><div class="earn-item-value" style="color:var(--green);">${E(d.totalInflow)}</div></div></div>
     </div>
     <div class="earn-card">
       <div class="earn-card-title">Broker costs</div>
-      <div class="earn-item"><div class="earn-item-icon">💸</div><div><div class="earn-item-label">Commissions</div><div class="earn-item-value" style="color:var(--red);">€${Math.abs(d.totalComm).toFixed(2)}</div></div><div class="earn-item-tag">${d.closedOptions.length + d.openPositions.length} contracts</div></div>
-      <div class="earn-item"><div class="earn-item-icon">🧾</div><div><div class="earn-item-label">Withholding tax</div><div class="earn-item-value" style="color:var(--red);">€${Math.abs(d.whtVal).toFixed(2)}</div></div></div>
-      <div class="earn-item"><div class="earn-item-icon">📡</div><div><div class="earn-item-label">Market data fees</div><div class="earn-item-value" style="color:var(--red);">€${Math.abs(d.totalFees).toFixed(2)}</div></div></div>
+      <div class="earn-item"><div class="earn-item-icon">💸</div><div><div class="earn-item-label">Commissions</div><div class="earn-item-value" style="color:var(--red);">${E(Math.abs(d.totalComm))}</div></div><div class="earn-item-tag">${d.closedOptions.length + d.openPositions.length} contracts</div></div>
+      <div class="earn-item"><div class="earn-item-icon">🧾</div><div><div class="earn-item-label">Withholding tax</div><div class="earn-item-value" style="color:var(--red);">${E(Math.abs(d.whtVal))}</div></div></div>
+      <div class="earn-item"><div class="earn-item-icon">📡</div><div><div class="earn-item-label">Market data fees</div><div class="earn-item-value" style="color:var(--red);">${E(Math.abs(d.totalFees))}</div></div></div>
     </div>
     <div class="earn-card">
       <div class="earn-card-title">Options summary</div>
-      <div class="earn-item"><div class="earn-item-icon">✅</div><div><div class="earn-item-label">Realized (closed)</div><div class="earn-item-value" style="color:${d.closedNet>=0?'var(--green)':'var(--red)'};">${d.closedNet>=0?'+':''}$${d.closedNet.toFixed(2)}</div></div><div class="earn-item-tag">${d.closedOptions.length} contracts</div></div>
+      <div class="earn-item"><div class="earn-item-icon">✅</div><div><div class="earn-item-label">Realized (closed)</div><div class="earn-item-value" style="color:${d.closedNet>=0?'var(--green)':'var(--red)'};">${dPnl(d.closedNet, 'USD')}</div></div><div class="earn-item-tag">${d.closedOptions.length} contracts</div></div>
       <div class="earn-item"><div class="earn-item-icon">⏳</div><div><div class="earn-item-label">Premium at risk</div><div class="earn-item-value" style="color:${d.openPremiumCollected<0?'var(--red)':'var(--accent)'};">${fmtPrem(d.openPremiumCollected)}</div></div><div class="earn-item-tag">${d.openPositions.length} open</div></div>
       <div class="earn-item"><div class="earn-item-icon">📊</div><div><div class="earn-item-label">Win rate</div><div class="earn-item-value" style="color:${d.closedWinRate>=50?'var(--green)':'var(--red)'};">${d.closedWinRate}%</div></div><div class="earn-item-tag">${d.closedWin}W / ${d.closedLose}L</div></div>
     </div>`;
@@ -3373,10 +3413,10 @@ function renderStockPLDatabar(data) {
   const src = data.stocksTable || [];
   if (!src.length) { tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:var(--muted);padding:20px;">No data</td></tr>'; return; }
 
-  // FIFO figures (EUR equivalent). Rows arrive sorted: held positions first (by market value),
+  // Same display-currency figures as the Stocks tab. Rows arrive sorted: held positions first (by market value),
   // then fully sold ones (by total P&L).
-  const rows = src.map(s => ({ label:s.sym, held:s.held, valueEur:s.valueEur||0,
-    real:+s.realEur.toFixed(2), unr:+s.unrEur.toFixed(2), total:+(s.realEur+s.unrEur).toFixed(2) }));
+  const fig = stockEurFigures(data);
+  const rows = fig.rows.map(x => ({ label:x.row.sym, held:x.row.held, valueEur:x.row.valueEur||0, real:x.real, unr:x.unr, total:x.total }));
   const maxAbs = Math.max(...rows.map(r => Math.abs(r.real) + Math.abs(r.unr)), 0.01);
 
   let grp = null, html = '';
@@ -3389,17 +3429,20 @@ function renderStockPLDatabar(data) {
     const cls = r.total>=0 ? 'pos' : 'neg';
     const segs = _databarSegsHtml(r.real, r.unr, maxAbs);
     const parts = [];
-    if (r.real !== 0) parts.push(`<span class="b-real${r.real<0?' neg':''}">Real ${fmtSign(r.real,'€')}</span>`);
-    if (r.unr  !== 0) parts.push(`<span class="b-open${r.unr<0?' neg':''}">Unreal ${fmtSign(r.unr,'€')}</span>`);
+    if (r.real !== 0) parts.push(`<span class="b-real${r.real<0?' neg':''}">Real ${fmtPnl(r.real, dispSym())}</span>`);
+    if (r.unr  !== 0) parts.push(`<span class="b-open${r.unr<0?' neg':''}">Unreal ${fmtPnl(r.unr, dispSym())}</span>`);
     const breakdown = parts.length>1 ? `<span class="databar-breakdown">${parts.join(' <span style="opacity:0.4">&middot;</span> ')}</span>` : '';
     html += `<tr class="${r.held ? '' : 'databar-sold'}">
-      <td class="databar-label-cell"><div class="databar-row-inner"><span class="databar-label">${escHtml(r.label)}${r.held ? `<span class="databar-posval">€${Math.round(r.valueEur).toLocaleString()}</span>` : ''}</span></div></td>
+      <td class="databar-label-cell"><div class="databar-row-inner"><span class="databar-label">${escHtml(r.label)}${r.held ? `<span class="databar-posval">${dMoney(r.valueEur, 'EUR', 0)}</span>` : ''}</span></div></td>
       <td><div class="databar-row-inner">
         ${segs}
-        <span class="databar-val-wrap"><span class="databar-val ${cls}">${fmtSign(r.total,'€')}</span>${breakdown}</span>
+        <span class="databar-val-wrap"><span class="databar-val ${cls}">${fmtPnl(r.total, dispSym())}</span>${breakdown}</span>
       </div></td>
     </tr>`;
   });
+  // TOTAL = sum of the rows above = Stocks tab TOTAL row = KPI "Stock P&L"
+  html += `<tr class="databar-total"><td class="databar-label-cell"><div class="databar-row-inner"><span class="databar-label">TOTAL</span></div></td>
+    <td><div class="databar-row-inner"><span class="databar-val-wrap"><span class="databar-val ${pnlCls(fig.total)}">${fmtPnl(fig.total, dispSym())}</span></span></div></td></tr>`;
   tbody.innerHTML = html;
 }
 
@@ -3519,12 +3562,12 @@ function renderCharts(data) {
     const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
     // Current exposure right now (for annotation)
-    let currentExposure = 0;
+    let currentExposure = 0;   // USD until converted below
     allPuts.forEach(p => {
       if (p.openDate <= today && p.expiry >= today) currentExposure += p.exposure;
     });
 
-    const exposureData = months.map(m => {
+    const exposureDataUSD = months.map(m => {
       const monthStart = m;
       const monthEnd   = new Date(m.getFullYear(), m.getMonth() + 1, 0);
       const isFutureMonth = monthStart > todayMonth;
@@ -3566,6 +3609,11 @@ function renderCharts(data) {
       return +peak.toFixed(0);
     });
 
+    // Notionals are USD; chart is drawn in the display currency
+    const exposureData = exposureDataUSD.map(v => Math.round(toDisp(v, 'USD')));
+    const currentExposureUSD = currentExposure;
+    currentExposure = toDisp(currentExposure, 'USD');
+
     // Debug log
     console.log('=== Cumulative Exposure breakdown ===');
     allPuts.forEach(p => {
@@ -3580,7 +3628,7 @@ function renderCharts(data) {
     const navEUR = data.navEnd || 1;
     // Convert NAV to USD using actual EUR/USD rate from Forex Balances
     const eurUsdRate = data.eurUsdRate || 1.10;
-    const navUSD = navEUR * eurUsdRate;
+    const navUSD = toDisp(navEUR, 'EUR');   // NAV in the display currency (name kept for the threshold code below)
     console.log('NAV EUR:', navEUR, '| EUR/USD rate:', eurUsdRate, '| NAV USD:', navUSD, '| thresholds: 1x=$'+navUSD.toFixed(0)+' 2x=$'+(navUSD*2).toFixed(0)+' 3x=$'+(navUSD*3).toFixed(0));
 
     // Build a gradient based on the data range
@@ -3757,7 +3805,7 @@ function renderCharts(data) {
           ctx.fillStyle = '#c8ff00';
           ctx.font = "bold 11px 'Space Mono', monospace";
           ctx.textAlign = 'left';
-          const label = 'NOW $' + currentExposure.toLocaleString(undefined, {maximumFractionDigits:0});
+          const label = 'NOW ' + dispSym() + currentExposure.toLocaleString(undefined, {maximumFractionDigits:0});
           ctx.fillText(label, chartArea.left + 6, yCurExp - 7);
           ctx.restore();
         }
@@ -3793,14 +3841,14 @@ function renderCharts(data) {
               label: ctx => {
                 const v = ctx.parsed.y;
                 const ratio = (v / navUSD).toFixed(1);
-                return ' $' + v.toLocaleString(undefined, {maximumFractionDigits:0}) + '  (' + ratio + '× NAV  |  EUR/USD ' + eurUsdRate.toFixed(4) + ')';
+                return ' ' + dispSym() + v.toLocaleString(undefined, {maximumFractionDigits:0}) + '  (' + ratio + '× NAV  |  EUR/USD ' + eurUsdRate.toFixed(4) + ')';
               }
             }
           }
         },
         scales: {
           x: { ticks: {color:'#5a6473', font:{size:12,family:'Space Mono'}}, grid: {display:false} },
-          y: { ticks: {color:'#5a6473', font:{size:11}, callback: v=>'$'+v.toLocaleString()}, grid: {color:'rgba(128,128,128,0.07)'}, border: {display:false} }
+          y: { ticks: {color:'#5a6473', font:{size:11}, callback: v=>dispSym()+v.toLocaleString()}, grid: {color:'rgba(128,128,128,0.07)'}, border: {display:false} }
         }
       }
     });
@@ -3886,7 +3934,7 @@ function renderCharts(data) {
           running += p.exposure;
         }
       });
-      return +running.toFixed(0);
+      return Math.round(toDisp(running, 'USD'));
     });
 
     _chartExpTotal = new Chart(totalCanvas, {
@@ -3913,13 +3961,13 @@ function renderCharts(data) {
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: ctx => ' $' + ctx.parsed.y.toLocaleString(undefined, {maximumFractionDigits:0})
+              label: ctx => ' ' + dispSym() + ctx.parsed.y.toLocaleString(undefined, {maximumFractionDigits:0})
             }
           }
         },
         scales: {
           x: { ticks: {color:'#5a6473', font:{size:12,family:'Space Mono'}}, grid: {display:false} },
-          y: { ticks: {color:'#5a6473', font:{size:11}, callback: v=>'$'+v.toLocaleString()}, grid: {color:'rgba(128,128,128,0.07)'}, border: {display:false}, min: 0 }
+          y: { ticks: {color:'#5a6473', font:{size:11}, callback: v=>dispSym()+v.toLocaleString()}, grid: {color:'rgba(128,128,128,0.07)'}, border: {display:false}, min: 0 }
         }
       }
     });
@@ -3974,8 +4022,9 @@ function renderPortfolioPies(data) {
   // Cash always last / smallest visual weight
   if (pieCash > 0) { portData.push(+pieCash.toFixed(2)); portLabels.push('Cash'); portColors.push('#adb5bd'); }
 
+  portData.forEach((v,i) => { portData[i] = +toDisp(v, 'EUR').toFixed(2); });   // EUR -> display currency
   const portTotal = portData.reduce((a,b)=>a+b,0);
-  _chartPortPie = new Chart(document.getElementById('portfolioPieChart'),{type:'doughnut',data:{labels:portLabels,datasets:[{data:portData,backgroundColor:portColors,borderWidth:2,borderColor:getComputedStyle(document.body).getPropertyValue('--surface2'),hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' €'+ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0})+'  ('+((ctx.parsed/portTotal)*100).toFixed(1)+'%)'}}}}});
+  _chartPortPie = new Chart(document.getElementById('portfolioPieChart'),{type:'doughnut',data:{labels:portLabels,datasets:[{data:portData,backgroundColor:portColors,borderWidth:2,borderColor:getComputedStyle(document.body).getPropertyValue('--surface2'),hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+dispSym()+ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0})+'  ('+((ctx.parsed/portTotal)*100).toFixed(1)+'%)'}}}}});
   const portLegend = document.getElementById('portfolioPieLegend');
   portLegend.innerHTML = '';
   portLabels.forEach((lbl,i)=>{ portLegend.innerHTML+=`<span style="display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;"><span style="width:9px;height:9px;border-radius:50%;background:${portColors[i]};flex-shrink:0;display:inline-block;"></span>${lbl} <span style="color:var(--muted);opacity:0.6;">(${(portData[i]/portTotal*100).toFixed(1)}%)</span></span>`; });
@@ -3994,8 +4043,9 @@ function renderPortfolioPies(data) {
   if(data.divEur>0)    { incData.push(+data.divEur.toFixed(2));    incLabels.push('Dividends');    incColors.push('#a78bfa'); }
   if(data.intEur>0)    { incData.push(+data.intEur.toFixed(2));    incLabels.push('Interest');     incColors.push('#fb923c'); }
   if(data.lendVal>0)   { incData.push(+data.lendVal.toFixed(2));   incLabels.push('Lending');      incColors.push('#c8ff00'); }
+  incData.forEach((v,i) => { incData[i] = +toDisp(v, 'EUR').toFixed(2); });   // EUR -> display currency
   const incTotal=incData.reduce((a,b)=>a+b,0);
-  _chartIncomePie = new Chart(document.getElementById('incomePieChart'),{type:'doughnut',data:{labels:incLabels,datasets:[{data:incData,backgroundColor:incColors,borderWidth:2,borderColor:getComputedStyle(document.body).getPropertyValue('--surface2'),hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' €'+ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0})+'  ('+((ctx.parsed/incTotal)*100).toFixed(1)+'%)'}}}}});
+  _chartIncomePie = new Chart(document.getElementById('incomePieChart'),{type:'doughnut',data:{labels:incLabels,datasets:[{data:incData,backgroundColor:incColors,borderWidth:2,borderColor:getComputedStyle(document.body).getPropertyValue('--surface2'),hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+dispSym()+ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0})+'  ('+((ctx.parsed/incTotal)*100).toFixed(1)+'%)'}}}}});
   const incLegend=document.getElementById('incomePieLegend');
   incLegend.innerHTML='';
   incLabels.forEach((lbl,i)=>{ incLegend.innerHTML+=`<span style="display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;"><span style="width:9px;height:9px;border-radius:50%;background:${incColors[i]};flex-shrink:0;display:inline-block;"></span>${lbl} <span style="color:var(--muted);opacity:0.6;">(${(incData[i]/incTotal*100).toFixed(1)}%)</span></span>`; });
@@ -4232,7 +4282,7 @@ function renderTreemap(containerId, items) {
       showTreemapTooltip(tile, it);
     });
 
-    tile.title = `${it.label}: ${it.value >= 0 ? '+' : '−'}$${Math.abs(it.value).toLocaleString(undefined,{maximumFractionDigits:0})}`;
+    tile.title = `${it.label}: ${fmtPnl(it.value, dispSym(), 0)}`;
     container.appendChild(tile);
   });
 }
@@ -4256,7 +4306,7 @@ function showTreemapTooltip(tile, it) {
 
   const sign = it.value >= 0 ? '+' : '−';
   const color = it.value >= 0 ? 'var(--green)' : 'var(--red)';
-  _treemapTooltipEl.innerHTML = `<span style="font-weight:700">${escHtml(it.label)}</span> &nbsp; <span style="color:${color}">${sign}$${Math.abs(it.value).toLocaleString(undefined,{maximumFractionDigits:0})}</span>`;
+  _treemapTooltipEl.innerHTML = `<span style="font-weight:700">${escHtml(it.label)}</span> &nbsp; <span style="color:${color}">${fmtPnl(it.value, dispSym(), 0)}</span>`;
   _treemapTooltipEl.style.display = 'block';
 
   const rect = tile.getBoundingClientRect();
@@ -4287,11 +4337,10 @@ function renderPLByTickerTable(treemapData) {
   treemapData.forEach(it => {
     const pct = totalPL !== 0 ? (it.value / totalPL * 100) : 0;
     const color = it.value >= 0 ? 'var(--green)' : 'var(--red)';
-    const sign = it.value >= 0 ? '+' : '−';
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="font-family:'Syne',sans-serif;font-weight:700;">${escHtml(it.label)}</td>
-      <td class="mono" style="text-align:right;color:${color};">${sign}$${Math.abs(it.value).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td class="mono" style="text-align:right;color:${color};">${fmtPnl(it.value, dispSym())}</td>
       <td class="mono" style="text-align:right;color:${color};">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</td>
     `;
     tbody.appendChild(tr);
@@ -4303,7 +4352,7 @@ function renderPLByTickerTable(treemapData) {
   const totalColor = totalPL >= 0 ? 'var(--green)' : 'var(--red)';
   totalRow.innerHTML = `
     <td style="font-family:'Syne',sans-serif;font-weight:700;">Total</td>
-    <td class="mono" style="text-align:right;color:${totalColor};">${totalPL >= 0 ? '+' : '−'}$${Math.abs(totalPL).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    <td class="mono" style="text-align:right;color:${totalColor};">${fmtPnl(totalPL, dispSym())}</td>
     <td class="mono" style="text-align:right;">100.0%</td>
   `;
   tbody.appendChild(totalRow);
@@ -4494,7 +4543,7 @@ const UA_I18N = {
     chart_opt_sub: 'Closed P&L + open premium, by month',
     chart_opt_profit: 'Profit', chart_opt_loss: 'Loss', chart_opt_open: 'Open (premium)',
     chart_stock_title: 'Stock P&L by position',
-    chart_stock_sub: 'Total P&L (realized + unrealized, EUR)',
+    chart_stock_sub: 'Total P&L (realized + unrealized)',
     chart_stock_real: 'Realized', chart_stock_unr: 'Unrealized',
     chart_exp_title: 'Peak options exposure by month',
     chart_exp_sub: 'Peak simultaneous put exposure on any single day within each month',
@@ -4538,7 +4587,7 @@ const UA_I18N = {
     chart_opt_sub: 'Zatvoreni P&L + otvorena premija, po mjesecu',
     chart_opt_profit: 'Profit', chart_opt_loss: 'Gubitak', chart_opt_open: 'Otvoreno (premija)',
     chart_stock_title: 'P&L dionica po poziciji',
-    chart_stock_sub: 'Ukupni P&L (realizirano + nerealizirano, EUR)',
+    chart_stock_sub: 'Ukupni P&L (realizirano + nerealizirano)',
     chart_stock_real: 'Realizirano', chart_stock_unr: 'Nerealizirano',
     chart_exp_title: 'Maksimalni exposure opcija po mjesecu',
     chart_exp_sub: 'Najveći simultani put exposure u jednom danu unutar svakog mjeseca',
@@ -4660,6 +4709,8 @@ function applyUAI18n() {
   const scCust = document.getElementById('proj-sc-custom');   if(scCust) scCust.textContent     = '⚙ ' + (uaT('proj_sc_custom')  || 'Custom');
   // Re-render projection with updated labels
   if (document.getElementById('proj-chart')) renderProjection();
+  // Unit suffix for titles whose text comes from the language tables: "(EUR)" / "(USD)" follows the display currency
+  document.querySelectorAll('[data-unit-suffix]').forEach(el => { el.textContent = el.textContent.replace(/ \((EUR|USD)\)$/, '') + ' (' + DISP + ')'; });
 }
 
 window.addEventListener('message', function(ev) {
