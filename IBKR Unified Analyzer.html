@@ -89,6 +89,7 @@
   .ccy-toggle { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
   .ccy-toggle button { background:transparent; border:0; padding:6px 10px; color:var(--muted); font-family:'Space Mono',monospace; font-size:11px; cursor:pointer; }
   .ccy-toggle button.active { background:var(--blue); color:#fff; }
+  .nav-recon { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; }
   .top-bar-right { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .file-chip {
     display:flex; align-items:center; gap:6px; background:var(--surface2);
@@ -1240,8 +1241,12 @@ function processIBKR(sections) {
   const iRUUnr    = ci(ruCols,'total unrealized',14);
   const iRUTotal  = ci(ruCols,'total',15);
   const stocks = [], optionsRU = [];
+  const ruCatTotals = {};   // statement's own category totals (base currency), e.g. ruCatTotals.Stocks / .Forex
+  let ruLastCat = null;
   for (const r of getData(sections,'Realized & Unrealized Performance Summary')) {
-    if (r[2]==='Total'||r[2]==='Total (All Assets)') continue;
+    if (r[2]==='Total') { if (ruLastCat) ruCatTotals[ruLastCat] = { real:num(r[iRUReal]), unr:num(r[iRUUnr]), total:num(r[iRUTotal]) }; continue; }
+    if (r[2]==='Total (All Assets)') continue;
+    ruLastCat = r[2];
     const obj = { cat:r[2], sym:r[3], realTotal:num(r[iRUReal]), unrTotal:num(r[iRUUnr]), total:num(r[iRUTotal]) };
     if (r[2]==='Stocks') stocks.push(obj);
     else if (r[2]==='Equity and Index Options') optionsRU.push(obj);
@@ -1767,7 +1772,7 @@ function processIBKR(sections) {
     endCashEUR, endCashUSD, settledCashEUR, settledCashUSD, collateralUSD, collateralBase, totalCashEUR,
     fxEURcash, fxUSDinEUR, eurUsdRate, deposits, totalDeposits, totalFees, totalComm,
     divEur, intEur, accrualEur, whtVal, lendVal, totalInflow, totalDeductions,
-    instrMap,
+    instrMap, ruCatTotals,
     stockTradeMap,
     organicPL: navEnd - navStart - totalDeposits,
     optByMonth, sortedMonths,
@@ -2239,7 +2244,45 @@ function renderNavFlow(d) {
     `<span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);">
       ${E(d.navStart)} + ${E(d.navDeposits)} + ${E(d.navMtM)} + ${E(d.navIncome)} − ${E(Math.abs(d.navCosts))}${Math.abs(d.navFX)>0.001?' + '+E(d.navFX):''} = <strong style="color:var(--text);">${E(d.navEnd)}</strong>
     </span>
-    <span class="verify-badge ${ok?'ok':'warn'}">${verStr}</span>`;
+    <span class="verify-badge ${ok?'ok':'warn'}">${verStr}</span>` + navReconHtml(d);
+}
+
+// Compares the sum of the components shown in the app with the statement's own NAV change
+// (Ending NAV − Starting NAV − net deposits & withdrawals). All amounts EUR; returns null if inputs are missing.
+function navReconciliation(d) {
+  const fin = v => typeof v === 'number' && isFinite(v);
+  if (!fin(d.navStart) || !fin(d.navEnd) || !fin(d.navDeposits)) return null;
+  const rate = d.eurUsdRate > 0 ? d.eurUsdRate : 0;
+  if (!rate) return null;
+  const fig = stockEurFigures(d);
+  const target = d.navEnd - d.navStart - d.navDeposits;
+  // stock figures are in the display currency — bring back to EUR for the check
+  const stockEur = DISP === 'EUR' ? fig.total : fig.total / DISP_RATE;
+  const stockFxEur = DISP === 'EUR' ? fig.fx : fig.fx / DISP_RATE;
+  const forexStmt = d.ruCatTotals && d.ruCatTotals.Forex ? d.ruCatTotals.Forex.total : null;
+  const comps = [
+    ['Stocks (realized + unrealized, per-lot FX)', stockEur],
+    ['Options (closed + open unrealized)', ((d.closedNet || 0) + (d.openUnrPL || 0)) / rate],
+    ['Dividends + withholding tax', (d.navDividends || 0) + (d.navWHT || 0)],
+    ['Interest', d.navInterest || 0],
+    ['Dividend / interest accruals', (d.navDivAcc || 0) + (d.navIntAcc || 0)],
+    ['Commissions', d.navComm || 0],
+    ['Fees + sales tax', (d.navOtherFees || 0) + (d.navSalesTax || 0)],
+    ['FX effect (statement Forex P&L, minus the part already in stock P&L; + other FX translations)', (forexStmt != null ? forexStmt - stockFxEur : 0) + (d.navFX || 0)],
+  ];
+  const sum = comps.reduce((a, c) => a + c[1], 0);
+  if (!fin(sum) || !fin(target)) return null;
+  return { comps, sum, target, diff: sum - target };
+}
+function navReconHtml(d) {
+  try {
+    const r = navReconciliation(d);
+    if (!r) return '';
+    const ok = Math.abs(r.diff) <= 5;
+    const tip = r.comps.map(c => c[0] + ': ' + dPnl(c[1], 'EUR')).join('\n') + '\nΣ components: ' + dPnl(r.sum, 'EUR') + '\nStatement ΔNAV (Ending − Starting − net deposits): ' + dPnl(r.target, 'EUR');
+    return `<div class="nav-recon"><span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);">App components ${dPnl(r.sum, 'EUR')} vs statement ΔNAV ${dPnl(r.target, 'EUR')} · difference ${dPnl(r.diff, 'EUR')}</span>
+      <span class="verify-badge ${ok ? 'ok' : 'warn'}" title="${escHtml(tip)}">${ok ? '✓ within ' + dMoney(5, 'EUR', 0) : '⚠ differs by ' + dMoney(Math.abs(r.diff), 'EUR')} ⓘ</span></div>`;
+  } catch (e) { console.warn('NAV reconciliation skipped:', e); return ''; }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -3162,6 +3205,13 @@ function renderStocksTable(data) {
   fxRow.innerHTML = `<td colspan="${NCOL}"><span class="stock-fx-note">of which currency effect: <strong style="color:${pnlColor(eurFig.fx)}">${fmtPnl(eurFig.fx, dispSym())}</strong>
     <span class="info-tip" tabindex="0" title="${escHtml(STOCK_ECON_TIP)}">ⓘ</span></span></td>`;
   tbody.appendChild(fxRow);
+  const stmt = data.ruCatTotals && data.ruCatTotals.Stocks;
+  if (stmt && Number.isFinite(stmt.real) && Number.isFinite(stmt.unr)) {
+    const stmtRow = document.createElement('tr');
+    stmtRow.className = 'summary-note-row';
+    stmtRow.innerHTML = `<td colspan="${NCOL}"><span class="stock-fx-note">IBKR statement (${DISP}, excl. FX): realized ${dPnl(stmt.real, 'EUR')} / unrealized ${dPnl(stmt.unr, 'EUR')}</span></td>`;
+    tbody.appendChild(stmtRow);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
