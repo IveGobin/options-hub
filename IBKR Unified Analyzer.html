@@ -1038,13 +1038,26 @@ function fxRateOn(dateStr) {
   return null;
 }
 function num(v) { if (v === '--' || v === '' || v === undefined || v === null) return 0; const n = parseFloat(String(v).replace(/,/g,'')); return isNaN(n) ? 0 : n; }
-function fmt(val) { const v = num(val); if (Math.abs(v) >= 1000) return (v<0?'-':'') + '$' + Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); return (v<0?'-$':'$') + Math.abs(v).toFixed(2); }
-function fmtEur(val) { const v = num(val); return (v<0?'-€':'€') + Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// ── Number / P&L formatting: one sign convention (U+2212 minus, '+' for gains) and one separator style everywhere ──
+function fmtNum(v, dec=2) { return Math.abs(num(v)).toLocaleString(undefined,{minimumFractionDigits:dec,maximumFractionDigits:dec}); }
+// P&L amount: '—' when zero/empty, else signed ('+' / '−') with currency symbol and thousands separators.
+function fmtPnl(v, sym, dec=2) {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = num(v);
+  if (Math.round(Math.abs(n) * Math.pow(10, dec)) === 0) return '—';
+  return (n > 0 ? '+' : '−') + (sym || '') + fmtNum(n, dec);
+}
+// Plain amount (balances, values): '−' prefix when negative, no '+'.
+function fmtMoney(v, sym, dec=2) { const n = num(v); return (n < 0 && Math.round(-n * Math.pow(10, dec)) > 0 ? '−' : '') + (sym || '') + fmtNum(n, dec); }
+function pnlCls(v) { const n = num(v); return n > 0.004 ? 'pos' : n < -0.004 ? 'neg' : 'neu'; }
+function pnlColor(v) { const c = pnlCls(v); return c === 'pos' ? 'var(--green)' : c === 'neg' ? 'var(--red)' : 'var(--muted)'; }
+function fmt(val) { const v = num(val); return v === 0 ? '—' : fmtMoney(v, '$'); }
+function fmtEur(val) { return fmtMoney(val, '€'); }
 function fmtK(val)   { const v = num(val); return Math.abs(v) >= 1000 ? '$' + (Math.abs(v)/1000).toFixed(1) + 'k' : '$' + Math.abs(v).toFixed(0); }
 function fmtAbs(val) { const v = Math.abs(num(val)); return v >= 1000 ? '$' + (v/1000).toFixed(1)+'k' : '$' + v.toFixed(0); }
-function fmtSign(val,ccy) { const v=num(val); if(v===0) return (ccy||'€')+'0.00'; return (v>0?'+':'−')+(ccy||'€')+Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
-// Signed premium in $ — credit (short/sold) shows +, debit (long/bought) shows -.
-function fmtPrem(val, decimals) { const v = num(val); const d = decimals===undefined?2:decimals; return (v<0?'-$':'+$') + Math.abs(v).toFixed(d); }
+function fmtSign(val,ccy) { return fmtPnl(val, ccy||'€'); }
+// Signed premium in $ — credit (short/sold) shows +, debit (long/bought) shows −.
+function fmtPrem(val, decimals) { return fmtPnl(val, '$', decimals===undefined?2:decimals); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // Builds a <tr> for a table's total/summary footer row from an explicit list of cells.
@@ -2936,7 +2949,7 @@ function renderStocksTable(data) {
       const hdr = document.createElement('tr');
       hdr.className = 'stock-group-row';
       hdr.innerHTML = s.held
-        ? `<td colspan="10">Open positions — still held (${grpRows.length}) · market value ≈ €${Math.round(grpVal).toLocaleString()}</td>`
+        ? `<td colspan="10">Open positions — still held (${grpRows.length}) · market value ≈ ${fmtMoney(grpVal, '€', 0)}</td>`
         : `<td colspan="10">Closed positions — fully sold (${grpRows.length})</td>`;
       tbody.appendChild(hdr);
     }
@@ -2944,12 +2957,12 @@ function renderStocksTable(data) {
     const ccy = s.ccy || (op ? op.ccy : 'USD');
     const cs  = s.eurBase ? '€' : (ccy === 'EUR' ? '€' : '$');
     const qty = s.held ? s.qty.toLocaleString(undefined,{maximumFractionDigits:4}) : '<span style="color:var(--muted)">sold</span>';
-    const costP = s.held ? cs + s.avgCost.toFixed(2) : '—';
-    const lastP = s.held && s.lastPrice ? cs + s.lastPrice.toFixed(2) : '—';
-    const mktV  = s.held ? cs + Math.round(s.value).toLocaleString() : '—';
-    const rCls  = s.realTotal >= 0 ? 'pos' : s.realTotal < 0 ? 'neg' : 'neu';
-    const uCls  = s.unrTotal >= 0 ? 'pos' : s.unrTotal < 0 ? 'neg' : 'neu';
-    const tCls  = s.total >= 0 ? 'pos' : s.total < 0 ? 'neg' : 'neu';
+    const costP = s.held ? fmtMoney(s.avgCost, cs) : '—';
+    const lastP = s.held && s.lastPrice ? fmtMoney(s.lastPrice, cs) : '—';
+    const mktV  = s.held ? fmtMoney(s.value, cs, 0) : '—';
+    const rCls  = pnlCls(s.realTotal);
+    const uCls  = pnlCls(s.unrTotal);
+    const tCls  = pnlCls(s.total);
     const trades = (data.stockTradeMap || {})[s.sym] || [];
     const hasTrades = trades.length > 0;
 
@@ -2964,9 +2977,9 @@ function renderStocksTable(data) {
       <td class="neu">${costP}</td>
       <td class="neu">${lastP}</td>
       <td class="neu">${mktV}</td>
-      <td class="${rCls}">${s.realTotal !== 0 ? (s.realTotal > 0 ? '+' : '') + cs + Math.abs(s.realTotal).toFixed(2) : '—'}</td>
-      <td class="${uCls}">${s.unrTotal !== 0 ? (s.unrTotal > 0 ? '+' : '') + cs + Math.abs(s.unrTotal).toFixed(2) : '—'}</td>
-      <td class="${tCls}">${(s.total >= 0 ? '+' : '') + cs + Math.abs(s.total).toFixed(2)}</td>`;
+      <td class="${rCls}">${fmtPnl(s.realTotal, cs)}</td>
+      <td class="${uCls}">${fmtPnl(s.unrTotal, cs)}</td>
+      <td class="${tCls}">${fmtPnl(s.total, cs)}</td>`;
 
     const txRow = document.createElement('tr');
     txRow.className = 'stock-tx-row';
@@ -2983,14 +2996,14 @@ function renderStocksTable(data) {
         const isAssign = codes.includes('A');
         const dateStr = t.date.substring(0, 10);
         const qtyStr = (isBuy ? '+' : '') + t.qty.toLocaleString();
-        const realStr = t.realPL !== 0 ? ((t.realPL > 0 ? '+' : '') + cs + Math.abs(t.realPL).toFixed(2)) : '—';
+        const realStr = fmtPnl(t.realPL, cs);
         let lotsCell = '<span style="color:var(--muted)">—</span>';
         if (t.matched && t.matched.length) {
           const parts = t.matched.map(m => `${+m.qty.toFixed(4)} @ ${cs}${m.unit.toFixed(2)} (${m.date})`);
           lotsCell = `<span title="${escHtml(parts.join(' | '))}">${parts.slice(0,3).join('<br>')}${parts.length > 3 ? `<br>+${parts.length-3} more lots` : ''}</span>`;
           if (t.untracked > 0) lotsCell += `<br><span style="color:var(--yellow)">+${+t.untracked.toFixed(4)} sh not in loaded history</span>`;
         }
-        const realCls = t.realPL > 0 ? 'style="color:var(--green)"' : t.realPL < 0 ? 'style="color:var(--red)"' : 'style="color:var(--muted)"';
+        const realCls = `style="color:${pnlColor(t.realPL)}"`;
         let priceCell = `${cs}${Math.abs(t.price).toFixed(3)}`;
         let assignBadge = '';
         if (isAssign) {
@@ -3011,8 +3024,8 @@ function renderStocksTable(data) {
           <td class="dep-date">${dateStr}</td>
           <td class="${isBuy ? 'tx-buy' : 'tx-sell'}">${qtyStr} sh</td>
           <td>${priceCell}</td>
-          <td>${cs}${Math.abs(t.proceeds).toFixed(2)}</td>
-          <td style="color:var(--red)">${t.comm !== 0 ? cs + t.comm.toFixed(2) : '—'}</td>
+          <td>${fmtMoney(Math.abs(t.proceeds), cs)}</td>
+          <td style="color:${pnlColor(t.comm)}">${fmtPnl(t.comm, cs)}</td>
           <td ${realCls}>${realStr}</td>
           <td style="text-align:left;color:var(--muted);font-size:10px;white-space:nowrap;">${lotsCell}</td>
           <td>${badge}</td>
@@ -3033,7 +3046,7 @@ function renderStocksTable(data) {
             <thead><tr><th>Bought</th><th>Qty</th><th>Cost / share</th><th>Unrealized P&L (${ccy})</th></tr></thead>
             <tbody>${s.lots.map(l => {
               const u = s.lastPrice ? l.qty*(s.lastPrice - l.unit) : null;
-              return `<tr><td class="dep-date">${l.date}</td><td>${+l.qty.toFixed(4)} sh</td><td>${cs}${l.unit.toFixed(3)}</td><td style="color:${u===null?'var(--muted)':u>=0?'var(--green)':'var(--red)'}">${u===null?'—':(u>=0?'+':'−')+cs+Math.abs(u).toFixed(2)}</td></tr>`;
+              return `<tr><td class="dep-date">${l.date}</td><td>${+l.qty.toFixed(4)} sh</td><td>${cs}${l.unit.toFixed(3)}</td><td style="color:${pnlColor(u)}">${fmtPnl(u, cs)}</td></tr>`;
             }).join('')}</tbody>
           </table>` : ''}
           ${hasAssign ? `<div style="margin-top:8px;font-size:10px;color:var(--muted);">→ <span style="color:var(--yellow)">yellow price</span> = effective price after net option premium (strike − premium/sh for assigned puts, strike + premium/sh for assigned calls). Realized / unrealized P&L is calculated FIFO (oldest lots are sold first) using this premium-adjusted basis.</div>` : ''}
@@ -3064,9 +3077,9 @@ function renderStocksTable(data) {
   summaryRow.className = 'summary-row';
   summaryRow.innerHTML = `
     <td colspan="7">TOTAL (€ equiv., FIFO per-lot FX)</td>
-    <td class="${totR >= 0 ? 'pos' : 'neg'}">${(totR >= 0 ? '+' : '−')}€${Math.abs(totR).toFixed(2)}</td>
-    <td class="${totU >= 0 ? 'pos' : 'neg'}">${(totU >= 0 ? '+' : '−')}€${Math.abs(totU).toFixed(2)}</td>
-    <td class="${totT >= 0 ? 'pos' : 'neg'}">${(totT >= 0 ? '+' : '−')}€${Math.abs(totT).toFixed(2)}</td>`;
+    <td class="${pnlCls(totR)}">${fmtPnl(totR, '€')}</td>
+    <td class="${pnlCls(totU)}">${fmtPnl(totU, '€')}</td>
+    <td class="${pnlCls(totT)}">${fmtPnl(totT, '€')}</td>`;
   tbody.appendChild(summaryRow);
 }
 
