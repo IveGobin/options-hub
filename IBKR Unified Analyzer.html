@@ -205,6 +205,9 @@
   table.stock-table tbody tr.stock-sold td { opacity:0.5; }
   table.stock-table tbody tr.stock-sold:hover td { opacity:0.9; }
   .stock-sold-badge { background:rgba(128,128,128,0.18); color:var(--muted); border-radius:4px; padding:1px 5px; font-size:9px; font-family:'Space Mono',monospace; letter-spacing:0.08em; margin-left:6px; vertical-align:middle; }
+  table.stock-table tbody tr.summary-note-row td { text-align:right; font-size:11px; color:var(--muted); padding:6px 12px 10px; border:0; }
+  table.stock-table tbody tr.summary-note-row:hover { background:transparent; }
+  .info-tip { cursor:help; margin-left:4px; opacity:0.8; }
   table.stock-table tbody tr.summary-row td { border-top:1px solid var(--border); font-weight:700; background:var(--surface2); }
 
   /* ── PIE CHARTS ── */
@@ -799,7 +802,8 @@
           <thead><tr>
             <th>Symbol</th><th style="text-align:left;">Description</th><th>CCY</th>
             <th>Qty</th><th>Avg cost</th><th>Last price</th><th>Market value</th>
-            <th>Realized P&amp;L</th><th>Unrealized P&amp;L</th><th>Total P&amp;L</th>
+            <th>Realized P&amp;L (native)</th><th>Unrealized P&amp;L (native)</th><th>Total P&amp;L (native)</th>
+            <th>Realized (€)</th><th>Unrealized (€)</th><th>Total (€)</th>
           </tr></thead>
           <tbody id="stock-tbody"></tbody>
         </table>
@@ -2913,7 +2917,29 @@ function renderMatrix(filterYear) {
 // ═══════════════════════════════════════════════════════════════════
 // STOCKS TABLE (with expandable transaction history)
 // ═══════════════════════════════════════════════════════════════════
+// Per-row EUR figures (FIFO per-lot FX; equal to native for EUR rows), rounded to cents so every total
+// shown in the app is the exact sum of the displayed row values. Legacy rows without EUR fields use the statement rate.
+const STOCK_ECON_TIP = 'Economic view, not tax. EUR figures use the FX rate on each purchase/sale day (FIFO) so they include currency effect; IBKR reports that part separately under Forex. Option premium from assigned puts/calls is included in share cost basis.';
+function stockEurFigures(data) {
+  const rate = data.eurUsdRate > 0 ? data.eurUsdRate : 1;
+  const r2 = v => Math.round(v * 100) / 100;
+  const rows = (data.stocksTable || data.stocks).map(r => {
+    const isEur = r.eurBase || r.ccy === 'EUR';
+    const toEur = v => isEur ? v : v / rate;
+    const real = r2(r.realEur != null ? r.realEur : toEur(r.realTotal));
+    const unr  = r2(r.unrEur  != null ? r.unrEur  : toEur(r.unrTotal));
+    const total = r2(real + unr);
+    // currency effect = per-lot EUR result minus the native result converted at the statement rate
+    const fx = isEur ? 0 : (real + unr) - r.total / rate;
+    return { row: r, real, unr, total, fx };
+  });
+  const sum = k => r2(rows.reduce((a, x) => a + x[k], 0));
+  return { rows, real: sum('real'), unr: sum('unr'), total: sum('total'), fx: r2(rows.reduce((a, x) => a + x.fx, 0)) };
+}
+
 function renderStocksTable(data) {
+  const NCOL = 13;
+  const eurFig = stockEurFigures(data);
   const tbody = document.getElementById('stock-tbody');
   const openStockMap = {};
   for (const p of data.openStocks) {
@@ -2949,8 +2975,8 @@ function renderStocksTable(data) {
       const hdr = document.createElement('tr');
       hdr.className = 'stock-group-row';
       hdr.innerHTML = s.held
-        ? `<td colspan="10">Open positions — still held (${grpRows.length}) · market value ≈ ${fmtMoney(grpVal, '€', 0)}</td>`
-        : `<td colspan="10">Closed positions — fully sold (${grpRows.length})</td>`;
+        ? `<td colspan="${NCOL}">Open positions — still held (${grpRows.length}) · market value ≈ ${fmtMoney(grpVal, '€', 0)}</td>`
+        : `<td colspan="${NCOL}">Closed positions — fully sold (${grpRows.length})</td>`;
       tbody.appendChild(hdr);
     }
     const op  = openStockMap[s.sym];
@@ -2963,6 +2989,7 @@ function renderStocksTable(data) {
     const rCls  = pnlCls(s.realTotal);
     const uCls  = pnlCls(s.unrTotal);
     const tCls  = pnlCls(s.total);
+    const eurRow = eurFig.rows.find(x => x.row === s);
     const trades = (data.stockTradeMap || {})[s.sym] || [];
     const hasTrades = trades.length > 0;
 
@@ -2979,7 +3006,10 @@ function renderStocksTable(data) {
       <td class="neu">${mktV}</td>
       <td class="${rCls}">${fmtPnl(s.realTotal, cs)}</td>
       <td class="${uCls}">${fmtPnl(s.unrTotal, cs)}</td>
-      <td class="${tCls}">${fmtPnl(s.total, cs)}</td>`;
+      <td class="${tCls}">${fmtPnl(s.total, cs)}</td>
+      <td class="${pnlCls(eurRow.real)}">${fmtPnl(eurRow.real, '€')}</td>
+      <td class="${pnlCls(eurRow.unr)}">${fmtPnl(eurRow.unr, '€')}</td>
+      <td class="${pnlCls(eurRow.total)}">${fmtPnl(eurRow.total, '€')}</td>`;
 
     const txRow = document.createElement('tr');
     txRow.className = 'stock-tx-row';
@@ -3032,7 +3062,7 @@ function renderStocksTable(data) {
         </tr>`;
       }).join('');
 
-      txRow.innerHTML = `<td colspan="10">
+      txRow.innerHTML = `<td colspan="${NCOL}">
         <div class="stock-tx-inner">
           <div class="stock-tx-title">Transaction history — ${escHtml(s.sym)} (${trades.length} trade${trades.length !== 1 ? 's' : ''})</div>
           <table class="tx-table">
@@ -3058,29 +3088,27 @@ function renderStocksTable(data) {
         txRow.style.display = isExpanded ? 'table-row' : 'none';
       });
     } else {
-      txRow.innerHTML = `<td colspan="10"><div class="stock-tx-inner"><div class="tx-empty">No individual trade records found for ${escHtml(s.sym)}.</div></div></td>`;
+      txRow.innerHTML = `<td colspan="${NCOL}"><div class="stock-tx-inner"><div class="tx-empty">No individual trade records found for ${escHtml(s.sym)}.</div></div></td>`;
     }
 
     tbody.appendChild(tr);
     tbody.appendChild(txRow);
   });
 
-  // TOTAL: rows are in mixed currencies — sum the FIFO EUR figures (per-lot FX), same as the Stock P&L card.
-  // Fallback for legacy rows without EUR fields: statement's FX rate.
-  const _rate = data.eurUsdRate > 0 ? data.eurUsdRate : 1;
-  const toEur = (v, row) => (row.eurBase || row.ccy === 'EUR') ? v : v / _rate;
-  const rowsArr = data.stocksTable || data.stocks;
-  const totR = rowsArr.reduce((a,r)=>a+(r.realEur != null ? r.realEur : toEur(r.realTotal,r)),0);
-  const totU = rowsArr.reduce((a,r)=>a+(r.unrEur  != null ? r.unrEur  : toEur(r.unrTotal,r)),0);
-  const totT = totR + totU;
+  // TOTAL: exact sum of the € columns above (per-lot FX, same as the KPI strip and the Stock P&L chart).
   const summaryRow = document.createElement('tr');
   summaryRow.className = 'summary-row';
   summaryRow.innerHTML = `
-    <td colspan="7">TOTAL (€ equiv., FIFO per-lot FX)</td>
-    <td class="${pnlCls(totR)}">${fmtPnl(totR, '€')}</td>
-    <td class="${pnlCls(totU)}">${fmtPnl(totU, '€')}</td>
-    <td class="${pnlCls(totT)}">${fmtPnl(totT, '€')}</td>`;
+    <td colspan="10">TOTAL (€, FIFO per-lot FX)</td>
+    <td class="${pnlCls(eurFig.real)}">${fmtPnl(eurFig.real, '€')}</td>
+    <td class="${pnlCls(eurFig.unr)}">${fmtPnl(eurFig.unr, '€')}</td>
+    <td class="${pnlCls(eurFig.total)}">${fmtPnl(eurFig.total, '€')}</td>`;
   tbody.appendChild(summaryRow);
+  const fxRow = document.createElement('tr');
+  fxRow.className = 'summary-note-row';
+  fxRow.innerHTML = `<td colspan="${NCOL}"><span class="stock-fx-note">of which currency effect: <strong style="color:${pnlColor(eurFig.fx)}">${eurFig.fx === 0 ? '€0.00' : fmtPnl(eurFig.fx, '€')}</strong>
+    <span class="info-tip" tabindex="0" title="${escHtml(STOCK_ECON_TIP)}">ⓘ</span></span></td>`;
+  tbody.appendChild(fxRow);
 }
 
 // ═══════════════════════════════════════════════════════════════════
