@@ -123,7 +123,7 @@
   .kpi-card.yellow::before { background:var(--yellow); }
   .kpi-card.amber::before  { background:var(--amber); }
   .kpi-label { font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
-  .kpi-value { font-family:'Space Mono',monospace; font-size:22px; font-weight:700; letter-spacing:-0.03em; line-height:1; }
+  .kpi-value { font-family:'Space Mono',monospace; font-size:22px; font-weight:700; letter-spacing:-0.03em; line-height:1; white-space:nowrap; }
   .kpi-value.pos     { color:var(--green); }
   .kpi-value.neg     { color:var(--red); }
   .kpi-value.neutral { color:var(--text); }
@@ -208,16 +208,16 @@
   table.stock-table tbody tr.stock-group-row td::before { content:none; }
   /* keep the group label in view while the table is scrolled horizontally */
   .stock-group-label { position:sticky; left:12px; display:inline-block; white-space:normal; max-width:calc(100vw - 80px); line-height:1.5; }
-  /* sticky Symbol column */
-  table.stock-table thead th:first-child,
-  table.stock-table tbody tr:not(.stock-group-row):not(.stock-tx-row):not(.summary-note-row) td:first-child { position:sticky; left:0; z-index:2; box-shadow:1px 0 0 var(--border); }
-  table.stock-table thead th:first-child { background:var(--surface); z-index:3; }
-  table.stock-table tbody tr:not(.stock-group-row):not(.stock-tx-row):not(.summary-note-row) td:first-child { background:var(--surface); }
-  table.stock-table tbody tr:not(.stock-group-row):not(.stock-tx-row):not(.summary-note-row):hover td:first-child { background:var(--surface2); }
-  table.stock-table tbody tr.summary-row td:first-child { background:var(--surface2); }
-  table.stock-table tbody tr.stock-sold td:first-child, table.stock-table tbody tr.stock-sold:hover td:first-child { opacity:1; }
-  table.stock-table tbody tr.stock-sold td:first-child .stock-sym { opacity:0.5; }
-  table.stock-table tbody tr.stock-sold:hover td:first-child .stock-sym { opacity:0.9; }
+  /* sticky Symbol column (direct rows only — the nested transaction tables keep their normal layout) */
+  table.stock-table > thead > tr > th:first-child,
+  table.stock-table > tbody > tr:not(.stock-group-row):not(.stock-tx-row):not(.summary-note-row) > td:first-child { position:sticky; left:0; z-index:2; box-shadow:1px 0 0 var(--border); }
+  table.stock-table > thead > tr > th:first-child { background:var(--surface); z-index:3; }
+  table.stock-table > tbody > tr:not(.stock-group-row):not(.stock-tx-row):not(.summary-note-row) > td:first-child { background:var(--surface); }
+  table.stock-table > tbody > tr:not(.stock-group-row):not(.stock-tx-row):not(.summary-note-row):hover > td:first-child { background:var(--surface2); }
+  table.stock-table > tbody > tr.summary-row > td:first-child { background:var(--surface2); }
+  table.stock-table > tbody > tr.stock-sold > td:first-child, table.stock-table > tbody > tr.stock-sold:hover > td:first-child { opacity:1; }
+  table.stock-table > tbody > tr.stock-sold > td:first-child .stock-sym { opacity:0.5; }
+  table.stock-table > tbody > tr.stock-sold:hover > td:first-child .stock-sym { opacity:0.9; }
   table.stock-table tbody tr.stock-sold td { opacity:0.5; }
   table.stock-table tbody tr.stock-sold:hover td { opacity:0.9; }
   .stock-sold-badge { background:rgba(128,128,128,0.18); color:var(--muted); border-radius:4px; padding:1px 5px; font-size:9px; font-family:'Space Mono',monospace; letter-spacing:0.08em; margin-left:8px; vertical-align:middle; display:inline-block; }
@@ -3139,7 +3139,7 @@ function renderStocksTable(data) {
             // Put assignment = buy at strike (effective cost lower by premium);
             // call assignment = sell at strike (effective proceeds higher by premium).
             const eff = isBuy ? Math.abs(t.price) - a.perShare : Math.abs(t.price) + a.perShare;
-            priceCell = `${cs}${Math.abs(t.price).toFixed(3)} <span style="color:var(--muted)">→</span> <span style="color:var(--yellow)" title="Strike ${isBuy ? '−' : '+'} net option premium (${cs}${a.perShare.toFixed(3)}/sh)">${cs}${eff.toFixed(3)}</span>`;
+            priceCell = `${cs}${Math.abs(t.price).toFixed(3)} <span style="color:var(--muted)">→</span> <span style="color:var(--yellow)" title="Strike ${isBuy ? '−' : '+'} net option premium (${cs}${a.perShare.toFixed(3)}/sh)">${cs}${eff.toFixed(3)}</span><div style="color:var(--yellow);font-size:9px;opacity:0.85;white-space:nowrap;">effective price (strike ${isBuy ? '−' : '+'} premium)</div>`;
             assignBadge = `<span class="tx-assign-badge" title="Shares delivered via option assignment — premium of ${cs}${a.prem.toFixed(2)} rolled into cost basis">ASSIGNED</span>`;
           } else {
             assignBadge = '<span class="tx-assign-badge">ASSIGNED</span>';
@@ -3163,19 +3163,19 @@ function renderStocksTable(data) {
           <div class="stock-tx-title">Transaction history — ${escHtml(s.sym)} (${trades.length} trade${trades.length !== 1 ? 's' : ''})</div>
           <table class="tx-table">
             <thead><tr>
-              <th>Date</th><th>Qty</th><th>Price</th><th>Proceeds</th><th>Commission</th><th>Realized P&L (${ccy}, FIFO)</th><th style="text-align:left;">FIFO lots sold</th><th>Code</th>
+              <th>Date</th><th>Qty</th><th>Price</th><th>Proceeds</th><th>Commission</th><th>Realized P&L (${ccy}, FIFO)</th><th style="text-align:left;" title="Lot prices of assigned shares are effective prices (strike − premium)">FIFO lots sold</th><th>Code</th>
             </tr></thead>
             <tbody>${txRows}</tbody>
           </table>
           ${(s.lots && s.lots.length) ? `<div class="stock-tx-title" style="margin-top:14px;">Open lots (FIFO) — shares you still hold</div>
           <table class="tx-table">
-            <thead><tr><th>Bought</th><th>Qty</th><th>Cost / share</th><th>Unrealized P&L (${ccy})</th></tr></thead>
+            <thead><tr><th>Bought</th><th>Qty</th><th title="For shares received by assignment this is the effective price (strike − premium), see note below">Cost / share</th><th>Unrealized P&L (${ccy})</th></tr></thead>
             <tbody>${s.lots.map(l => {
               const u = s.lastPrice ? l.qty*(s.lastPrice - l.unit) : null;
               return `<tr><td class="dep-date">${l.date}</td><td>${+l.qty.toFixed(4)} sh</td><td>${cs}${l.unit.toFixed(3)}</td><td style="color:${pnlColor(u)}">${fmtPnl(u, cs)}</td></tr>`;
             }).join('')}</tbody>
           </table>` : ''}
-          ${hasAssign ? `<div style="margin-top:8px;font-size:10px;color:var(--muted);">→ <span style="color:var(--yellow)">yellow price</span> = effective price after net option premium (strike − premium/sh for assigned puts, strike + premium/sh for assigned calls). Realized / unrealized P&L is calculated FIFO (oldest lots are sold first) using this premium-adjusted basis.</div>` : ''}
+          ${hasAssign ? `<div style="margin-top:8px;font-size:10px;color:var(--muted);">→ <span style="color:var(--yellow)">yellow price</span> = effective price (strike − premium) after net option premium (strike − premium/sh for assigned puts, strike + premium/sh for assigned calls). Realized / unrealized P&L is calculated FIFO (oldest lots are sold first) using this premium-adjusted basis.</div>` : ''}
         </div>
       </td>`;
 
