@@ -633,6 +633,9 @@
   .oc-acc .oc-minibar .oc-target { top:-2px; bottom:-2px; }
   .oc-acc[open] .oc-minibar { display:none; }
   .oc-body { padding:0 14px 12px; border-top:1px solid var(--border); padding-top:2px; }
+  .oc-line2 { display:flex; justify-content:space-between; gap:8px; white-space:nowrap; }
+  .oc-line2 b { font-weight:400; color:var(--text); }
+  .oc-acc > summary .oc-chev { flex:0 0 auto; }
   .oc-flag { margin-left:8px; font-size:11px; }
   .oc-flag.soon { color:var(--yellow); } .oc-flag.neg { color:var(--red); } .oc-flag.pos { color:var(--green); }
   .oc-total { background:var(--surface2); border-color:rgba(0,180,216,0.4); border-left-color:rgba(0,180,216,0.4); }
@@ -685,7 +688,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.6</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.6 · m6</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -2909,11 +2912,10 @@ function renderOpenCards(openPositions) {
       html += `<details class="oc-card oc-acc">
         <summary>
           <div class="oc-head">
-            <span class="oc-title"><span class="type-badge ${p.type}">${p.type}</span><strong>${escHtml(p.ticker)}</strong><span class="oc-strike">${fmtNative(p.strike, '$', p.strike%1===0?0:2)}</span></span>
+            <span class="oc-title"><span class="type-badge ${p.type}">${p.type}</span><strong>${escHtml(p.ticker)}</strong><span class="oc-strike">${fmtNative(p.strike, '$', p.strike%1===0?0:2)} ×${p.qty}</span></span>
             <span class="oc-right"><span class="${p.unrPL>0?'unr-pos':p.unrPL<0?'unr-neg':'unr-neu'}">${dPnl(p.unrPL, 'USD')}${kept !== null ? `<span class="oc-kept-inline"> (${pct(kept, 1)})</span>` : ''}</span><span class="oc-chev"></span></span>
           </div>
-          <div class="oc-sub">${fmtDate(p.expiry)} · ${dl < 0 ? Math.abs(dl) + 'd ago' : dl === 0 ? 'today' : dl + 'd left'} · ×${p.qty}${flag}</div>
-          ${kept !== null ? `<div class="oc-bar oc-minibar">${fill}</div>` : ''}
+          <div class="oc-sub oc-line2"><span>${fmtDate(p.expiry)} · ${dl < 0 ? Math.abs(dl) + 'd ago' : dl === 0 ? 'today' : dl + 'd left'}${flag}</span><span>close <b>${dMoney(p.currentValue, 'USD')}</b></span></div>
         </summary>
         <div class="oc-body">
           ${kept === null

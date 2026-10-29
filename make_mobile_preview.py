@@ -5,7 +5,11 @@ Pokretanje:  python make_mobile_preview.py
 Pregled na desktopu: suzi prozor ispod 700px ili u DevTools uključi prikaz za mobitel (npr. 390px),
 ili na kraj URL-a dodaj #cards da se kartice prikažu na bilo kojoj širini.
 """
+import re
 from pathlib import Path
+
+# Preview iteration, shown after the original's version (e.g. "v2.6 · m5"). Bump on every change to this script.
+PREVIEW_VERSION = 6
 
 HERE = Path(__file__).resolve().parent
 SRC = HERE / 'IBKR Unified Analyzer.html'
@@ -20,6 +24,10 @@ def rep(old, new):
     assert n == 1, f'Očekivano točno 1 pojavljivanje, nađeno {n}: {old[:80]!r}'
     s = s.replace(old, new)
 
+
+# ── Version label in the top bar: original version + preview iteration ──
+s, n = re.subn(r'(margin-left:8px;">)(v\d+\.\d+)(</span></h1>)', rf'\g<1>\g<2> · m{PREVIEW_VERSION}\g<3>', s, count=1)
+assert n == 1, 'Version label in the top bar not found'
 
 # ── HTML: kontejner za kartice ispod tablice ──
 rep("""          <tbody id="stock-tbody"></tbody>
@@ -191,6 +199,9 @@ rep("</style>", """  /* ── Mobile preview: Open Options as cards ── */
   .oc-acc .oc-minibar .oc-target { top:-2px; bottom:-2px; }
   .oc-acc[open] .oc-minibar { display:none; }
   .oc-body { padding:0 14px 12px; border-top:1px solid var(--border); padding-top:2px; }
+  .oc-line2 { display:flex; justify-content:space-between; gap:8px; white-space:nowrap; }
+  .oc-line2 b { font-weight:400; color:var(--text); }
+  .oc-acc > summary .oc-chev { flex:0 0 auto; }
   .oc-flag { margin-left:8px; font-size:11px; }
   .oc-flag.soon { color:var(--yellow); } .oc-flag.neg { color:var(--red); } .oc-flag.pos { color:var(--green); }
   .oc-total { background:var(--surface2); border-color:rgba(0,180,216,0.4); border-left-color:rgba(0,180,216,0.4); }
@@ -252,11 +263,10 @@ function renderOpenCards(openPositions) {
       html += `<details class="oc-card oc-acc">
         <summary>
           <div class="oc-head">
-            <span class="oc-title"><span class="type-badge ${p.type}">${p.type}</span><strong>${escHtml(p.ticker)}</strong><span class="oc-strike">${fmtNative(p.strike, '$', p.strike%1===0?0:2)}</span></span>
+            <span class="oc-title"><span class="type-badge ${p.type}">${p.type}</span><strong>${escHtml(p.ticker)}</strong><span class="oc-strike">${fmtNative(p.strike, '$', p.strike%1===0?0:2)} ×${p.qty}</span></span>
             <span class="oc-right"><span class="${p.unrPL>0?'unr-pos':p.unrPL<0?'unr-neg':'unr-neu'}">${dPnl(p.unrPL, 'USD')}${kept !== null ? `<span class="oc-kept-inline"> (${pct(kept, 1)})</span>` : ''}</span><span class="oc-chev"></span></span>
           </div>
-          <div class="oc-sub">${fmtDate(p.expiry)} · ${dl < 0 ? Math.abs(dl) + 'd ago' : dl === 0 ? 'today' : dl + 'd left'} · ×${p.qty}${flag}</div>
-          ${kept !== null ? `<div class="oc-bar oc-minibar">${fill}</div>` : ''}
+          <div class="oc-sub oc-line2"><span>${fmtDate(p.expiry)} · ${dl < 0 ? Math.abs(dl) + 'd ago' : dl === 0 ? 'today' : dl + 'd left'}${flag}</span><span>close <b>${dMoney(p.currentValue, 'USD')}</b></span></div>
         </summary>
         <div class="oc-body">
           ${kept === null
