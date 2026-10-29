@@ -620,6 +620,21 @@
   .oc-meta { display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:9px; font-family:'Space Mono',monospace; font-size:11px; color:var(--muted); }
   .oc-meta b { font-weight:400; color:var(--text); }
   .oc-card .sc-more > summary { margin-top:8px; }
+  .oc-acc { padding:0; border-left-width:1px; opacity:1; }
+  .oc-acc > summary { list-style:none; cursor:pointer; padding:12px 14px; }
+  .oc-acc > summary::-webkit-details-marker { display:none; }
+  .oc-acc .oc-title strong { font-size:15px; }
+  .oc-right { display:flex; align-items:center; gap:10px; white-space:nowrap; }
+  .oc-chev { width:7px; height:7px; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted); transform:rotate(45deg); margin:-3px 2px 0 0; transition:transform 0.15s; }
+  .oc-acc[open] .oc-chev { transform:rotate(-135deg); margin-top:3px; }
+  .oc-kept-inline { display:none; font-size:11px; opacity:0.85; }
+  .oc-acc[open] .oc-kept-inline { display:inline; }
+  .oc-acc .oc-minibar { height:4px; margin-top:9px; }
+  .oc-acc .oc-minibar .oc-target { top:-2px; bottom:-2px; }
+  .oc-acc[open] .oc-minibar { display:none; }
+  .oc-body { padding:0 14px 12px; border-top:1px solid var(--border); padding-top:2px; }
+  .oc-flag { margin-left:8px; font-size:11px; }
+  .oc-flag.soon { color:var(--yellow); } .oc-flag.neg { color:var(--red); } .oc-flag.pos { color:var(--green); }
   .oc-total { background:var(--surface2); border-color:rgba(0,180,216,0.4); border-left-color:rgba(0,180,216,0.4); }
   /* ── Mobile preview: Closed P&L ── */
   .cl-cards { display:none; flex-direction:column; gap:8px; }
@@ -2886,20 +2901,26 @@ function renderOpenCards(openPositions) {
       if (dl < 0) { badges.push('<span class="oc-badge loss">Expired</span>'); act = act || 'act-loss'; }
       else if (dl <= 7) { badges.push(`<span class="oc-badge soon">⏳ ${dl === 0 ? 'Expires today' : 'Expires in ' + dl + 'd'}</span>`); act = act || 'act-soon'; }
       if (kept !== null && kept < 0) { badges.push('<span class="oc-badge loss">▼ Loss · option worth more than premium</span>'); act = 'act-loss'; }
-      const bar = kept === null
-        ? `<div class="oc-barlbl"><span>Bought option (debit) · no premium to keep</span></div>`
-        : `<div class="oc-bar"><div class="oc-fill ${keptCls(kept)}" style="width:${Math.max(0, Math.min(100, kept)).toFixed(1)}%"></div><div class="oc-target" style="left:80%"></div></div>
-           <div class="oc-barlbl"><span>${pct(kept, 1)} kept</span><span>target 80%</span></div>`;
-      html += `<div class="oc-card ${act || 'quiet'}">
-        <div class="oc-head">
-          <span class="oc-title"><span class="type-badge ${p.type}">${p.type}</span><strong>${escHtml(p.ticker)}</strong><span class="oc-strike">${fmtNative(p.strike, '$', p.strike%1===0?0:2)}</span></span>
-          <span class="${p.unrPL>0?'unr-pos':p.unrPL<0?'unr-neg':'unr-neu'}">${dPnl(p.unrPL, 'USD')}</span>
-        </div>
-        <div class="oc-sub">${fmtDate(p.expiry)} · ${dl < 0 ? Math.abs(dl) + 'd ago' : dl === 0 ? 'today' : dl + 'd left'} · ×${p.qty}</div>
-        ${bar}
-        ${badges.length ? `<div class="oc-badges">${badges.join('')}</div>` : ''}
-        <div class="oc-meta"><span>Premium <b>${fmtPrem(p.premiumCollected)}</b></span><span>To close <b>${dMoney(p.currentValue, 'USD')}</b></span>${p.exposure !== null ? `<span>Exposure <b>${fmtK(p.exposure)}</b></span>` : ''}</div>
-        <details class="sc-more"><summary>Details</summary>
+      const flag = act === 'act-close' ? '<span class="oc-flag pos" title="80% reached">✓</span>'
+                 : act === 'act-loss'  ? '<span class="oc-flag neg" title="Loss / expired">▼</span>'
+                 : act === 'act-soon'  ? '<span class="oc-flag soon" title="Expires within 7 days">⏳</span>' : '';
+      const fill = kept === null ? '' : `<div class="oc-fill ${keptCls(kept)}" style="width:${Math.max(0, Math.min(100, kept)).toFixed(1)}%"></div><div class="oc-target" style="left:80%"></div>`;
+      // Accordion: the summary is the compact line, the body holds kept %, badges and details.
+      html += `<details class="oc-card oc-acc">
+        <summary>
+          <div class="oc-head">
+            <span class="oc-title"><span class="type-badge ${p.type}">${p.type}</span><strong>${escHtml(p.ticker)}</strong><span class="oc-strike">${fmtNative(p.strike, '$', p.strike%1===0?0:2)}</span></span>
+            <span class="oc-right"><span class="${p.unrPL>0?'unr-pos':p.unrPL<0?'unr-neg':'unr-neu'}">${dPnl(p.unrPL, 'USD')}${kept !== null ? `<span class="oc-kept-inline"> (${pct(kept, 1)})</span>` : ''}</span><span class="oc-chev"></span></span>
+          </div>
+          <div class="oc-sub">${fmtDate(p.expiry)} · ${dl < 0 ? Math.abs(dl) + 'd ago' : dl === 0 ? 'today' : dl + 'd left'} · ×${p.qty}${flag}</div>
+          ${kept !== null ? `<div class="oc-bar oc-minibar">${fill}</div>` : ''}
+        </summary>
+        <div class="oc-body">
+          ${kept === null
+            ? `<div class="oc-barlbl"><span>Bought option (debit) · no premium to keep</span></div>`
+            : `<div class="oc-bar">${fill}</div><div class="oc-barlbl"><span>${pct(kept, 1)} kept</span><span>target 80%</span></div>`}
+          ${badges.length ? `<div class="oc-badges">${badges.join('')}</div>` : ''}
+          <div class="oc-meta"><span>Premium <b>${fmtPrem(p.premiumCollected)}</b></span><span>To close <b>${dMoney(p.currentValue, 'USD')}</b></span></div>
           <div class="sc-grid">
             <span>Qty</span><span>${p.qty}</span>
             <span>Premium / share</span><span>${fmtPnl(perShare, '$')}</span>
@@ -2908,8 +2929,8 @@ function renderOpenCards(openPositions) {
             <span>Unrealized P&amp;L</span><span class="${pnlCls(p.unrPL)}">${dPnl(p.unrPL, 'USD')}</span>
             <span>Exposure</span><span>${p.exposure !== null ? fmtK(p.exposure) : '—'}</span>
           </div>
-        </details>
-      </div>`;
+        </div>
+      </details>`;
     }
   }
   // TOTAL card: same sums as the table's TOTAL row
