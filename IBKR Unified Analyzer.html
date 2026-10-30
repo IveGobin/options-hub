@@ -580,7 +580,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.7</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.8</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -1018,7 +1018,7 @@
 
       <!-- Footnote -->
       <div class="proj-footnote" id="proj-footnote">
-        ★ <strong>Default CAGR 47.7%</strong> is derived from your IBKR Time-Weighted Return of 42.73% annualised over 333 days (Jun 2025 – May 2026): (1 + 0.4273)^(365/333) − 1 = 47.69%.
+        ★ <strong id="proj-twr-note">Default CAGR is your IBKR Time-Weighted Return annualised over the statement period.</strong>
         Starting value is pre-filled from the last loaded statement's Ending NAV.
         ⚠ This projection is illustrative only and does not constitute financial advice. Past returns do not guarantee future results. Compound interest model with annual deposits added at the start of each year.
       </div>
@@ -2555,8 +2555,8 @@ function renderDetailTable() {
   // Format profit %: always show sign explicitly, never strip minus
   const fmtPct = pct => {
     if (pct === null || pct === undefined) return '—';
-    const sign = pct >= 0 ? '+' : '';
-    return `${sign}${pct.toFixed(1)}%`;
+    const sign = pct > 0 ? '+' : pct < 0 ? '−' : '';
+    return `${sign}${Math.abs(pct).toFixed(1)}%`;
   };
 
   rows.forEach(r => {
@@ -2642,7 +2642,7 @@ function renderOpenTable(openPositions) {
     // "% kept" and the 80%-buyback target only make sense for premium SOLD (credit);
     // for bought (debit) positions there's no premium to have "kept", so show "—".
     const keptPct = p.premiumCollected > 0 ? ((p.premiumCollected - p.currentValue) / p.premiumCollected) * 100 : null;
-    const keptEl = keptPct===null ? '—' : (() => { const cls=keptPct>=75?'high':keptPct>=40?'mid':keptPct>=0?'low':'neg'; return `<span class="kept-pill ${cls}">${keptPct.toFixed(1)}%</span>`; })();
+    const keptEl = keptPct===null ? '—' : (() => { const cls=keptPct>=75?'high':keptPct>=40?'mid':keptPct>=0?'low':'neg'; return `<span class="kept-pill ${cls}">${keptPct<0?'−':''}${Math.abs(keptPct).toFixed(1)}%</span>`; })();
     const perShare = p.premiumCollected / (p.qty*100);
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -2677,7 +2677,7 @@ function renderOpenTable(openPositions) {
     '',                                                                                                                                        // 80%
     { html:dMoney(totCtC, 'USD'), class:'mono', style:'color:var(--muted)' },                                                                // Cost to close
     { html:totUnrStr, class:totUnrCls },                                                                                                       // Unrealized P&L
-    { html:totKept!==null?`<span class="kept-pill ${totKCls}">${totKept.toFixed(1)}%</span>`:'—' },                                            // % Kept
+    { html:totKept!==null?`<span class="kept-pill ${totKCls}">${totKept<0?'−':''}${Math.abs(totKept).toFixed(1)}%</span>`:'—' },                                            // % Kept
     { html:fmtK(totExp), class:'mono' },                                                                                                        // Exposure
     '',                                                                                                                                        // Days left
   ], 'border-top:1px solid var(--border);');
@@ -4402,7 +4402,7 @@ function renderPLByTickerTable(treemapData) {
     tr.innerHTML = `
       <td style="font-family:'Syne',sans-serif;font-weight:700;">${escHtml(it.label)}</td>
       <td class="mono" style="text-align:right;color:${color};">${fmtPnl(it.value, dispSym())}</td>
-      <td class="mono" style="text-align:right;color:${color};">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</td>
+      <td class="mono" style="text-align:right;color:${color};">${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct).toFixed(1)}%</td>
     `;
     tbody.appendChild(tr);
   });
@@ -4448,7 +4448,7 @@ function projCalc(cagr, annualDeposit, startVal, inflationRate, years) {
   return results;
 }
 
-function projFmtK(n) { if (Math.abs(n) >= 1e6) return '€'+(n/1e6).toFixed(2)+'M'; if (Math.abs(n) >= 1e3) return '€'+(Math.abs(n)/1e3).toFixed(0)+'K'; return '€'+Math.round(n); }
+function projFmtK(n) { if (Math.abs(n) >= 1e9) return '€'+(n/1e9).toFixed(2)+'B'; if (Math.abs(n) >= 1e6) return '€'+(n/1e6).toFixed(2)+'M'; if (Math.abs(n) >= 1e3) return '€'+(Math.abs(n)/1e3).toFixed(0)+'K'; return '€'+Math.round(n); }
 function projFmtEur(n) { return (n<0?'-€':'€')+Math.abs(Math.round(n)).toLocaleString(); }
 
 function renderProjection() {
@@ -4531,7 +4531,7 @@ function projSliderChange() {
 function projSetScenario(s, btn) {
   document.querySelectorAll('.proj-scenario-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const scenarios = { bear:10, moderate:25, twr:47.7 };
+  const scenarios = { bear:10, moderate:25, twr:_projTwrCagr };
   if (s !== 'custom' && scenarios[s] !== undefined) {
     _projParams.cagr = scenarios[s];
     document.getElementById('proj-cagr').value = _projParams.cagr;
@@ -4540,6 +4540,13 @@ function projSetScenario(s, btn) {
   }
 }
 
+let _projTwrCagr = 47.7;   // annualised TWR of the loaded statements (fallback until data is loaded)
+// Days covered by a statement period like "June 9, 2025 - October 22, 2026" (inclusive); null if it can't be parsed.
+function periodDays(period) {
+  const [a, b] = String(period || '').split(' - ').map(x => new Date(x));
+  const d = Math.round((b - a) / 86400000) + 1;
+  return isFinite(d) && d > 0 ? d : null;
+}
 function projInitFromData(data) {
   if (data && data.navEnd > 0) {
     _projParams.startVal = Math.round(data.navEnd);
@@ -4549,13 +4556,18 @@ function projInitFromData(data) {
   if (data && data.twr) {
     const twrV = parseFloat(data.twr);
     if (!isNaN(twrV)) {
-      const annualised = parseFloat(((Math.pow(1 + twrV/100, 365/333) - 1)*100).toFixed(1));
+      const days = periodDays(data.period) || 365;
+      const annualised = parseFloat(((Math.pow(1 + twrV/100, 365/days) - 1)*100).toFixed(1));
+      const note = document.getElementById('proj-twr-note');
+      if (note) note.textContent = `Default CAGR ${annualised.toFixed(1)}% is your IBKR Time-Weighted Return of ${twrV.toFixed(2)}% annualised over ${days} days (${data.period}): (1 + ${(twrV/100).toFixed(4)})^(365/${days}) − 1.`
+        + (annualised > 0 && annualised <= 60 ? '' : ' It is outside 0–60%, so the slider keeps its previous value.');
       if (annualised > 0 && annualised <= 60) {
+        _projTwrCagr = annualised;
         _projParams.cagr = annualised;
         const sl = document.getElementById('proj-cagr');
         if (sl) { sl.value = annualised; document.getElementById('proj-cagr-val').textContent = annualised.toFixed(1); }
         const twrBtn = document.getElementById('proj-sc-twr');
-        if (twrBtn) twrBtn.textContent = `⭐ TWR ${uaT('proj_sc_twr')} (${annualised.toFixed(1)}%)`;
+        if (twrBtn) twrBtn.textContent = `⭐ ${uaT('proj_sc_twr')} (${annualised.toFixed(1)}%)`;
       }
     }
   }
@@ -4766,7 +4778,7 @@ function applyUAI18n() {
   projIds.forEach(([id,key]) => { const el=document.getElementById(id); if(el) el.textContent=uaT(key); });
   const scBear = document.getElementById('proj-sc-bear');     if(scBear) scBear.textContent     = '🐻 ' + (uaT('proj_sc_bear')     || 'Conservative (10%)');
   const scMod  = document.getElementById('proj-sc-moderate'); if(scMod)  scMod.textContent      = '📊 ' + (uaT('proj_sc_moderate') || 'Moderate (25%)');
-  const scTwr  = document.getElementById('proj-sc-twr');      if(scTwr)  scTwr.textContent      = '⭐ ' + uaT('proj_sc_twr') + ' (' + _projParams.cagr.toFixed(1) + '%)';
+  const scTwr  = document.getElementById('proj-sc-twr');      if(scTwr)  scTwr.textContent      = '⭐ ' + uaT('proj_sc_twr') + ' (' + _projTwrCagr.toFixed(1) + '%)';
   const scCust = document.getElementById('proj-sc-custom');   if(scCust) scCust.textContent     = '⚙ ' + (uaT('proj_sc_custom')  || 'Custom');
   // Re-render projection with updated labels
   if (document.getElementById('proj-chart')) renderProjection();
