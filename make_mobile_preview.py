@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 # Preview iteration, shown after the original's version (e.g. "v2.6 · m5"). Bump on every change to this script.
-PREVIEW_VERSION = 7
+PREVIEW_VERSION = 8
 
 HERE = Path(__file__).resolve().parent
 SRC = HERE / 'IBKR Unified Analyzer.html'
@@ -127,8 +127,10 @@ rep("""    tbody.appendChild(stmtRow);
       <span>Realized <b class="${pnlCls(eurFig.real)}">${fmtPnl(eurFig.real, dispSym())}</b></span>
       <span>Unrealized <b class="${pnlCls(eurFig.unr)}">${fmtPnl(eurFig.unr, dispSym())}</b></span>
     </div>
-    <div class="sc-note">of which currency effect: <strong style="color:${pnlColor(eurFig.fx)}">${fmtPnl(eurFig.fx, dispSym())}</strong>
-      <span class="info-tip" tabindex="0" title="${escHtml(STOCK_ECON_TIP)}">ⓘ</span>
+    <div class="sc-note">${DISP === 'EUR'
+      ? `of which currency effect: <strong style="color:${pnlColor(eurFig.fx)}">${fmtPnl(eurFig.fx, dispSym())}</strong>
+      <span class="info-tip" tabindex="0" title="${escHtml(STOCK_ECON_TIP)}">ⓘ</span>`
+      : 'USD view: native P&amp;L (EUR stocks at the statement rate). Switch to EUR to see the currency effect.'}
       ${stmt && Number.isFinite(stmt.real) && Number.isFinite(stmt.unr) ? `<br>IBKR statement (excl. FX): realized ${dPnl(stmt.real, 'EUR')} / unrealized ${dPnl(stmt.unr, 'EUR')}` : ''}</div>
   </div>`);
   const cardBox = document.getElementById('stock-cards');

@@ -695,7 +695,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.6 · m7</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.7 · m8</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -2374,11 +2374,10 @@ function navReconciliation(d) {
   if (!fin(d.navStart) || !fin(d.navEnd) || !fin(d.navDeposits)) return null;
   const rate = d.eurUsdRate > 0 ? d.eurUsdRate : 0;
   if (!rate) return null;
-  const fig = stockEurFigures(d);
+  const fig = stockEurFigures(d, 'EUR');   // the check is always done in EUR (base currency)
   const target = d.navEnd - d.navStart - d.navDeposits;
-  // stock figures are in the display currency — bring back to EUR for the check
-  const stockEur = DISP === 'EUR' ? fig.total : fig.total / DISP_RATE;
-  const stockFxEur = DISP === 'EUR' ? fig.fx : fig.fx / DISP_RATE;
+  const stockEur = fig.total;
+  const stockFxEur = fig.fx;
   const forexStmt = d.ruCatTotals && d.ruCatTotals.Forex ? d.ruCatTotals.Forex.total : null;
   const comps = [
     ['Stocks (realized + unrealized, per-lot FX)', stockEur],
@@ -3309,26 +3308,33 @@ function renderMatrixCards(sortedTickers, sortedQ, qLabels) {
 // ═══════════════════════════════════════════════════════════════════
 // STOCKS TABLE (with expandable transaction history)
 // ═══════════════════════════════════════════════════════════════════
-// Per-row figures in the display currency (EUR: FIFO per-lot FX, equal to native for EUR rows; USD: those EUR
-// figures at the statement rate), rounded to cents so every total
-// shown in the app is the exact sum of the displayed row values. Legacy rows without EUR fields use the statement rate.
+// Per-row figures in the given currency (default: display currency), rounded to cents so every total shown in the
+// app is the exact sum of the displayed row values.
+//   EUR: FIFO per-lot FX (equal to native for EUR rows), so it includes the currency effect.
+//   USD: native P&L for USD rows, EUR rows at the statement rate; no per-lot currency effect (fx = 0).
+// Legacy rows without EUR fields use the statement rate.
 const STOCK_ECON_TIP = 'Economic view, not tax. EUR figures use the FX rate on each purchase/sale day (FIFO) so they include currency effect; IBKR reports that part separately under Forex. Option premium from assigned puts/calls is included in share cost basis.';
 // Currency of a stock row / its symbol — one helper for the rows, lots, tx tables and their headers.
 function rowCcy(row, op) { return row.eurBase ? 'EUR' : (row.ccy || (op && op.ccy) || 'USD'); }
 function cs(row, op) { return rowCcy(row, op) === 'EUR' ? '€' : '$'; }
-function stockEurFigures(data) {
+function stockEurFigures(data, ccy = DISP) {
   const rate = data.eurUsdRate > 0 ? data.eurUsdRate : 1;
   const r2 = v => Math.round(v * 100) / 100;
   const rows = (data.stocksTable || data.stocks).map(r => {
     const isEur = r.eurBase || r.ccy === 'EUR';
+    if (ccy === 'USD') {
+      // USD view: a USD stock shows its own USD result; EUR stocks at the statement rate
+      const toUsd = v => isEur ? v * rate : v;
+      const real = r2(toUsd(r.realTotal)), unr = r2(toUsd(r.unrTotal));
+      return { row: r, real, unr, total: r2(real + unr), fx: 0 };
+    }
     const toEur = v => isEur ? v : v / rate;
     const realE = r.realEur != null ? r.realEur : toEur(r.realTotal);
     const unrE  = r.unrEur  != null ? r.unrEur  : toEur(r.unrTotal);
-    const real = r2(toDisp(realE, 'EUR'));
-    const unr  = r2(toDisp(unrE, 'EUR'));
+    const real = r2(realE), unr = r2(unrE);
     const total = r2(real + unr);
     // currency effect = per-lot EUR result minus the native result converted at the statement rate
-    const fx = isEur ? 0 : toDisp((realE + unrE) - r.total / rate, 'EUR');
+    const fx = isEur ? 0 : (realE + unrE) - r.total / rate;
     return { row: r, real, unr, total, fx };
   });
   const sum = k => r2(rows.reduce((a, x) => a + x[k], 0));
@@ -3520,19 +3526,21 @@ function renderStocksTable(data) {
     </div>`);
   });
 
-  // TOTAL: exact sum of the € columns above (per-lot FX, same as the KPI strip and the Stock P&L chart).
+  // TOTAL: exact sum of the display-currency columns above (same as the KPI strip and the Stock P&L chart).
   const summaryRow = document.createElement('tr');
   summaryRow.className = 'summary-row';
   summaryRow.innerHTML = `
-    <td colspan="10">TOTAL (${DISP}, FIFO per-lot FX)</td>
+    <td colspan="10">TOTAL (${DISP === 'EUR' ? 'EUR, FIFO per-lot FX' : 'USD, native P&L'})</td>
     <td class="${pnlCls(eurFig.real)}">${fmtPnl(eurFig.real, dispSym())}</td>
     <td class="${pnlCls(eurFig.unr)}">${fmtPnl(eurFig.unr, dispSym())}</td>
     <td class="${pnlCls(eurFig.total)}">${fmtPnl(eurFig.total, dispSym())}</td>`;
   tbody.appendChild(summaryRow);
   const fxRow = document.createElement('tr');
   fxRow.className = 'summary-note-row';
-  fxRow.innerHTML = `<td colspan="${NCOL}"><span class="stock-fx-note">of which currency effect: <strong style="color:${pnlColor(eurFig.fx)}">${fmtPnl(eurFig.fx, dispSym())}</strong>
-    <span class="info-tip" tabindex="0" title="${escHtml(STOCK_ECON_TIP)}">ⓘ</span></span></td>`;
+  fxRow.innerHTML = DISP === 'EUR'
+    ? `<td colspan="${NCOL}"><span class="stock-fx-note">of which currency effect: <strong style="color:${pnlColor(eurFig.fx)}">${fmtPnl(eurFig.fx, dispSym())}</strong>
+    <span class="info-tip" tabindex="0" title="${escHtml(STOCK_ECON_TIP)}">ⓘ</span></span></td>`
+    : `<td colspan="${NCOL}"><span class="stock-fx-note">USD view: native P&amp;L (EUR stocks at the statement rate). Switch to EUR to see the currency effect.</span></td>`;
   tbody.appendChild(fxRow);
   const stmt = data.ruCatTotals && data.ruCatTotals.Stocks;
   if (stmt && Number.isFinite(stmt.real) && Number.isFinite(stmt.unr)) {
@@ -3548,8 +3556,10 @@ function renderStocksTable(data) {
       <span>Realized <b class="${pnlCls(eurFig.real)}">${fmtPnl(eurFig.real, dispSym())}</b></span>
       <span>Unrealized <b class="${pnlCls(eurFig.unr)}">${fmtPnl(eurFig.unr, dispSym())}</b></span>
     </div>
-    <div class="sc-note">of which currency effect: <strong style="color:${pnlColor(eurFig.fx)}">${fmtPnl(eurFig.fx, dispSym())}</strong>
-      <span class="info-tip" tabindex="0" title="${escHtml(STOCK_ECON_TIP)}">ⓘ</span>
+    <div class="sc-note">${DISP === 'EUR'
+      ? `of which currency effect: <strong style="color:${pnlColor(eurFig.fx)}">${fmtPnl(eurFig.fx, dispSym())}</strong>
+      <span class="info-tip" tabindex="0" title="${escHtml(STOCK_ECON_TIP)}">ⓘ</span>`
+      : 'USD view: native P&amp;L (EUR stocks at the statement rate). Switch to EUR to see the currency effect.'}
       ${stmt && Number.isFinite(stmt.real) && Number.isFinite(stmt.unr) ? `<br>IBKR statement (excl. FX): realized ${dPnl(stmt.real, 'EUR')} / unrealized ${dPnl(stmt.unr, 'EUR')}` : ''}</div>
   </div>`);
   const cardBox = document.getElementById('stock-cards');
