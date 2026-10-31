@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 # Preview iteration, shown after the original's version (e.g. "v2.6 · m5"). Bump on every change to this script.
-PREVIEW_VERSION = 8
+PREVIEW_VERSION = 9
 
 HERE = Path(__file__).resolve().parent
 SRC = HERE / 'IBKR Unified Analyzer.html'
@@ -195,8 +195,7 @@ rep("</style>", """  /* ── Mobile preview: Open Options as cards ── */
   .oc-right { display:flex; align-items:center; gap:10px; white-space:nowrap; }
   .oc-chev { width:7px; height:7px; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted); transform:rotate(45deg); margin:-3px 2px 0 0; transition:transform 0.15s; }
   .oc-acc[open] .oc-chev { transform:rotate(-135deg); margin-top:3px; }
-  .oc-kept-inline { display:none; font-size:11px; opacity:0.85; }
-  .oc-acc[open] .oc-kept-inline { display:inline; }
+  .oc-kept-inline { font-size:11px; opacity:0.85; }   /* kept % always visible, also on a collapsed card */
   .oc-acc .oc-minibar { height:4px; margin-top:9px; }
   .oc-acc .oc-minibar .oc-target { top:-2px; bottom:-2px; }
   .oc-acc[open] .oc-minibar { display:none; }
