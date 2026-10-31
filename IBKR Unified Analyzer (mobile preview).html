@@ -692,10 +692,10 @@
   <div id="drop-zone">
     <div class="drop-icon">📊</div>
     <div class="drop-text">Drag CSV here or click</div>
-    <div class="drop-sub">IBKR Activity Statement export (.csv) — select multiple to merge</div>
+    <div class="drop-sub">IBKR Activity Statement export (.csv) — select multiple to merge · optional NAV history (.json) for an exact growth chart</div>
     <button class="btn-upload" onclick="event.stopPropagation(); document.getElementById('file-input').click()">Choose file</button>
   </div>
-  <input type="file" id="file-input" accept=".csv" multiple style="display:none">
+  <input type="file" id="file-input" accept=".csv,.json" multiple style="display:none">
   <div class="drop-hint">
     Export via <strong>Reports → Activity → Custom → CSV</strong><br>
     Combines portfolio overview, stock P&L, options deep-dive &amp; expiry calendar.
@@ -706,7 +706,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.14 · m9</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.15 · m9</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -777,11 +777,12 @@
       <div class="section-title" data-unit="disp">Portfolio growth by month</div>
       <div class="chart-card">
         <div class="chart-legend" style="margin-bottom:10px;">
-          <span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--blue);"></span><span data-unit="disp">Portfolio value (estimated)</span></span>
+          <span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--blue);"></span><span data-unit="disp" id="navGrowthLegend">Portfolio value (estimated)</span></span>
           <span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--muted);"></span>Net deposits (cost basis)</span>
         </div>
         <div style="position:relative;height:280px;"><canvas id="navGrowthChart"></canvas></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:10px;">
+        <div id="navGrowthCheck" style="font-size:11px;margin-top:10px;"></div>
+        <div id="navGrowthNote" style="font-size:11px;color:var(--muted);margin-top:10px;">
           Estimate: monthly net deposits are exact (from Deposits &amp; Withdrawals). The portfolio value line distributes the period's total mark-to-market P/L across months in proportion to that month's trading activity, then is calibrated to reconcile exactly with the statement's starting and ending NAV.
         </div>
       </div>
@@ -2155,6 +2156,37 @@ function getPeriodEnd(sections) {
   return isNaN(d) ? 0 : d.getTime();
 }
 
+// ── NAV HISTORY (.json) ──
+// Format: {"currency":"EUR","points":[{"date":"2026-01-31","nav":12345}, …]} or a bare array of points.
+// Values are in the statement's base currency (EUR). The file stays on the device (never in the repo).
+function isNavJsonFile(r) { return /\.json$/i.test(r.name || '') || /^\s*[\[{]/.test(r.text || ''); }
+function parseNavJson(jsonRes) {
+  const pts = [];
+  let ccy = 'EUR';
+  for (const r of jsonRes) {
+    let doc;
+    try { doc = JSON.parse(r.text); } catch (e) { throw new Error(r.name + ': not valid JSON (' + e.message + ').'); }
+    const arr = Array.isArray(doc) ? doc : (doc && Array.isArray(doc.points) ? doc.points : null);
+    if (!arr) throw new Error(r.name + ': expected {"points":[{"date":"YYYY-MM-DD","nav":123}]}.');
+    if (doc.currency) ccy = String(doc.currency).toUpperCase();
+    for (const p of arr) {
+      const d = String((p && (p.date || p.Date)) || '').trim();
+      const v = num(p && (p.nav !== undefined ? p.nav : p.NAV !== undefined ? p.NAV : p.value));
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !isFinite(v)) throw new Error(r.name + ': bad point ' + JSON.stringify(p) + ' (need "date":"YYYY-MM-DD" and a numeric "nav").');
+      pts.push({ date:d, ts:new Date(d + 'T00:00:00').getTime(), nav:v });
+    }
+  }
+  if (ccy !== 'EUR') throw new Error('NAV history currency is ' + ccy + ' — only EUR (the statement base currency) is supported.');
+  pts.sort((a, b) => a.ts - b.ts);
+  return pts.length ? { ccy, points: pts } : null;
+}
+function stmtEndNav(sections) {
+  const cols = colMap(sections, 'Net Asset Value');
+  const iCur = ci(cols, 'current total', 6);
+  const row = getData(sections, 'Net Asset Value').find(r => (r[2]||'').trim() === 'Total');
+  return row ? num(row[iCur]) : null;
+}
+
 function loadFiles(files) {
   const fileArr = Array.from(files);
   const results = new Array(fileArr.length);
@@ -2166,7 +2198,13 @@ function loadFiles(files) {
       done++;
       if (done === fileArr.length) _fxReady.then(() => {
         try {
-          const parsed = results.map(r => ({ sections: parseIBKR(r.text), name: r.name }));
+          // Optional NAV history (.json): kept apart from the statements; without it nothing changes.
+          const jsonRes = results.filter(r => isNavJsonFile(r));
+          const csvRes  = results.filter(r => !isNavJsonFile(r));
+          let navHist = null;
+          if (jsonRes.length) navHist = parseNavJson(jsonRes);
+          if (!csvRes.length) throw new Error('Select the IBKR CSV statement(s) together with the NAV .json file.');
+          const parsed = csvRes.map(r => ({ sections: parseIBKR(r.text), name: r.name }));
           // Validate all are IBKR files
           parsed.forEach(p => {
             if (!getData(p.sections, 'Statement').length)
@@ -2176,8 +2214,11 @@ function loadFiles(files) {
           parsed.forEach(p => { p.periodEnd = getPeriodEnd(p.sections); });
           parsed.sort((a, b) => a.periodEnd - b.periodEnd);
           const merged = mergeSections(parsed);
-          const label = fileArr.length === 1 ? fileArr[0].name : fileArr.length + ' files merged';
+          const label = (csvRes.length === 1 ? csvRes[0].name : csvRes.length + ' files merged') + (navHist ? ' + NAV history' : '');
           const data = processIBKR(merged);
+          // Each statement's own ending NAV (base currency) — used to cross-check the NAV history.
+          data.stmtEnds = parsed.map(p => ({ end: p.periodEnd, nav: stmtEndNav(p.sections), name: p.name })).filter(x => x.end && x.nav !== null);
+          data.navHist = navHist;
           renderDashboard(data, label);
           if (!_fxTable) document.getElementById('error-box').innerHTML = '<div class="error-msg">⚠ tecajna_lista_usd.json nije učitan — EUR iznosi za dionice koriste jedan tečaj iz izvještaja, ne tečaj na dan kupnje/prodaje.</div>';
         } catch(err) {
@@ -2549,6 +2590,143 @@ function renderNavGrowthChart(data) {
   const border = getComputedStyle(document.body).getPropertyValue('--border');
   const blue = getComputedStyle(document.body).getPropertyValue('--blue');
 
+  // Legend / note / check texts (reset on every render: the NAV history is optional)
+  const legendEl = document.getElementById('navGrowthLegend');
+  const noteEl   = document.getElementById('navGrowthNote');
+  const checkEl  = document.getElementById('navGrowthCheck');
+  if (noteEl && noteEl.dataset.orig === undefined) noteEl.dataset.orig = noteEl.innerHTML;
+  const setLegend = t => { if (legendEl) { legendEl.dataset.base = t; legendEl.textContent = t + ' (' + DISP + ')'; } };
+  const hist = (data.navHist && data.navHist.points) || [];
+
+  if (!hist.length) {
+    // ── No NAV history: unchanged estimated monthly chart ──
+    setLegend('Portfolio value (estimated)');
+    if (noteEl) noteEl.innerHTML = noteEl.dataset.orig;
+    if (checkEl) checkEl.innerHTML = '';
+    renderNavGrowthEstimated(canvas, labels, navSeries, depSeries, muted, border, blue);
+    return;
+  }
+
+  // ── With NAV history (.json): actual values on a real time axis ──
+  // Month m's estimate is the value at the END of m → plotted at the 1st of the next month.
+  const DAY = 86400000;
+  const monthEndTs = m => { const [y, mo] = m.split('-').map(Number); return new Date(y, mo, 1).getTime(); };
+  const firstTs = hist[0].ts, lastTs = hist[hist.length - 1].ts;
+  const pts = hist.map(h => ({ x:h.ts, y:h.nav, src:'json' }));
+  // Statement ending NAVs are official too; add them unless the history already has a point within 3 days.
+  (data.stmtEnds || []).forEach(se => {
+    if (!pts.some(p => Math.abs(p.x - se.end) <= 3*DAY)) pts.push({ x:se.end, y:se.nav, src:'statement' });
+  });
+  // Estimated month-ends only where the history has no coverage (before its first / after its last point).
+  sortedMonths.forEach((m, i) => {
+    const t = monthEndTs(m);
+    if (t < firstTs - 16*DAY || t > lastTs + 16*DAY) {
+      if (!pts.some(p => Math.abs(p.x - t) <= 3*DAY)) pts.push({ x:t, y:navSeries[i], src:'est' });
+    }
+  });
+  pts.sort((a, b) => a.x - b.x);
+
+  // Net deposits as a step line at the exact deposit dates.
+  const depPts = [];
+  let cum = data.navStart || 0;
+  const depList = deposits.map(r => ({ t:new Date((r[depCols.date]||'').substring(0,10) + 'T00:00:00').getTime(), a:num(r[depCols.amount]) }))
+                          .filter(d => isFinite(d.t)).sort((a, b) => a.t - b.t);
+  depList.forEach(d => { cum += d.a; depPts.push({ x:d.t, y:cum }); });
+  const xMax = Math.max(pts[pts.length-1].x, depPts.length ? depPts[depPts.length-1].x : 0);
+  if (depPts.length) depPts.push({ x:xMax, y:cum });
+  const depAt = t => { let v = data.navStart || 0; for (const d of depList) { if (d.t <= t) v += d.a; else break; } return v; };
+
+  // Cross-check the history against each statement's ending NAV.
+  const fmtD = t => new Date(t).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+  const checks = (data.stmtEnds || []).map(se => {
+    const near = hist.filter(h => Math.abs(h.ts - se.end) <= 3*DAY).sort((a, b) => Math.abs(a.ts - se.end) - Math.abs(b.ts - se.end))[0];
+    if (!near) return `<span style="color:var(--muted)">· ${fmtD(se.end)}: no NAV history point within 3 days of the statement end — not checked</span>`;
+    const pct = se.nav ? (near.nav - se.nav) / Math.abs(se.nav) * 100 : 0;
+    const ok = Math.abs(pct) <= 2;
+    return `<span style="color:${ok ? 'var(--green)' : 'var(--yellow)'}">${ok ? '✓' : '⚠'} ${fmtD(se.end)}: statement ${fmtMoney(toDisp(se.nav,'EUR'), dispSym(), 0)} vs NAV history ${fmtMoney(toDisp(near.nav,'EUR'), dispSym(), 0)} (${near.date}, ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)${ok ? '' : ' — check the .json values'}</span>`;
+  });
+  if (checkEl) checkEl.innerHTML = checks.join('<br>');
+
+  const nEst = pts.filter(p => p.src === 'est').length;
+  setLegend('Portfolio value (actual NAV)');
+  if (noteEl) noteEl.innerHTML = `Solid points: your NAV history file (${hist.length} points) and the statements' ending NAV.` +
+    (nEst ? ` Hollow points / dashed line: ${nEst} month-end${nEst > 1 ? 's' : ''} without NAV history, estimated as before (period mark-to-market spread by trading activity).` : '') +
+    ` Net deposits step on the exact deposit dates.`;
+
+  const monthLbl = t => new Date(t).toLocaleString('en-US', { month:'short', year:'2-digit' });
+  const xMin = Math.min(pts[0].x, depPts.length ? depPts[0].x : pts[0].x);
+  _chartNavGrowth = new Chart(canvas, {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'Portfolio value',
+          data: pts.map(p => ({ x:p.x, y:toDisp(p.y, 'EUR'), src:p.src })),
+          borderColor: blue,
+          backgroundColor: 'rgba(0,180,216,0.12)',
+          fill: true,
+          cubicInterpolationMode: 'monotone',   // smooth but never overshoots a real value
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: ctx => (ctx.raw && ctx.raw.src === 'est') ? 'transparent' : blue,
+          segment: { borderDash: ctx => (ctx.p0.raw.src === 'est' || ctx.p1.raw.src === 'est') ? [5,4] : undefined },
+          borderWidth: 2
+        },
+        {
+          label: 'Net deposits (cost basis)',
+          data: depPts.map(p => ({ x:p.x, y:toDisp(p.y, 'EUR') })),
+          borderColor: muted,
+          backgroundColor: 'transparent',
+          borderDash: [5,4],
+          stepped: 'before',
+          fill: false,
+          pointRadius: 0,
+          pointHitRadius: 0,
+          pointHoverRadius: 0,
+          borderWidth: 1.5
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          filter: item => item.datasetIndex === 0,
+          callbacks: {
+            title: items => items.length ? fmtD(items[0].raw.x) : '',
+            label: ctx => ' Portfolio value: ' + dispSym() + ctx.parsed.y.toLocaleString(undefined,{maximumFractionDigits:0}) +
+              (ctx.raw.src === 'est' ? ' (estimated)' : ctx.raw.src === 'statement' ? ' (statement)' : ''),
+            afterLabel: ctx => ' Net deposits: ' + dispSym() + toDisp(depAt(ctx.raw.x), 'EUR').toLocaleString(undefined,{maximumFractionDigits:0})
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'linear', min: xMin, max: xMax,
+          grid: { color: border },
+          ticks: { color: muted, font: { size: 11 }, callback: v => monthLbl(v) },
+          // One tick per month start (every 2nd/3rd month when the range is long).
+          afterBuildTicks: axis => {
+            const t = [], d0 = new Date(axis.min); let d = new Date(d0.getFullYear(), d0.getMonth() + 1, 1);
+            while (d.getTime() <= axis.max) { t.push(d.getTime()); d = new Date(d.getFullYear(), d.getMonth() + 1, 1); }
+            const step = Math.ceil(t.length / 8);
+            axis.ticks = t.filter((_, i) => i % step === 0).map(v => ({ value:v }));
+          }
+        },
+        y: {
+          grid: { color: border },
+          ticks: { color: muted, font: { size: 11 }, callback: v => dispSym() + v.toLocaleString(undefined,{maximumFractionDigits:0}) }
+        }
+      }
+    }
+  });
+}
+
+// Original estimated monthly chart (used when no NAV history file is loaded).
+function renderNavGrowthEstimated(canvas, labels, navSeries, depSeries, muted, border, blue) {
   _chartNavGrowth = new Chart(canvas, {
     type: 'line',
     data: {
