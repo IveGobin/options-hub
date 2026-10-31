@@ -694,7 +694,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.9 · m9</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.10 · m9</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -4456,7 +4456,7 @@ function renderPortfolioPies(data) {
 
   portData.forEach((v,i) => { portData[i] = +toDisp(v, 'EUR').toFixed(2); });   // EUR -> display currency
   const portTotal = portData.reduce((a,b)=>a+b,0);
-  _chartPortPie = new Chart(document.getElementById('portfolioPieChart'),{type:'doughnut',data:{labels:portLabels,datasets:[{data:portData,backgroundColor:portColors,borderWidth:2,borderColor:getComputedStyle(document.body).getPropertyValue('--surface2'),hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+dispSym()+ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0})+'  ('+((ctx.parsed/portTotal)*100).toFixed(1)+'%)'}}}}});
+  _chartPortPie = new Chart(document.getElementById('portfolioPieChart'),{type:'pie',data:{labels:portLabels,datasets:[{data:portData,backgroundColor:portColors,borderWidth:2,borderColor:getComputedStyle(document.body).getPropertyValue('--surface2'),hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+dispSym()+ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0})+'  ('+((ctx.parsed/portTotal)*100).toFixed(1)+'%)'}}}}});
   const portLegend = document.getElementById('portfolioPieLegend');
   portLegend.innerHTML = '';
   portLabels.forEach((lbl,i)=>{ portLegend.innerHTML+=`<span style="display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;"><span style="width:9px;height:9px;border-radius:50%;background:${portColors[i]};flex-shrink:0;display:inline-block;"></span>${lbl} <span style="color:var(--muted);opacity:0.6;">(${(portData[i]/portTotal*100).toFixed(1)}%)</span></span>`; });
@@ -4477,7 +4477,7 @@ function renderPortfolioPies(data) {
   if(data.lendVal>0)   { incData.push(+data.lendVal.toFixed(2));   incLabels.push('Lending');      incColors.push('#c8ff00'); }
   incData.forEach((v,i) => { incData[i] = +toDisp(v, 'EUR').toFixed(2); });   // EUR -> display currency
   const incTotal=incData.reduce((a,b)=>a+b,0);
-  _chartIncomePie = new Chart(document.getElementById('incomePieChart'),{type:'doughnut',data:{labels:incLabels,datasets:[{data:incData,backgroundColor:incColors,borderWidth:2,borderColor:getComputedStyle(document.body).getPropertyValue('--surface2'),hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+dispSym()+ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0})+'  ('+((ctx.parsed/incTotal)*100).toFixed(1)+'%)'}}}}});
+  _chartIncomePie = new Chart(document.getElementById('incomePieChart'),{type:'pie',data:{labels:incLabels,datasets:[{data:incData,backgroundColor:incColors,borderWidth:2,borderColor:getComputedStyle(document.body).getPropertyValue('--surface2'),hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+dispSym()+ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0})+'  ('+((ctx.parsed/incTotal)*100).toFixed(1)+'%)'}}}}});
   const incLegend=document.getElementById('incomePieLegend');
   incLegend.innerHTML='';
   incLabels.forEach((lbl,i)=>{ incLegend.innerHTML+=`<span style="display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;"><span style="width:9px;height:9px;border-radius:50%;background:${incColors[i]};flex-shrink:0;display:inline-block;"></span>${lbl} <span style="color:var(--muted);opacity:0.6;">(${(incData[i]/incTotal*100).toFixed(1)}%)</span></span>`; });
