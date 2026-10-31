@@ -580,7 +580,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.10</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.11</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -4140,119 +4140,6 @@ function renderPortfolioPies(data) {
   const incLegend=document.getElementById('incomePieLegend');
   incLegend.innerHTML='';
   incLabels.forEach((lbl,i)=>{ incLegend.innerHTML+=`<span style="display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;"><span style="width:9px;height:9px;border-radius:50%;background:${incColors[i]};flex-shrink:0;display:inline-block;"></span>${lbl} <span style="color:var(--muted);opacity:0.6;">(${(incData[i]/incTotal*100).toFixed(1)}%)</span></span>`; });
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// PIE CHART (Chart.js doughnut)
-// ═══════════════════════════════════════════════════════════════════
-const _pieChartInstances = {};
-function renderPieChart(containerId, tickerData, palette, isPositive) {
-  const container = document.getElementById(containerId);
-  if (!tickerData.length) { container.innerHTML = '<div class="pie-empty">No data</div>'; return; }
-
-  const labels  = tickerData.map(d => d[0]);
-  const values  = tickerData.map(d => Math.abs(d[1]));
-  const colors  = tickerData.map((d, i) => palette[i % palette.length]);
-  const total   = values.reduce((a, b) => a + b, 0);
-  const maxVal  = Math.max(...values);
-
-  // Destroy previous chart instance if exists
-  if (_pieChartInstances[containerId]) {
-    _pieChartInstances[containerId].destroy();
-    delete _pieChartInstances[containerId];
-  }
-
-  // Build DOM
-  const canvasSide = document.createElement('div'); canvasSide.className = 'pie-canvas-side';
-  const wrap       = document.createElement('div'); wrap.className = 'pie-canvas-wrap';
-  const canvas     = document.createElement('canvas');
-  canvas.style.width = '160px'; canvas.style.height = '160px';
-  wrap.appendChild(canvas); canvasSide.appendChild(wrap);
-
-  const legendSide = document.createElement('div'); legendSide.className = 'pie-legend-side';
-  const legend     = document.createElement('div'); legend.className = 'pie-legend';
-
-  labels.forEach((lbl, i) => {
-    const barPct = Math.round((values[i] / maxVal) * 100);
-    const pct    = (values[i] / total * 100).toFixed(1);
-    const row    = document.createElement('div');
-    row.className = 'legend-row'; row.dataset.idx = i;
-    row.innerHTML = `<div class="legend-left"><span class="legend-dot" style="background:${colors[i]}"></span><span class="legend-ticker">${escHtml(lbl)}</span></div><div class="legend-bar-wrap"><div class="legend-bar-fill" style="width:${barPct}%;background:${colors[i]};opacity:0.6"></div></div><span class="legend-pct">${pct}%</span><span class="legend-val" style="color:${isPositive ? 'var(--green)' : 'var(--red)'}">${isPositive ? '+' : '-'}$${values[i].toFixed(0)}</span>`;
-    legend.appendChild(row);
-  });
-
-  legendSide.appendChild(legend);
-  container.innerHTML = '';
-  container.appendChild(canvasSide);
-  container.appendChild(legendSide);
-
-  const surfaceColor = getComputedStyle(document.body).getPropertyValue('--surface').trim() || '#111419';
-
-  const chart = new Chart(canvas, {
-    type: 'doughnut',
-    data: {
-      labels,
-      datasets: [{
-        data: values,
-        backgroundColor: colors,
-        borderColor: surfaceColor,
-        borderWidth: 2,
-        hoverOffset: 6,
-      }]
-    },
-    options: {
-      responsive: false,
-      cutout: '52%',
-      animation: { duration: 400 },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#111419',
-          borderColor: '#222831',
-          borderWidth: 1,
-          titleColor: '#5a6473',
-          bodyColor: '#e8ecf0',
-          padding: 10,
-          callbacks: {
-            label: ctx => {
-              const pct = (ctx.parsed / total * 100).toFixed(1);
-              return ` ${ctx.label}: ${isPositive ? '+' : '-'}$${ctx.parsed.toFixed(0)} (${pct}%)`;
-            }
-          }
-        }
-      }
-    },
-    plugins: [{
-      id: 'centerText',
-      afterDraw(chart) {
-        const { ctx, chartArea: { width, height, left, top } } = chart;
-        const cx = left + width / 2, cy = top + height / 2;
-        ctx.save();
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text').trim() || '#e8ecf0';
-        ctx.font = "bold 12px 'Space Mono',monospace";
-        ctx.fillText(fmtAbs(total), cx, cy);
-        ctx.restore();
-      }
-    }]
-  });
-
-  _pieChartInstances[containerId] = chart;
-
-  // Sync legend hover with chart highlight
-  legend.querySelectorAll('.legend-row').forEach((row, i) => {
-    row.addEventListener('mouseenter', () => {
-      legend.querySelectorAll('.legend-row').forEach((r, j) => { r.style.opacity = j === i ? '1' : '0.3'; });
-      chart.setDatasetVisibility(0, true);
-      chart.tooltip.setActiveElements([{ datasetIndex: 0, index: i }], { x: 0, y: 0 });
-      chart.update('none');
-    });
-    row.addEventListener('mouseleave', () => {
-      legend.querySelectorAll('.legend-row').forEach(r => { r.style.opacity = '1'; });
-      chart.tooltip.setActiveElements([], {});
-      chart.update('none');
-    });
-  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
