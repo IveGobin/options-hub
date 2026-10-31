@@ -402,7 +402,8 @@
   .alloc-table tr:last-child td { border-bottom:none; }
   .alloc-table td.pct { padding-right:4px; }
   .alloc-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:8px; vertical-align:middle; }
-  @media(max-width:700px) { .snap-hero{grid-template-columns:1fr;} .snap-charts{grid-template-columns:1fr;} .snap-nav-value{font-size:32px;} }
+  @media(max-width:700px) { .snap-hero{grid-template-columns:1fr;gap:1.25rem;} .snap-charts{grid-template-columns:1fr;} .snap-nav-value{font-size:32px;}
+    .snap-twr-label,.snap-twr-value,.snap-twr-sub{text-align:left;} }   /* stacked on mobile: TWR aligned with the value above */
 
   /* ── CASH BALANCES ── */
   .cash-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; }
@@ -705,7 +706,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.12 · m9</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.13 · m9</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
