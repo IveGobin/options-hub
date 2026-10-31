@@ -1461,21 +1461,14 @@ input[type="range"]::-moz-range-thumb {
         var nlvEUR  = newest.nlvEUR;
         var cashEUR = newest.cashEUR;
 
-        var notionalUSD = 0;
-        var tickerMap   = {};
-        var dateMap     = {};
-        parsed.forEach(function(p) {
-            notionalUSD += p.notionalUSD;
-            Object.keys(p.tickerMap).forEach(function(k) {
-                tickerMap[k] = (tickerMap[k] || 0) + p.tickerMap[k];
-            });
-            Object.keys(p.dateMap).forEach(function(k) {
-                dateMap[k] = (dateMap[k] || 0) + p.dateMap[k];
-            });
-        });
+        // Open Positions is a snapshot at each statement's period end, so only the NEWEST
+        // statement describes what is open now (same as NLV / cash above). Summing the
+        // snapshots of several statements would count still-listed or long-closed puts twice.
+        var notionalUSD = newest.notionalUSD;
+        var tickerMap   = Object.assign({}, newest.tickerMap);
+        var dateMap     = Object.assign({}, newest.dateMap);
 
-        gPositions = [];
-        parsed.forEach(function(p) { gPositions = gPositions.concat(p.positions); });
+        gPositions = newest.positions.slice();
         gStmtDate = newest.periodEnd || 0;
         var wSum = 0;
         gPositions.forEach(function(pos) { wSum += pos.w * pos.notional; });
@@ -1528,7 +1521,7 @@ input[type="range"]::-moz-range-thumb {
         }
 
         if (notionalUSD <= 0) {
-            var sawOpen = parsed.some(function(p){ return p.openPosSeen; });
+            var sawOpen = newest.openPosSeen;
             messages.push('\u26a0\ufe0f No short puts recognised' +
                 (sawOpen ? ' (option rows found, but none are short puts)' : ' (no option rows found in Open Positions)') +
                 ' \u2013 ticker/date concentration stay at 0%');
