@@ -388,8 +388,8 @@
   .snap-stat-label { font-size:11px; color:var(--muted); margin-bottom:6px; font-weight:500; }
   .snap-stat-value { font-family:'Space Mono',monospace; font-size:20px; font-weight:700; white-space:nowrap; }
   .snap-stat-sub { font-size:11px; color:var(--muted); margin-left:6px; font-weight:400; font-family:'Syne',sans-serif; }
-  .snap-charts { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px; }
-  .snap-chart-card { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:20px; }
+  .snap-charts { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .snap-chart-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:24px; }
   .snap-chart-title { font-size:12px; color:var(--muted); font-weight:500; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:16px; }
   /* 100% stacked bar + table (Portfolio Allocation, Cash Earned by Source) */
   .alloc-bar { display:flex; height:56px; border-radius:8px; overflow:hidden; gap:2px; background:var(--border); }
@@ -402,7 +402,7 @@
   .alloc-table tr:last-child td { border-bottom:none; }
   .alloc-table td.pct { padding-right:4px; }
   .alloc-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:8px; vertical-align:middle; }
-  @media(max-width:700px) { .snap-hero{grid-template-columns:1fr;gap:1.25rem;} .snap-charts{grid-template-columns:1fr;} .snap-nav-value{font-size:32px;}
+  @media(max-width:700px) { .snap-hero{grid-template-columns:1fr;gap:1.25rem;} .snap-charts{grid-template-columns:1fr;} .snap-chart-card{padding:18px 16px;} .snap-nav-value{font-size:32px;}
     .snap-twr-label,.snap-twr-value,.snap-twr-sub{text-align:left;} }   /* stacked on mobile: TWR aligned with the value above */
 
   /* ── CASH BALANCES ── */
@@ -706,7 +706,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.13 · m9</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.14 · m9</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -746,17 +746,22 @@
           <div id="snap-twr-block"></div>
         </div>
         <div class="snap-stats" id="snap-stats"></div>
-        <div class="snap-charts">
-          <div class="snap-chart-card">
-            <div class="snap-chart-title" data-unit="disp">Portfolio Allocation</div>
-            <div id="portfolioAllocBar" class="alloc-bar"></div>
-            <div id="portfolioAllocTable"></div>
-          </div>
-          <div class="snap-chart-card">
-            <div class="snap-chart-title" data-unit="disp">Cash Earned by Source</div>
-            <div id="incomeAllocBar" class="alloc-bar"></div>
-            <div id="incomeAllocTable"></div>
-          </div>
+      </div>
+    </div>
+
+    <!-- Own section (not nested inside the snapshot card) so the bars and tables get the full width on phones -->
+    <div class="section">
+      <div class="section-title">Allocation &amp; Income</div>
+      <div class="snap-charts">
+        <div class="snap-chart-card">
+          <div class="snap-chart-title" data-unit="disp">Portfolio Allocation</div>
+          <div id="portfolioAllocBar" class="alloc-bar"></div>
+          <div id="portfolioAllocTable"></div>
+        </div>
+        <div class="snap-chart-card">
+          <div class="snap-chart-title" data-unit="disp">Cash Earned by Source</div>
+          <div id="incomeAllocBar" class="alloc-bar"></div>
+          <div id="incomeAllocTable"></div>
         </div>
       </div>
     </div>
