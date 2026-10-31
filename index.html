@@ -342,7 +342,7 @@
 
   <div id="frame-area">
     <div id="welcome">
-      <h1>Options Hub</h1>
+      <h1>Options Hub <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.0</span></h1>
       <p>Select a tool from the sidebar or click a card below.</p>
       <div class="card-groups">
 
@@ -494,7 +494,11 @@
     area.innerHTML = '';
 
     var iframe = document.createElement('iframe');
-    iframe.src   = file;
+    // Cache-buster: always load the newest version of the tool (GitHub Pages / Safari cache
+    // HTML for several minutes, so a just-deployed version would otherwise not show up).
+    var hashAt = file.indexOf('#');
+    var base = hashAt >= 0 ? file.slice(0, hashAt) : file, hash = hashAt >= 0 ? file.slice(hashAt) : '';
+    iframe.src   = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'v=' + Date.now() + hash;
     iframe.title = name;
 
     // After load: send postMessage AND directly call applyCoachI18n if available
