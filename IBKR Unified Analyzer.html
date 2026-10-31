@@ -580,7 +580,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.8</span></h1>
+    <h1>IBKR <span>Unified</span> Analyzer <span style="font-size:11px;font-weight:400;color:var(--muted);font-family:'Space Mono',monospace;margin-left:8px;">v2.9</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div id="header-meta" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;display:flex;gap:12px;flex-wrap:wrap;"></div>
@@ -781,7 +781,7 @@
           <thead><tr>
             <th>Ticker</th><th>Type</th><th>Strike</th><th>Qty assigned</th>
             <th>Assign date</th><th data-unit="disp">Premium collected</th><th data-unit="usd">Per share</th>
-            <th data-unit="usd">Effective cost / share</th><th data-unit="disp">P&amp;L at assign</th>
+            <th data-unit="usd" title="Shares are booked at the strike; break-even (strike − premium) is shown for information only">Stock cost / share</th><th data-unit="disp" title="Premium of the assigned contracts, booked as realized option P&amp;L">Option P&amp;L (realized)</th>
           </tr></thead>
           <tbody id="assigned-tbody"></tbody>
         </table>
@@ -1288,8 +1288,37 @@ function processIBKR(sections) {
   const itCode   = ci(tCols,'code',15);
   const itBasis  = ci(tCols,'basis',12);
 
+  // Options P&L rules: see OPTIONS_PNL_RULES.md – read before changing any options calculation,
+  // and update it in the same change.
+  // ── OPTION SYMBOL ALIASES (corporate actions) ──
+  // After a corporate action IBKR may rename an option (e.g. 'MOD 20NOV26 135 P' → 'MOD1 20NOV26 135 P'):
+  // Trades and R&U keep the old name while Open Positions uses the new one. Financial Instrument
+  // Information lists both OCC codes in one row with the new name as Description. Map old → new so
+  // the position is recognised as open everywhere. Rules: OPTIONS_PNL_RULES.md.
+  const MON3 = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const occToDesc = occ => {
+    const m = (occ||'').trim().match(/^(\S+)\s+(\d{2})(\d{2})(\d{2})([PC])(\d{8})$/);
+    return m ? `${m[1]} ${m[4]}${MON3[+m[3]-1]}${m[2]} ${+m[6]/1000} ${m[5]}` : null;
+  };
+  const optAlias = {};
+  for (const r of getData(sections,'Financial Instrument Information')) {
+    if (r[2] !== 'Equity and Index Options') continue;
+    const desc = (r[4]||'').trim();
+    const occs = (r[3]||'').split(',');
+    if (!desc || occs.length < 2) continue;
+    for (const occ of occs) { const old = occToDesc(occ); if (old && old !== desc) optAlias[old] = desc; }
+  }
+  const canonOpt = s => { const k = (s||'').trim(); return optAlias[k] || k; };
+
   const tradesRaw = getData(sections,'Trades').filter(r => r[2]==='Order' && r[3]==='Equity and Index Options');
   const tradeSubTotals = (sections['Trades']||[]).filter(r => r[1]==='SubTotal' && r[3]==='Equity and Index Options');
+  for (const r of tradesRaw.concat(tradeSubTotals)) if (r[itSym]) r[itSym] = canonOpt(r[itSym]);
+  // Same rename in R&U, merging rows if both names appear.
+  for (let i = optionsRU.length - 1; i >= 0; i--) {
+    const o = optionsRU[i]; o.sym = canonOpt(o.sym);
+    const j = optionsRU.findIndex(x => x !== o && x.sym === o.sym);
+    if (j >= 0 && j < i) { const x = optionsRU[j]; x.realTotal += o.realTotal; x.unrTotal += o.unrTotal; x.total += o.total; optionsRU.splice(i, 1); }
+  }
 
   const tradesBySym = {};
   for (const r of tradesRaw) {
@@ -1311,9 +1340,13 @@ function processIBKR(sections) {
     // Track the last CLOSING trade date (code 'C', expiry 'Ep', or any trade with realized P/L)
     // so partial-close realized P/L can be attributed to the month it was actually realized.
     const _codes = (r[itCode]||'').split(';').map(c=>c.trim());
-    if (d && (_codes.includes('C') || _codes.includes('Ep') || num(r[itRealPL]) !== 0)) {
+    if (d && (_codes.includes('C') || _codes.includes('Ep') || _codes.includes('A') || _codes.includes('Ex') || num(r[itRealPL]) !== 0)) {
       if (!optTradeMap[sym].lastCloseDate || d > optTradeMap[sym].lastCloseDate) optTradeMap[sym].lastCloseDate = d;
     }
+    // Assignment / exercise: IBKR rolls the option premium into the stock's cost basis and reports
+    // realized P/L 0 on this row; the premium is in this row's Basis column (signed: + credit kept
+    // on a short option, − debit paid on a long one). This app books it as realized OPTION P/L.
+    if (_codes.includes('A') || _codes.includes('Ex')) optTradeMap[sym].assignBasis = (optTradeMap[sym].assignBasis||0) + num(r[itBasis]);
     optTradeMap[sym].netQty += num(r[itQty]);
     optTradeMap[sym]._trades.push({ d, qty: num(r[itQty]) });
   }
@@ -1365,18 +1398,29 @@ function processIBKR(sections) {
     const sym = (r[itSym]||'').trim();
     if (!sym) continue;
     const realPL = num(r[itRealPL]);
-    if (optTradeMap[sym]) optTradeMap[sym].subRealPL = realPL;
-    else optTradeMap[sym] = { proceeds:0, comm:0, lastDate:null, firstDate:null, maxQty:0, netQty:0, subRealPL: realPL };
+    if (!optTradeMap[sym]) optTradeMap[sym] = { proceeds:0, comm:0, lastDate:null, firstDate:null, maxQty:0, netQty:0 };
+    // Accumulate: with several loaded statements one symbol can have a SubTotal row per file.
+    optTradeMap[sym].subRealPL = (optTradeMap[sym].subRealPL||0) + realPL;
+    optTradeMap[sym].subQty    = (optTradeMap[sym].subQty||0) + num(r[itQty]);
+    optTradeMap[sym].hasSub    = true;
   }
-  for (const o of optionsRU) { const t = optTradeMap[o.sym]; o.tradePL = t ? +(t.proceeds+t.comm).toFixed(2) : o.realTotal; }
+  // ── SINGLE SOURCE OF TRUTH for realized option P/L (see OPTIONS_PNL_RULES.md) ──
+  // realPL = IBKR SubTotal realized P/L + premium of assigned/exercised contracts (assignBasis).
+  // Every view (monthly chart, Closed P&L matrix/quarters, stat badges, put/call split, KPIs)
+  // must use optRealPL() — never proceeds+comm or the raw SubTotal value on its own.
+  for (const sym of Object.keys(optTradeMap)) {
+    const t = optTradeMap[sym];
+    t.realPL = t.hasSub ? (t.subRealPL||0) + (t.assignBasis||0) : (t.proceeds + t.comm);
+  }
+  const optRealPL = sym => { const t = optTradeMap[(sym||'').trim()]; return t ? t.realPL : null; };
+  for (const o of optionsRU) { const v = optRealPL(o.sym); o.tradePL = v !== null ? +v.toFixed(2) : o.realTotal; }
 
   const openOptPosMap = {};
   getData(sections,'Open Positions').filter(r=>r[2]==='Summary'&&r[3]==='Equity and Index Options').forEach(r=>{ openOptPosMap[r[iOpSym].trim()] = Math.abs(num(r[iOpCostB])); });
   const ruSyms = new Set(optionsRU.map(o => o.sym.trim()));
   for (const sym of Object.keys(optTradeMap)) {
     if (!ruSyms.has(sym.trim()) && !openOptPosMap.hasOwnProperty(sym.trim())) {
-      const t = optTradeMap[sym];
-      optionsRU.push({ sym, realTotal:0, unrTotal:0, tradePL:+(t.proceeds+t.comm).toFixed(2) });
+      optionsRU.push({ sym, realTotal:0, unrTotal:0, tradePL:+optRealPL(sym).toFixed(2) });
     }
   }
   const closedOptions = optionsRU.filter(o => o.unrTotal === 0);
@@ -1422,27 +1466,32 @@ function processIBKR(sections) {
     if (!parsed) continue;
     const qty = Math.abs(num(r[itQty]));
     const assignDate = parseTradeDate(r[itDate]);
-    const sellTrades = (tradesBySym[sym]||[]).filter(t=>t.qty<0);
-    // Sum total sell qty and total premium collected across all sell trades
-    let totalSellQty = 0, totalPremCollected = 0;
-    // Net premium: proceeds minus commission (matches IBKR's premium-adjusted cost basis)
-    sellTrades.forEach(t => { totalSellQty += Math.abs(t.qty); totalPremCollected += Math.abs(t.proceeds) - Math.abs(t.comm); });
-    // Only attribute the proportion of premium that corresponds to the assigned contracts
-    const premCollected = totalSellQty > 0 ? (qty / totalSellQty) * totalPremCollected : 0;
+    // Net premium of the assigned contracts = Basis of this assignment row (exact, incl. commissions).
+    // Fallback for statements without a Basis column: pro-rata share of all sell trades.
+    let premCollected = num(r[itBasis]);
+    if (!premCollected) {
+      const sellTrades = (tradesBySym[sym]||[]).filter(t=>t.qty<0);
+      let totalSellQty = 0, totalPremCollected = 0;
+      sellTrades.forEach(t => { totalSellQty += Math.abs(t.qty); totalPremCollected += Math.abs(t.proceeds) - Math.abs(t.comm); });
+      premCollected = totalSellQty > 0 ? (qty / totalSellQty) * totalPremCollected : 0;
+    }
     const perShare = qty > 0 ? premCollected/(qty*100) : 0;
-    const effectiveCost = parsed.type==='P' ? parsed.strike-perShare : parsed.strike+perShare;
+    // Shares are booked at the STRIKE; the premium is realized option P/L (OPTIONS_PNL_RULES.md).
+    // breakEven is informational only and is not used in any calculation.
+    const breakEven = parsed.type==='P' ? parsed.strike-perShare : parsed.strike+perShare;
     assignedPositions.push({ sym, ticker:parsed.ticker, type:parsed.type, strike:parsed.strike,
-      qtyContracts:qty, sharesAssigned:qty*100, assignDate, premCollected, perShare, effectiveCost, realAtAssign:num(r[itRealPL]) });
+      qtyContracts:qty, sharesAssigned:qty*100, assignDate, premCollected, perShare, breakEven,
+      realAtAssign: num(r[itRealPL]) + premCollected });
   }
 
   // ── CLOSED P&L (for matrix) ──
   const openSyms = new Set(openPositions.map(p=>p.sym));
   const closedPL = [];
-  for (const r of tradeSubTotals) {
-    const sym = r[itSym]?r[itSym].trim():'';
-    if (!sym) continue;
-    const netQty = num(r[itQty]);
-    const realTotal = num(r[itRealPL]);
+  for (const sym of Object.keys(optTradeMap)) {
+    const tInfo = optTradeMap[sym];
+    if (!tInfo.hasSub) continue;
+    const netQty = tInfo.subQty || 0;
+    const realTotal = +tInfo.realPL.toFixed(6);   // optRealPL: SubTotal realized + assigned premium
     // include: fully closed (qty=0) OR partially closed (qty!=0 but has realized P/L)
     if (netQty !== 0 && realTotal === 0) continue;
     // skip fully open positions with no realized P/L
@@ -1466,15 +1515,15 @@ function processIBKR(sections) {
       monthKey   = `${y}-${String(m+1).padStart(2,'0')}`;
       monthLabel = closeDate.toLocaleString('en-US',{month:'short'}) + " '" + String(y).slice(2);
     }
-    const isPartial = num(r[itQty]) !== 0;
+    const isPartial = netQty !== 0;
     closedPL.push({ sym, ticker:parsed.ticker, expiry:parsed.expiry, strike:parsed.strike, type:parsed.type, realTotal, closeDate, monthKey, monthLabel, isPartial });
   }
 
   // ── CLOSED STATS (from realized P/L — same source as the matrix) ──
   // Includes partially-closed positions (e.g. a partial buyback of a short put),
   // whose realized loss/gain was previously ignored because the position still
-  // had unrealized P/L. Assigned premium (realized P/L = 0) counts as neither
-  // win nor loss — it rolls into the stock's cost basis, matching IBKR.
+  // had unrealized P/L. Premium of assigned options counts as realized option P/L
+  // (a win), and the shares are booked at the strike — see OPTIONS_PNL_RULES.md.
   const closedWin  = closedPL.filter(c => c.realTotal > 0).length;
   const closedLose = closedPL.filter(c => c.realTotal < 0).length;
   const closedWinRate = (closedWin+closedLose) > 0 ? (closedWin/(closedWin+closedLose)*100).toFixed(0) : 0;
@@ -1598,17 +1647,17 @@ function processIBKR(sections) {
       // Partially-closed open position: realized P/L already booked (e.g. partial
       // buyback) belongs to the month it was realized, not the expiry month.
       const t = optTradeMap[o.sym.trim()];
-      if (t && t.subRealPL) {
+      if (t && t.realPL) {
         const cd = t.lastCloseDate || t.lastDate;
         if (cd) {
           const d2 = new Date(cd+'T00:00:00');
           const ck = MONTH_ABBR[d2.getMonth()]+"'"+String(d2.getFullYear()).slice(2);
           if (!optByMonth[ck]) optByMonth[ck] = { closedPL:0, premiumCollected:0, count:0 };
-          optByMonth[ck].closedPL += t.subRealPL;
+          optByMonth[ck].closedPL += t.realPL;
         }
       }
     }
-    else optByMonth[key].closedPL += o.tradePL;
+    else optByMonth[key].closedPL += o.tradePL;   // = optRealPL(sym), same value as the Closed P&L matrix
     optByMonth[key].count++;
   }
   const monthOrder = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
@@ -1622,9 +1671,9 @@ function processIBKR(sections) {
   // files, always matching sells against the OLDEST open lots first.
   //   buy cost      = |proceeds| + |commission|
   //   sell proceeds = proceeds − |commission|
-  // Shares bought/delivered through option assignment get the net option premium rolled
-  // into the price (strike − premium/sh for puts, strike + premium/sh for calls), the same
-  // way IBKR treats it in its cost basis.
+  // Shares bought/delivered through option assignment are booked at the STRIKE price. The
+  // option premium is NOT rolled into the cost basis (IBKR does that); it is counted as
+  // realized option P/L instead — see OPTIONS_PNL_RULES.md.
   const mtmStockMap = {};
   for (const r of getData(sections,'Mark-to-Market Performance Summary').filter(r2=>r2[2]==='Stocks')) {
     mtmStockMap[normSym((r[3]||'').trim())] = { curQty:num(r[5]), curPrice:num(r[7]) };
@@ -1633,19 +1682,6 @@ function processIBKR(sections) {
   const toEurAmt = (v, ccy) => ccy === 'EUR' ? v : v / eurPerRate;
   // Per-date conversion (tecajna_lista_usd.json): USD per EUR on the given day, null if unavailable.
   const rateOn = (dateStr, ccy) => ccy === 'EUR' ? 1 : fxRateOn(dateStr);
-
-  // Net premium rolled into the stock = Basis of the assigned (short) option's closing row.
-  const assignPrem = {};
-  for (const r of tradesRaw) {
-    if (!(r[itCode]||'').split(';').map(c=>c.trim()).includes('A')) continue;
-    const q = num(r[itQty]);
-    const parsed = parseOptSym((r[itSym]||'').trim());
-    if (!parsed || q <= 0) continue;
-    const k = `${(parsed.ticker||'').trim().toUpperCase()}|${(r[itDate]||'').substring(0,10)}|${parsed.strike}`;
-    if (!assignPrem[k]) assignPrem[k] = { prem:0, shares:0 };
-    assignPrem[k].prem   += Math.abs(num(r[itBasis]));
-    assignPrem[k].shares += q*100;
-  }
 
   const itPrice = ci(tCols,'t. price',8);
   const stockOrders = getData(sections,'Trades')
@@ -1661,12 +1697,8 @@ function processIBKR(sections) {
     const price = num(r[itPrice]);
     const codes = (r[itCode]||'').split(';').map(c=>c.trim());
     const dateStr = ts.substring(0,10);
-    let perShare = 0;
-    if (codes.includes('A')) {
-      const a = assignPrem[`${key.toUpperCase()}|${dateStr}|${Math.abs(price)}`];
-      if (a && a.shares) perShare = a.prem / a.shares;
-    }
-    const t = { date:ts, qty, price, proceeds, comm:-comm, code:(r[itCode]||'').trim(), realPL:0, matched:[], untracked:0 };
+    const perShare = 0;   // assignment: shares at strike, no premium adjustment (OPTIONS_PNL_RULES.md)
+    const t ={ date:ts, qty, price, proceeds, comm:-comm, code:(r[itCode]||'').trim(), realPL:0, matched:[], untracked:0 };
     const dayRate = rateOn(dateStr, book.ccy) || eurPerRate;   // USD per EUR on trade day
     if (qty > 0) {
       const cost = Math.abs(proceeds) + comm - perShare*qty;
@@ -1714,6 +1746,8 @@ function processIBKR(sections) {
     let unrEur = null;
     if (op && Math.abs(op.qty - qtyHeld) > 1e-6) {
       // Loaded history does not explain the statement's open quantity → trust IBKR's figures.
+      // NOTE: IBKR's cost basis includes premium of assigned options (differs from this app's
+      // strike-based rule). Load the full history to avoid this fallback (OPTIONS_PNL_RULES.md).
       mismatch = true;
       qtyHeld = op.qty; costHeld = op.costBasis; unr = op.unrPL;
     } else if (qtyHeld > 1e-6 && lastPrice) {
@@ -2487,15 +2521,14 @@ function buildClosedDetailRows(tradesBySym) {
           const profit    = premium - buyback + openFee + closeFee;
           const profitPct = premium > 0 ? (profit / premium) * 100 : null;
 
-          // Assigned options are treated as stock purchases — exclude from this table
-          if (status !== 'Assigned') {
-            rows.push({
-              ticker: parsed.ticker, sym,
-              type: parsed.type, strike: parsed.strike,
-              qty: matched, openDate: lot.date, closeDate,
-              premium, buyback, openFee, closeFee, profit, profitPct, status
-            });
-          }
+          // Assigned options are included: the premium is realized option P/L (buyback = 0),
+          // the shares are booked at the strike (OPTIONS_PNL_RULES.md).
+          rows.push({
+            ticker: parsed.ticker, sym,
+            type: parsed.type, strike: parsed.strike,
+            qty: matched, openDate: lot.date, closeDate,
+            premium, buyback, openFee, closeFee, profit, profitPct, status
+          });
 
           lot.remaining -= matched;
           toClose -= matched;
@@ -2701,7 +2734,7 @@ function renderAssignedTable(assignedPositions) {
       <td class="mono">${p.assignDate?fmtDate(p.assignDate):'—'}</td>
       <td><span class="premium-pill">${dPnl(p.premCollected, 'USD')}</span></td>
       <td class="mono" style="color:var(--accent);font-size:11px;">${fmtNative(p.perShare, '$')}/sh</td>
-      <td class="mono" style="color:var(--yellow);">${fmtNative(p.effectiveCost, '$')}/sh</td>
+      <td class="mono">${fmtNative(p.strike, '$')}/sh <span style="color:var(--muted);font-size:10px;" title="Break-even = strike ${p.type==='P'?'−':'+'} premium/share (information only)">B/E ${fmtNative(p.breakEven, '$')}</span></td>
       <td class="${plCls}">${dPnl(p.realAtAssign, 'USD')}</td>`;
     tbody.appendChild(tr);
   });
@@ -2717,7 +2750,7 @@ function renderAssignedTable(assignedPositions) {
     '',                                                                                                                                       // Assign date
     { html:`<span class="premium-pill" style="background:rgba(0,180,216,0.1);color:var(--blue)">${dPnl(totPrem, 'USD')}</span>` },           // Premium collected
     '',                                                                                                                                       // Per share
-    '',                                                                                                                                       // Effective cost
+    '',                                                                                                                                       // Stock cost
     { html:dPnl(totPL, 'USD'), class:totPlCls },                                                             // P&L at assign
   ], 'border-top:1px solid var(--border);');
   tbody.appendChild(tfoot);
@@ -3014,7 +3047,7 @@ function renderMatrix(filterYear) {
 //   EUR: FIFO per-lot FX (equal to native for EUR rows), so it includes the currency effect.
 //   USD: native P&L for USD rows, EUR rows at the statement rate; no per-lot currency effect (fx = 0).
 // Legacy rows without EUR fields use the statement rate.
-const STOCK_ECON_TIP = 'Economic view, not tax. EUR figures use the FX rate on each purchase/sale day (FIFO) so they include currency effect; IBKR reports that part separately under Forex. Option premium from assigned puts/calls is included in share cost basis.';
+const STOCK_ECON_TIP = 'Economic view, not tax. EUR figures use the FX rate on each purchase/sale day (FIFO) so they include currency effect; IBKR reports that part separately under Forex. Shares from assigned puts/calls are booked at the strike price; the option premium is counted as realized option P&L, not in the share cost basis (IBKR does the opposite).';
 // Currency of a stock row / its symbol — one helper for the rows, lots, tx tables and their headers.
 function rowCcy(row, op) { return row.eurBase ? 'EUR' : (row.ccy || (op && op.ccy) || 'USD'); }
 function cs(row, op) { return rowCcy(row, op) === 'EUR' ? '€' : '$'; }
@@ -3145,11 +3178,8 @@ function renderStocksTable(data) {
           const a = assignLookup[`${symKey}|${dateStr}|${Math.abs(t.price)}`];
           if (a && a.perShare > 0) {
             hasAssign = true;
-            // Put assignment = buy at strike (effective cost lower by premium);
-            // call assignment = sell at strike (effective proceeds higher by premium).
-            const eff = isBuy ? Math.abs(t.price) - a.perShare : Math.abs(t.price) + a.perShare;
-            priceCell = `${sym}${Math.abs(t.price).toFixed(3)} <span style="color:var(--muted)">→</span> <span style="color:var(--yellow)" title="Strike ${isBuy ? '−' : '+'} net option premium (${sym}${a.perShare.toFixed(3)}/sh)">${sym}${eff.toFixed(3)}</span><div style="color:var(--yellow);font-size:9px;opacity:0.85;white-space:nowrap;">effective price (strike ${isBuy ? '−' : '+'} premium)</div>`;
-            assignBadge = `<span class="tx-assign-badge" title="Shares delivered via option assignment — premium of ${sym}${a.prem.toFixed(2)} rolled into cost basis">ASSIGNED</span>`;
+            // Shares are booked at the strike; the premium is realized option P&L (OPTIONS_PNL_RULES.md).
+            assignBadge = `<span class="tx-assign-badge" title="Shares delivered via option assignment at the strike — premium of ${sym}${a.prem.toFixed(2)} is counted as realized option P&amp;L">ASSIGNED</span>`;
           } else {
             assignBadge = '<span class="tx-assign-badge">ASSIGNED</span>';
           }
@@ -3172,19 +3202,19 @@ function renderStocksTable(data) {
           <div class="stock-tx-title">Transaction history — ${escHtml(s.sym)} (${trades.length} trade${trades.length !== 1 ? 's' : ''})</div>
           <table class="tx-table">
             <thead><tr>
-              <th>Date</th><th>Qty</th><th>Price</th><th>Proceeds</th><th>Commission</th><th>Realized P&L (${ccy}, FIFO)</th><th style="text-align:left;" title="Lot prices of assigned shares are effective prices (strike − premium)">FIFO lots sold</th><th>Code</th>
+              <th>Date</th><th>Qty</th><th>Price</th><th>Proceeds</th><th>Commission</th><th>Realized P&L (${ccy}, FIFO)</th><th style="text-align:left;" title="Assigned shares are booked at the strike price">FIFO lots sold</th><th>Code</th>
             </tr></thead>
             <tbody>${txRows}</tbody>
           </table>
           ${(s.lots && s.lots.length) ? `<div class="stock-tx-title" style="margin-top:14px;">Open lots (FIFO) — shares you still hold</div>
           <table class="tx-table">
-            <thead><tr><th>Bought</th><th>Qty</th><th title="For shares received by assignment this is the effective price (strike − premium), see note below">Cost / share</th><th>Unrealized P&L (${ccy})</th></tr></thead>
+            <thead><tr><th>Bought</th><th>Qty</th><th title="Shares received by assignment are booked at the strike price">Cost / share</th><th>Unrealized P&L (${ccy})</th></tr></thead>
             <tbody>${s.lots.map(l => {
               const u = s.lastPrice ? l.qty*(s.lastPrice - l.unit) : null;
               return `<tr><td class="dep-date">${l.date}</td><td>${+l.qty.toFixed(4)} sh</td><td>${sym}${l.unit.toFixed(3)}</td><td style="color:${pnlColor(u)}">${fmtPnl(u, sym)}</td></tr>`;
             }).join('')}</tbody>
           </table>` : ''}
-          ${hasAssign ? `<div style="margin-top:8px;font-size:10px;color:var(--muted);">→ <span style="color:var(--yellow)">yellow price</span> = effective price (strike − premium) after net option premium (strike − premium/sh for assigned puts, strike + premium/sh for assigned calls). Realized / unrealized P&L is calculated FIFO (oldest lots are sold first) using this premium-adjusted basis.</div>` : ''}
+          ${hasAssign ? `<div style="margin-top:8px;font-size:10px;color:var(--muted);">ASSIGNED shares are booked at the strike price. The option premium is counted as realized option P&amp;L (Options tab), not in the share cost. Realized / unrealized P&amp;L is calculated FIFO (oldest lots are sold first).</div>` : ''}
         </div>
       </td>`;
 
@@ -3220,7 +3250,7 @@ function renderStocksTable(data) {
   if (stmt && Number.isFinite(stmt.real) && Number.isFinite(stmt.unr)) {
     const stmtRow = document.createElement('tr');
     stmtRow.className = 'summary-note-row';
-    stmtRow.innerHTML = `<td colspan="${NCOL}"><span class="stock-fx-note">IBKR statement (${DISP}, excl. FX): realized ${dPnl(stmt.real, 'EUR')} / unrealized ${dPnl(stmt.unr, 'EUR')}</span></td>`;
+    stmtRow.innerHTML = `<td colspan="${NCOL}"><span class="stock-fx-note">IBKR statement (${DISP}, excl. FX): realized ${dPnl(stmt.real, 'EUR')} / unrealized ${dPnl(stmt.unr, 'EUR')} · IBKR puts assigned option premium into share cost basis, this app counts it as option P&amp;L</span></td>`;
     tbody.appendChild(stmtRow);
   }
 }

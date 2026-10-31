@@ -1,5 +1,10 @@
 # Options Hub — project instructions
 
+## Options P&L rules
+Before any change that touches option P&L, stock P&L from assignments or P&L aggregation (monthly chart,
+Closed P&L matrix / quarters, KPIs) in `IBKR Unified Analyzer.html`, read @OPTIONS_PNL_RULES.md, follow it,
+check its invariants, and update it (including the changelog) in the same change.
+
 ## Always bump the version
 Every change to an app file must bump its visible version label, so the user can tell after opening the app that it refreshed.
 
