@@ -234,6 +234,23 @@
   .skpi .s { font-family:'Space Mono',monospace; font-size:10px; color:var(--muted); margin-top:3px; }
   tr.hl td { background:rgba(0,180,216,0.08); }
 
+  /* ── ALLOCATION BARS (same look as IBKR Unified Analyzer) ── */
+  .alloc-cards { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .alloc-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:24px; }
+  .alloc-title { font-size:12px; color:var(--muted); font-weight:500; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:16px; }
+  .alloc-bar { display:flex; height:56px; border-radius:8px; overflow:hidden; gap:2px; background:var(--border); }
+  .alloc-seg { display:flex; align-items:center; justify-content:center; min-width:3px; overflow:hidden; white-space:nowrap; font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .alloc-seg.sm { font-size:10px; }
+  .alloc-table { width:100%; border-collapse:collapse; margin-top:14px; font-size:13px; font-variant-numeric:tabular-nums; }
+  .alloc-table th { color:var(--muted); font-weight:500; font-size:12px; text-align:right; padding:6px 0 8px; border-bottom:1px solid var(--border); }
+  .alloc-table th:first-child, .alloc-table td:first-child { text-align:left; }
+  .alloc-table td { padding:7px 0; text-align:right; border-bottom:1px solid var(--border); color:var(--text); }
+  .alloc-table tr:last-child td { border-bottom:none; }
+  .alloc-table tr.total td { font-weight:600; border-top:1px solid var(--border); }
+  .alloc-table td.pct { padding-right:4px; }
+  .alloc-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:8px; vertical-align:middle; }
+  .alloc-empty { color:var(--muted); font-size:13px; padding:20px 0; }
+
   .bar { height:6px; border-radius:3px; background:var(--blue); display:inline-block; vertical-align:middle; }
   .bar-wrap { width:120px; display:inline-block; text-align:left; }
 
@@ -274,7 +291,7 @@
 <!-- APP -->
 <div id="app">
   <div class="top-bar">
-    <h1>IBKR <span>Portfolio</span> Simulator <span class="ver">v1.0</span></h1>
+    <h1>IBKR <span>Portfolio</span> Simulator <span class="ver">v1.1</span></h1>
     <div class="top-bar-right">
       <div class="file-chip"><span>📄</span><span id="file-name-text">file.csv</span></div>
       <div class="meta" id="header-meta"></div>
@@ -287,6 +304,22 @@
   <div class="layout">
     <main>
       <div id="restore-box"></div>
+
+      <div class="section">
+        <div class="section-title">Allocation</div>
+        <div class="alloc-cards">
+          <div class="alloc-card">
+            <div class="alloc-title" id="stock-alloc-title">Stock allocation</div>
+            <div id="stockAllocBar" class="alloc-bar"></div>
+            <div id="stockAllocTable"></div>
+          </div>
+          <div class="alloc-card">
+            <div class="alloc-title" id="opt-alloc-title">Short put exposure</div>
+            <div id="optAllocBar" class="alloc-bar"></div>
+            <div id="optAllocTable"></div>
+          </div>
+        </div>
+      </div>
 
       <div class="section">
         <div class="section-title">Market data</div>
@@ -714,12 +747,75 @@ function renderAll() {
   computeCalib();
   CUR = baseState(); SIM = simulate(S.actions);
   E_CUR = evaluate(CUR, 0); E_SIM = evaluate(SIM, 0);
-  renderSummary(); renderChanges(); renderScenarios(); renderSettings();
+  renderAllocation(); renderSummary(); renderChanges(); renderScenarios(); renderSettings();
   renderMarket(); renderStocks(); renderOptions(); renderTradeForm(); renderStress(); renderConc();
 }
 
 function syncDispToggle() { document.querySelectorAll('.ccy-toggle button').forEach(b => b.classList.toggle('active', b.dataset.ccy === S.disp)); }
 function setDisp(c) { S.disp = c === 'USD' ? 'USD' : 'EUR'; LS.set('ps_disp', S.disp); syncDispToggle(); if (S.stmt) renderAll(); }
+
+// ═══════════════════════════════════════════════════════════════════
+// ALLOCATION BARS (100% stacked bar + table) — same as IBKR Unified Analyzer
+// ═══════════════════════════════════════════════════════════════════
+const ALLOC_PALETTE = ['#e63946','#2ec4b6','#f4a261','#6a4c93','#06d6a0','#ffd166','#118ab2','#ef476f','#b7e4c7','#ff6b35','#c77dff','#80b918'];
+const CASH_COLOR = '#adb5bd';
+// items: [{label, value, color, sub}] with value in EUR (base), already in display order.
+function renderAllocBar(barId, tableId, firstCol, items, extraCol) {
+  const bar = document.getElementById(barId), table = document.getElementById(tableId);
+  items = items.filter(it => it.value > 0);
+  const total = items.reduce((a, it) => a + it.value, 0);
+  if (!total) { bar.innerHTML = ''; bar.style.display = 'none'; table.innerHTML = '<div class="alloc-empty">Nothing to show</div>'; return; }
+  bar.style.display = '';
+  const ink = hex => { const h = hex.replace('#',''); const r = parseInt(h.substr(0,2),16), g = parseInt(h.substr(2,2),16), b = parseInt(h.substr(4,2),16);
+    return (0.299*r + 0.587*g + 0.114*b) > 150 ? '#111' : '#fff'; };
+  const p = it => it.value / total * 100;
+  bar.innerHTML = items.map(it =>
+    `<div class="alloc-seg" style="flex:${p(it)} 1 0;background:${it.color};color:${ink(it.color)}" title="${escHtml(it.label)}: ${p(it).toFixed(1)}% · ${dMoney(it.value, 2)}">${p(it).toFixed(1)}%</div>`).join('');
+  if (ALLOC_RO) ALLOC_RO.observe(bar);
+  fitAllocLabels(bar);
+  table.innerHTML = `<table class="alloc-table"><thead><tr><th>${escHtml(firstCol)}</th>${extraCol ? `<th>${escHtml(extraCol)}</th>` : ''}<th>% ▾</th><th>${S.disp} value</th></tr></thead><tbody>${
+    items.map(it => `<tr><td><span class="alloc-dot" style="background:${it.color}"></span>${escHtml(it.label)}</td>${extraCol ? `<td>${it.sub || ''}</td>` : ''}<td class="pct">${p(it) < 0.1 ? '<0.1' : p(it).toFixed(1)}%</td><td>${dMoney(it.value, 2)}</td></tr>`).join('')
+  }<tr class="total"><td>Total</td>${extraCol ? '<td></td>' : ''}<td class="pct">100%</td><td>${dMoney(total, 2)}</td></tr></tbody></table>`;
+}
+// Segment labels: normal size if they fit, else small, else hidden (value stays in tooltip + table).
+function fitAllocLabels(bar) {
+  if (!bar.clientWidth) return;
+  bar.querySelectorAll('.alloc-seg').forEach(seg => {
+    if (seg.dataset.lbl === undefined) seg.dataset.lbl = seg.textContent;
+    seg.textContent = seg.dataset.lbl; seg.classList.remove('sm');
+    const fits = () => { const r = document.createRange(); r.selectNodeContents(seg); return r.getBoundingClientRect().width <= seg.clientWidth - 4; };
+    if (fits()) return;
+    seg.classList.add('sm');
+    if (fits()) return;
+    seg.textContent = Math.round(parseFloat(seg.dataset.lbl)) + '%';
+    if (!fits()) seg.textContent = '';
+  });
+}
+const ALLOC_RO = window.ResizeObserver ? new ResizeObserver(es => es.forEach(e => fitAllocLabels(e.target))) : null;
+
+// Simulated portfolio (equals the statement until you add changes). A ticker keeps the same colour in both cards.
+function renderAllocation() {
+  const stocks = {}, puts = {}, contracts = {};
+  for (const p of SIM.pos) {
+    const e = E_SIM.per[p.key];
+    if (p.kind === 'STK' && e.val > 0) stocks[p.ticker] = (stocks[p.ticker] || 0) + toEur(e.val, p.ccy);
+    if (p.kind === 'OPT' && p.right === 'P' && p.qty < 0) {
+      puts[p.ticker] = (puts[p.ticker] || 0) + toEur(p.strike * p.mult * -p.qty, p.ccy);
+      contracts[p.ticker] = (contracts[p.ticker] || 0) - p.qty;
+    }
+  }
+  const sStock = Object.entries(stocks).sort((a, b) => b[1] - a[1]);
+  const sPut   = Object.entries(puts).sort((a, b) => b[1] - a[1]);
+  const color = {};
+  for (const [t] of sStock.concat(sPut)) if (!color[t]) color[t] = ALLOC_PALETTE[Object.keys(color).length % ALLOC_PALETTE.length];
+  const suffix = S.actions.length ? ' — simulated' : '';
+  document.getElementById('stock-alloc-title').textContent = `Stock allocation (${S.disp})${suffix}`;
+  document.getElementById('opt-alloc-title').textContent = `Short put exposure (${S.disp})${suffix}`;
+  const stockItems = sStock.map(([t, v]) => ({ label:t, value:v, color:color[t] }));
+  if (E_SIM.cash > 0) stockItems.push({ label:'Cash', value:E_SIM.cash, color:CASH_COLOR });
+  renderAllocBar('stockAllocBar', 'stockAllocTable', 'Asset', stockItems);
+  renderAllocBar('optAllocBar', 'optAllocTable', 'Ticker', sPut.map(([t, v]) => ({ label:t, value:v, color:color[t], sub:contracts[t] + ' ct' })), 'Contracts');
+}
 
 // ── SUMMARY ──
 function renderSummary() {
