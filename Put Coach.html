@@ -139,37 +139,20 @@ input[type="range"]::-moz-range-thumb {
 .radar-leg-item { display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: var(--mono); color: var(--muted); }
 .radar-leg-dot { width: 10px; height: 3px; border-radius: 2px; flex-shrink: 0; }
 
-/* Margin cube: isometric stack of opaque blocks; transparent outlines = margin used */
-.mcube-wrap {
-    --c: 0,255,65; --pulse: 3s;
-    position: relative; margin: 16px auto 0; width: 100%; max-width: 280px;
-    aspect-ratio: 1 / 1;
-    perspective: 1200px; perspective-origin: 50% 50%;
+/* Margin grid: 100 blocks = NLV; filled blocks = excess liquidity left, empty = margin used */
+.mgrid {
+    --c: var(--safe);
+    display: grid; grid-template-columns: repeat(20, 1fr); gap: 3px;
+    width: 100%; max-width: 420px; margin: 10px auto 0;
 }
-.mcube-scene {
-    position: absolute; left: 50%; top: 50%; width: 0; height: 0;
-    transform-style: preserve-3d;
-    transform: rotateX(-30deg) rotateY(-45deg);
+.mg {
+    aspect-ratio: 4 / 3; border-radius: 3px; box-sizing: border-box;
+    border: 1px solid color-mix(in srgb, var(--c) 28%, transparent);
+    background: linear-gradient(90deg, var(--c) var(--f, 0%), transparent var(--f, 0%));
+    transition: background .25s;
 }
-.mc { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-style: preserve-3d; }
-/* used margin: transparent outline only */
-.mc:not(.on) .mc-f { background: none; border: 1px solid rgba(var(--c),.18); color: transparent; }
-.mc-f {
-    position: absolute; width: var(--s); height: var(--s);
-    left: calc(var(--s) / -2); top: calc(var(--s) / -2);
-    border: 1px solid rgba(0,0,0,.55); box-sizing: border-box;
-    backface-visibility: hidden; -webkit-backface-visibility: hidden;
-    background: linear-gradient(rgba(0,0,0,var(--k)), rgba(0,0,0,var(--k))), rgb(var(--c));
-    display: flex; align-items: center; justify-content: center;
-    font-family: monospace; font-weight: 700; font-size: calc(var(--s) * .6); line-height: 1;
-    color: rgba(0,0,0,.38); user-select: none; -webkit-user-select: none;
-}
-.mc-f.t  { --k: 0;   transform: rotateX(90deg) translateZ(calc(var(--s) / 2)); }
-.mc-f.fr { --k: .30; transform: translateZ(calc(var(--s) / 2)); }
-.mc-f.l  { --k: .42; transform: rotateY(-90deg) translateZ(calc(var(--s) / 2)); }
-.mc-f.r  { --k: .52; transform: rotateY(90deg) translateZ(calc(var(--s) / 2)); }
-.mc-f.bk { --k: .60; transform: rotateY(180deg) translateZ(calc(var(--s) / 2)); }
-.mc-f.b  { --k: .68; transform: rotateX(-90deg) translateZ(calc(var(--s) / 2)); }
+.mg.on { border-color: color-mix(in srgb, var(--c) 70%, #000); }
+.mgrid-cap { font-family: var(--mono); font-size: 10px; color: var(--muted); text-align: center; margin-top: 8px; line-height: 1.5; }
 
 /* Position sliders */
 .sliders-wrap { margin-top: 20px; }
@@ -271,7 +254,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.0</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.1</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -389,17 +372,11 @@ input[type="range"]::-moz-range-thumb {
             </div>
         </div>
 
-        <!-- Margin cube: full cube = NLV, filled part = excess liquidity -->
+        <!-- Margin grid: 100 blocks = NLV, filled blocks = excess liquidity -->
         <div class="div"></div>
-        <div style="font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:center;">Margin left <span id="mcube-pct" style="font-weight:700;"></span></div>
-        <div class="mcube-wrap" id="mcube-wrap" aria-hidden="true" style="margin-top:10px;">
-            <div class="mcube-scene" id="mcube-scene"></div>
-        </div>
-        <div class="radar-legend">
-            <div class="radar-leg-item"><div class="radar-leg-dot" style="background:#00ff41;height:8px;width:8px;border-radius:2px;"></div>Excess liquidity left</div>
-            <div class="radar-leg-item"><div class="radar-leg-dot" style="border:1px solid rgba(0,255,65,.5);height:8px;width:8px;border-radius:2px;"></div>Margin used</div>
-        </div>
-        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);text-align:center;margin-top:6px;">Full cube = net liquidation value · transparent blocks = margin used</div>
+        <div style="font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:center;">Margin left <span id="mgrid-pct" style="font-weight:700;"></span></div>
+        <div class="mgrid" id="mgrid" role="img" aria-label="Margin left"></div>
+        <div class="mgrid-cap" id="mgrid-cap"></div>
 
         <!-- Axis legend table -->
         <div id="axis-legend" style="margin-top:14px;">
@@ -571,66 +548,55 @@ input[type="range"]::-moz-range-thumb {
         onSliders();
     }
 
-    // ── MARGIN CUBE (4x4x4, 64 blocks = NLV; present blocks = excess liquidity, missing = margin used) ──
-    var mcCells = [];
-    var mcSize = 0;
+    // ── MARGIN GRID (100 blocks = NLV, 1 block = 1%; filled = excess liquidity left, empty = margin used) ──
+    var mgCells = [];
     var MARGIN_USED_PCT = 0;
+    var MG_NLV = 0;
 
-    function buildMarginCube() {
-        var scene = el('mcube-scene'), wrap = el('mcube-wrap');
-        if (!scene || !wrap) return;
-        var s = Math.round(Math.min(wrap.clientWidth, wrap.clientHeight) / 10);
-        if (!s || s === mcSize) return;
-        mcSize = s;
-        scene.style.setProperty('--s', s + 'px');
-        if (!mcCells.length) {
-            var faces = ['fr', 'bk', 'r', 'l', 't', 'b'];
-            for (var y = 0; y < 4; y++) for (var x = 0; x < 4; x++) for (var z = 0; z < 4; z++) {
-                var c = document.createElement('div'); c.className = 'mc';
-                faces.forEach(function(f) {
-                    var d = document.createElement('div'); d.className = 'mc-f ' + f; d.textContent = '$'; c.appendChild(d);
-                });
-                scene.appendChild(c);
-                mcCells.push({ el: c, x: x, y: y, z: z });
-            }
-            // fill order: layer by layer from the bottom, inside a layer from one corner to the opposite one
-            mcCells.slice().sort(function(a, b) {
-                return (a.y - b.y) || ((a.x + a.z) - (b.x + b.z)) || (a.x - b.x);
-            }).forEach(function(c, i) { c.rank = i; });
+    function buildMarginGrid() {
+        var grid = el('mgrid');
+        if (!grid || mgCells.length) return;
+        for (var i = 0; i < 100; i++) {
+            var d = document.createElement('div'); d.className = 'mg';
+            grid.appendChild(d); mgCells.push(d);
         }
-        // blocks touch: step = block size
-        mcCells.forEach(function(c) {
-            c.el.style.transform = 'translate3d(' + ((c.x - 1.5) * s) + 'px,' +
-                ((1.5 - c.y) * s) + 'px,' + ((c.z - 1.5) * s) + 'px)';
-        });
     }
+
+    function fmtBlocks(v) { return (Math.round(v * 10) / 10).toFixed(1).replace(/\.0$/, ''); }
 
     function setMarginUsed(pct) {
         pct = Math.max(0, Math.min(100, parseFloat(pct) || 0));
         MARGIN_USED_PCT = pct;
-        buildMarginCube();
-        var freePct = 100 - pct;
-        var n = Math.round(freePct / 100 * 64);
+        buildMarginGrid();
+        var free = 100 - pct;                      // blocks left, can be fractional
+        var color = free >= 60 ? 'var(--safe)' : free >= 30 ? 'var(--warn)' : 'var(--danger)';
+        var grid = el('mgrid');
+        grid.style.setProperty('--c', color);
 
-        var wrap = el('mcube-wrap');
-        var rgb = freePct >= 60 ? '0,255,65' : freePct >= 30 ? '255,176,0' : '255,50,50';
-        wrap.style.setProperty('--c', rgb);
-        var pctEl = el('mcube-pct');
-        pctEl.textContent = freePct.toFixed(0) + '%';
-        pctEl.style.color = 'rgb(' + rgb + ')';
-        wrap.style.setProperty('--pulse', freePct < 10 ? '1.2s' : freePct < 30 ? '2s' : '3s');
+        mgCells.forEach(function(c, i) {
+            var f = Math.max(0, Math.min(1, free - i));
+            c.style.setProperty('--f', (f * 100).toFixed(1) + '%');
+            c.classList.toggle('on', f > 0);
+        });
 
-        mcCells.forEach(function(c) { c.el.classList.toggle('on', c.rank < n); });
+        var pctEl = el('mgrid-pct');
+        pctEl.textContent = free.toFixed(0) + '%';
+        pctEl.style.color = color;
+
+        var cap = 'Each block = 1% of NLV';
+        if (MG_NLV > 0) cap += ' (' + fmt(MG_NLV / 100) + ' EUR)';
+        cap += ': ' + fmtBlocks(free) + ' of 100 left, ' + fmtBlocks(pct) + ' used as margin.';
+        el('mgrid-cap').textContent = cap;
+        grid.setAttribute('aria-label', 'Margin left ' + free.toFixed(0) + '%');
     }
     window.setMarginUsed = setMarginUsed;
-    window.addEventListener('resize', buildMarginCube);
 
     // The page computes free liquidity as excess / NLV
-    function updateMarginCube(ratio) {
+    function updateMarginGrid(ratio, nlv) {
+        MG_NLV = nlv || 0;
         setMarginUsed((1 - Math.max(0, Math.min(1, ratio))) * 100);
     }
 
-    // ── RADAR CHART ───────────────────────────────────────────────────────
     var AXES = ['Liquidity', 'VIX Buffer', 'Exposure Safety', 'Margin Safety', 'Ticker Conc.', 'Date Conc.'];
     var N = AXES.length;
     var CX = 195, CY = 190, R = 128;
@@ -879,7 +845,7 @@ input[type="range"]::-moz-range-thumb {
 
         // Draw radar
         drawRadar(scores, targetScores, zone);
-        updateMarginCube(nlv > 0 ? excess / nlv : 0);
+        updateMarginGrid(nlv > 0 ? excess / nlv : 0, nlv);
 
         // Render axis legend table
         renderAxisLegend({
