@@ -13,7 +13,7 @@ Every change to an app file must bump its visible version label, so the user can
   - `IBKR Unified Analyzer.html`: `v2.6` in the `<h1>` of the top bar
   - `IBKR Tax Calculator.html`: `v1.0` in the `<h1>`
   - `Compound Growth Simulator.html`: `v1.1` in `.gs-section-title`
-  - `Put Coach.html`: `v1.0` in `.title` (span `.ver`)
+  - `Put Coach.html`: `v1.1` in `.title` (span `.ver`)
   - `Loan Calculator.html`: `v1.0` in `.gs-section-title` (span `.ver`)
   - `Loan vs Invest.html`: `v1.0` in `.hdr-title` (span `.ver`)
   - `index.html` (hub): `v1.0` in the welcome `<h1>` (span `.ver`)
