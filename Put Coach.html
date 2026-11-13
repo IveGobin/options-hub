@@ -253,10 +253,27 @@ input[type="range"]::-moz-range-thumb {
 .lev-grid { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-family:var(--mono); font-size:11px; }
 .lev-grid > span:nth-child(odd) { color:var(--muted); }
 .lev-grid > span:nth-child(even) { text-align:right; }
-.wi-row { display:flex; align-items:center; gap:8px; margin-top:12px; flex-wrap:wrap; }
-.wi-in { width:64px; font-size:13px; padding:5px 8px; }
-.wi-txt { font-family:var(--mono); font-size:11px; color:var(--muted); }
-.wi-res { font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:6px; line-height:1.6; min-height:1px; }
+/* What-if card (mobile first: 2 x 2 inputs, results as rows) */
+.wi-card { margin-top:12px; padding:12px 14px 14px; border-radius:11px; background:var(--surface2); border:1px solid var(--border); }
+.wi-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+.wi-usd { font-size:9px; padding:1px 6px; border-radius:10px; background:rgba(232,117,58,.15); color:var(--accent); margin-left:4px; letter-spacing:.06em; }
+.wi-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 10px; }
+.wi-f { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.wi-f > span { font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+.wi-f > span i { font-style:normal; text-transform:none; letter-spacing:0; opacity:.6; }
+.wi-f .num-in { font-size:16px; padding:9px 10px; min-height:42px; background:var(--surface); }   /* 16px: no iOS zoom */
+.wi-f input[type=date] { -webkit-appearance:none; appearance:none; font-size:13px; padding:9px 6px 9px 8px; }   /* native picker: no zoom */
+[data-theme="dark"] .wi-f input[type=date] { color-scheme:dark; }
+.wi-res { margin-top:12px; }
+.wi-hint { font-family:var(--mono); font-size:10.5px; color:var(--muted); line-height:1.6; }
+.wi-verdict { font-family:var(--mono); font-size:12px; font-weight:700; padding:9px 11px; border-radius:8px; margin-bottom:10px; line-height:1.45; }
+.wi-verdict small { display:block; font-weight:400; font-size:10px; opacity:.85; margin-top:2px; }
+.wi-verdict.ok  { background:rgba(58,173,114,.12); color:#3aad72; }
+.wi-verdict.bad { background:rgba(232,96,96,.12); color:#e86060; }
+.wi-rows { display:grid; grid-template-columns:auto 1fr; gap:7px 12px; font-family:var(--mono); font-size:11.5px; align-items:baseline; }
+.wi-rows > span:nth-child(odd) { color:var(--muted); font-size:10px; letter-spacing:.06em; text-transform:uppercase; }
+.wi-rows > span:nth-child(even) { text-align:right; font-weight:700; }
+.wi-rows .from { color:var(--muted); font-weight:400; }
 </style>
 </head>
 <body data-theme="dark">
@@ -267,7 +284,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.5</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.6</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -399,20 +416,24 @@ input[type="range"]::-moz-range-thumb {
         <!-- Leverage if every short put is assigned -->
         <div class="lev-card" id="lev-card"></div>
 
-        <!-- What-if: one new put trade -->
-        <div class="wi-row">
-            <span class="slider-label">What-if</span>
-            <span class="wi-txt">sell</span>
-            <input class="num-in wi-in" type="number" id="wi-qty" min="0" step="1" placeholder="0" oninput="onSliders()">
-            <span class="wi-txt">puts @ $</span>
-            <input class="num-in wi-in" type="number" id="wi-strike" min="0" step="0.5" placeholder="strike" oninput="onSliders()" style="width:84px;">
-            <span class="wi-txt">on</span>
-            <input class="num-in wi-in" type="text" id="wi-tkr" placeholder="ticker" maxlength="8" oninput="this.value=this.value.toUpperCase();onSliders()" style="width:84px;text-transform:uppercase;" title="Underlying ticker (empty = a new ticker)">
-            <span class="wi-txt">exp</span>
-            <input class="num-in wi-in" type="date" id="wi-exp" oninput="onSliders()" style="width:auto;" title="Expiry date (empty = a new expiry)">
-            <button class="adj-btn" title="Clear what-if" onclick="['wi-qty','wi-strike','wi-tkr','wi-exp'].forEach(function(i){el(i).value='';});onSliders();">×</button>
+        <!-- What-if: one new put trade (US options, USD) -->
+        <div class="wi-card">
+            <div class="wi-head">
+                <span class="slider-label">What-if · new short put <span class="wi-usd">USD</span></span>
+                <button class="btn-sm" onclick="clearWhatIf()">Clear</button>
+            </div>
+            <div class="wi-grid">
+                <label class="wi-f"><span>Contracts</span>
+                    <input class="num-in" type="number" id="wi-qty" min="0" step="1" inputmode="numeric" placeholder="e.g. 2" oninput="onSliders()"></label>
+                <label class="wi-f"><span>Strike $</span>
+                    <input class="num-in" type="number" id="wi-strike" min="0" step="0.5" inputmode="decimal" placeholder="e.g. 20" oninput="onSliders()"></label>
+                <label class="wi-f"><span>Ticker <i>optional</i></span>
+                    <input class="num-in" type="text" id="wi-tkr" maxlength="8" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="new ticker" oninput="this.value=this.value.toUpperCase();onSliders()" style="text-transform:uppercase;"></label>
+                <label class="wi-f"><span>Expiry <i>optional</i></span>
+                    <input class="num-in" type="date" id="wi-exp" oninput="onSliders()"></label>
+            </div>
+            <div class="wi-res" id="wi-res"></div>
         </div>
-        <div class="wi-res" id="wi-res"></div>
         <div class="div"></div>
 
         <div class="radar-wrap">
@@ -553,6 +574,7 @@ input[type="range"]::-moz-range-thumb {
     function toggleTheme() {
         var t = document.body.getAttribute('data-theme');
         document.body.setAttribute('data-theme', t === 'dark' ? 'light' : 'dark');
+        render();   // the radar SVG takes its colours from the theme
     }
 
     function setMode(m) {
@@ -816,12 +838,11 @@ input[type="range"]::-moz-range-thumb {
         el('not-val').textContent = fmt(notionalRaw) + ' ' + curNot;
 
         // Show conversion hint
+        // Excess liquidity can never exceed NLV in TWS: flag a likely typo
         var excConv = el('exc-converted');
-        if (curExc === 'USD') {
-            excConv.textContent = '≈ ' + fmt(excessIn) + ' EUR';
-        } else {
-            excConv.textContent = '';
-        }
+        excConv.textContent = (curExc === 'USD' ? '≈ ' + fmt(excessIn) + ' EUR' : '') +
+            (excessIn > nlv ? (curExc === 'USD' ? ' · ' : '') + '⚠️ above NLV — check the value from TWS' : '');
+        excConv.style.color = excessIn > nlv ? '#e86060' : '';
         var notConv = el('not-converted');
         if (curNot === 'USD') {
             notConv.textContent = '≈ ' + fmt(notional - wiEUR) + ' EUR';
@@ -1133,36 +1154,83 @@ input[type="range"]::-moz-range-thumb {
                 '</div>';
             })();
 
-        // What-if result: impact of the trade + how many contracts fit at that strike
+        // What-if result (USD trade): verdict + before → after rows, laid out for a phone
+        el('wi-res').innerHTML = whatIfHTML(d, base, lev, color);
+    }
+
+    function clearWhatIf() {
+        ['wi-qty', 'wi-strike', 'wi-tkr', 'wi-exp'].forEach(function(i) { el(i).value = ''; });
+        onSliders();
+    }
+
+    function whatIfHTML(d, base, lev, levColor) {
+        var fx = getFX(), nlv = d.nlv;
         var strike = parseFloat(el('wi-strike').value);
-        var res = '';
-        if (strike > 0) {
-            // Same room as the status line / sell card, measured before the what-if trade
-            var fit = Math.max(0, Math.floor(d.roomBefore.room * fx / (100 * strike)));
-            res = 'Fits at $' + strike + ' (all limits green): <b style="color:var(--text)">' + fit + ' contract' + (fit === 1 ? '' : 's') + '</b>' +
-                  ' <span style="opacity:.8">· binding: ' + bindingLabel(d.roomBefore, d) + '</span>';
-            if (d.wiEUR > 0) {
-                var levBefore = nlv > 0 ? base / nlv : 0;
-                res += '<br>This trade: ' + levBefore.toFixed(2) + 'x → <b style="color:' + color + '">' + lev.toFixed(2) + 'x</b>' +
-                       ' (+' + usd(d.wiEUR) + ' notional, margin ~' + usd(d.wiEUR * MARGIN) + ')';
-                // Concentration impact (needs an imported book)
-                if (d.conc.hasBook) {
-                    var c0 = concNow(0, '', '');
-                    var tkr = el('wi-tkr').value.trim().toUpperCase();
-                    var dk = whatIfDateKey();
-                    var pc = function(v) { return Math.round(v * 100) + '%'; };
-                    res += '<br>' + (tkr
-                        ? escHTML(tkr) + ' ' + pc(c0.share(tkr)) + ' → <b style="color:var(--text)">' + pc(d.conc.share(tkr)) + '</b> of the book'
-                        : 'New ticker · top ' + escHTML(c0.topTicker || '—') + ' ' + pc(c0.tickerConc) + ' → ' + pc(d.conc.share(c0.topTicker)));
-                    res += ' · ' + (dk
-                        ? dk + ' ' + pc(c0.dshare(dk)) + ' → <b style="color:var(--text)">' + pc(d.conc.dshare(dk)) + '</b> of put notional'
-                        : 'new expiry · top ' + (c0.topDate || '—') + ' ' + pc(c0.dateConc) + ' → ' + pc(d.conc.dshare(c0.topDate)));
-                }
-            }
-        } else {
-            res = 'Enter contracts and strike to see the impact of a new put before placing it.';
+        if (!(strike > 0)) {
+            return '<div class="wi-hint">Enter the strike (and contracts) of a put you are thinking of selling: ' +
+                   'you see how many fit and what the trade does to leverage, excess, margin cushion and concentration — before placing it.</div>';
         }
-        el('wi-res').innerHTML = res;
+        var GREEN = '#3aad72', AMBER = '#e8a03a', RED = '#e86060';
+        var usd = function(v) { return '$' + fmt(Math.abs(v) * fx); };
+        var pc  = function(v) { return Math.round(v * 100) + '%'; };
+        var arrow = function(a, b, col) {
+            return '<span class="from">' + a + ' → </span><span style="color:' + (col || 'var(--text)') + '">' + b + '</span>';
+        };
+
+        // Same room as the status line / sell card, measured before the what-if trade
+        var fit = Math.max(0, Math.floor(d.roomBefore.room * fx / (100 * strike)));
+        var plural = function(n) { return n + ' contract' + (n === 1 ? '' : 's'); };
+        var qty = parseFloat(el('wi-qty').value) || 0;
+
+        if (!(d.wiEUR > 0)) {
+            return '<div class="wi-verdict ' + (fit > 0 ? 'ok' : 'bad') + '">' +
+                (fit > 0 ? 'Up to ' + plural(fit) + ' fit at $' + strike : 'No contract fits at $' + strike) +
+                '<small>all limits green · binding: ' + bindingLabel(d.roomBefore, d) + '</small></div>' +
+                '<div class="wi-hint">Enter contracts to see the impact of the trade.</div>';
+        }
+
+        var fits = qty <= fit;
+        var html = '<div class="wi-verdict ' + (fits ? 'ok' : 'bad') + '">' +
+            (fits ? '✅ Fits — all limits stay green' : '⚠️ Too big') +
+            '<small>' + (fits ? '' : 'breaks: ' + bindingLabel(d.roomBefore, d) + ' · ') + 'max ' + plural(fit) + ' at $' + strike + '</small></div>';
+
+        // Before → after
+        var levBefore = nlv > 0 ? base / nlv : 0;
+        var exB = d.excessIn / nlv, exA = d.excess / nlv;
+        var exCol = d.excess < d.stopExcess ? RED : d.excess < d.targetExcess ? AMBER : GREEN;
+        var cushB = base > 0 ? d.excessIn / base : Infinity;
+        var cushCol = d.cushion >= CUSHION_GREEN ? GREEN : d.cushion >= CUSHION_WARN ? AMBER : RED;
+
+        html += '<div class="wi-rows">' +
+            '<span>Notional</span><span>' + usd(d.wiEUR) + '</span>' +
+            '<span>Margin used</span><span>~' + usd(d.wiEUR * MARGIN) + '</span>' +
+            '<span>Leverage</span><span>' + arrow(levBefore.toFixed(2) + 'x', lev.toFixed(2) + 'x', levColor) + '</span>' +
+            '<span>Excess</span><span>' + arrow(pc(exB), pc(exA) + ' NLV', exCol) + '</span>' +
+            '<span>Survives drop</span><span>' + arrow(fmtCushion(cushB), fmtCushion(d.cushion), cushCol) + '</span>';
+
+        // Concentration (needs an imported book)
+        if (d.conc.hasBook) {
+            var c0 = concNow(0, '', '');
+            var tkr = el('wi-tkr').value.trim().toUpperCase();
+            var dk = whatIfDateKey();
+            var tCol = function(v) { return v >= 0.40 ? RED : v >= 0.25 ? AMBER : GREEN; };
+            var dCol = function(v) { return v >= 0.35 ? (v >= 0.70 ? RED : AMBER) : GREEN; };
+            if (tkr) {
+                var ta = d.conc.share(tkr);
+                html += '<span>' + escHTML(tkr) + '</span><span>' + arrow(pc(c0.share(tkr)), pc(ta) + ' of book', tCol(ta)) + '</span>';
+            } else if (c0.topTicker) {
+                var tt = d.conc.share(c0.topTicker);
+                html += '<span>New ticker</span><span>' + arrow('top ' + escHTML(c0.topTicker) + ' ' + pc(c0.tickerConc), pc(tt), tCol(tt)) + '</span>';
+            }
+            if (dk) {
+                var da = d.conc.dshare(dk);
+                html += '<span>' + dk + '</span><span>' + arrow(pc(c0.dshare(dk)), pc(da) + ' of puts', dCol(da)) + '</span>';
+            } else if (c0.topDate) {
+                var dd = d.conc.dshare(c0.topDate);
+                html += '<span>New expiry</span><span>' + arrow('top ' + c0.topDate + ' ' + pc(c0.dateConc), pc(dd), dCol(dd)) + '</span>';
+            }
+        }
+        return html + '</div>';
     }
 
     // ── AXIS LEGEND TABLE ─────────────────────────────────────────────────
