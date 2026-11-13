@@ -5,6 +5,12 @@ Before any change that touches option P&L, stock P&L from assignments or P&L agg
 Closed P&L matrix / quarters, KPIs) in `IBKR Unified Analyzer.html`, read @OPTIONS_PNL_RULES.md, follow it,
 check its invariants, and update it (including the changelog) in the same change.
 
+## Put Coach documentation
+`PUT_COACH.md` documents every formula, constant, zone and card of `Put Coach.html`. Any change to Put Coach
+that touches a formula, constant, threshold, input, card or the import must update `PUT_COACH.md` in the same
+change (keep the version in its title and add a changelog line). Keep the short Put Coach text in the hub docs
+(`hub_shared.js`, `doc_sec_coach_p`, EN and HR) consistent with it.
+
 ## Always bump the version
 Every change to an app file must bump its visible version label, so the user can tell after opening the app that it refreshed.
 
