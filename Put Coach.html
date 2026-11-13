@@ -182,6 +182,18 @@ input[type="range"]::-moz-range-thumb {
 }
 .cur-btn.active { background: var(--accent); color: #fff; }
 
+/* Max assignment loan: three choices */
+.loan-row { display: flex; gap: 8px; }
+.loan-btn {
+    flex: 1; padding: 8px 4px; border-radius: 9px; border: 1.5px solid var(--border);
+    background: var(--surface2); color: var(--muted);
+    font-family: var(--mono); font-size: 14px; font-weight: 700;
+    cursor: pointer; transition: all .2s; text-align: center;
+}
+.loan-btn small { display: block; font-size: 9px; font-weight: 400; opacity: .7; margin-top: 1px; }
+.loan-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(232,117,58,.08); }
+.loan-btn.active small { opacity: 1; }
+
 .empty-state { text-align: center; padding: 28px 0; color: var(--muted); font-family: var(--mono); font-size: 12px; }
 
 /* Axis legend table */
@@ -293,7 +305,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.9</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.10</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -311,9 +323,9 @@ input[type="range"]::-moz-range-thumb {
 
     <!-- Mode -->
     <div class="mode-row">
-        <button class="mode-pill" id="mp-conservative" onclick="setMode('conservative')">🛡️ Conservative<br><small>Stop 40% · loan 0%</small></button>
-        <button class="mode-pill sel-m" id="mp-moderate"     onclick="setMode('moderate')">⚖️ Moderate<br><small>Stop 30% · loan 20%</small></button>
-        <button class="mode-pill" id="mp-aggressive"   onclick="setMode('aggressive')">🔥 Aggressive<br><small>Stop 20% · loan 50%</small></button>
+        <button class="mode-pill" id="mp-conservative" onclick="setMode('conservative')">🛡️ Conservative<br><small>Stop 40% · loan 30%</small></button>
+        <button class="mode-pill sel-m" id="mp-moderate"     onclick="setMode('moderate')">⚖️ Moderate<br><small>Stop 30% · loan 60%</small></button>
+        <button class="mode-pill" id="mp-aggressive"   onclick="setMode('aggressive')">🔥 Aggressive<br><small>Stop 20% · loan 90%</small></button>
     </div>
 
     <!-- VIX slider -->
@@ -390,9 +402,11 @@ input[type="range"]::-moz-range-thumb {
                 <span class="slider-label" title="How much margin loan (as % of NLV) you accept in the worst case: every short put assigned at once. Max exposure = NLV × (1 + loan %).">Max assignment loan</span>
                 <span style="font-family:var(--mono);font-size:10px;color:var(--muted);" id="loan-hint"></span>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-                <input class="num-in" type="number" id="loan-pct" min="0" max="300" step="5" value="20" oninput="onSliders()" style="flex:1;">
-                <span style="font-family:var(--mono);font-size:12px;color:var(--muted);">% of NLV</span>
+            <input type="hidden" id="loan-pct" value="60">
+            <div class="loan-row">
+                <button class="loan-btn" id="loan-30" onclick="setLoan(30)">30%<small>1.3x</small></button>
+                <button class="loan-btn active" id="loan-60" onclick="setLoan(60)">60%<small>1.6x</small></button>
+                <button class="loan-btn" id="loan-90" onclick="setLoan(90)">90%<small>1.9x</small></button>
             </div>
         </div>
     </div>
@@ -501,7 +515,8 @@ input[type="range"]::-moz-range-thumb {
     // Exposure limit = max margin loan you accept if EVERY short put is assigned (worst case), as % of NLV.
     // Total exposure = stock holdings + raw put notional. Green ≤ NLV × (1 + loan%),
     // warn up to LOAN_WARN_BAND percentage points above that, danger beyond.
-    const LOAN_DEFAULT = { conservative: 0, moderate: 20, aggressive: 50 };
+    const LOAN_OPTIONS = [30, 60, 90];
+    const LOAN_DEFAULT = { conservative: 30, moderate: 60, aggressive: 90 };
     const LOAN_WARN_BAND = 25;
     const MARGIN = 0.20;          // approx. margin a NEW short put uses, per EUR notional
     // Margin cushion = excess / (stocks + put notional): the uniform drop of every underlying
@@ -595,7 +610,15 @@ input[type="range"]::-moz-range-thumb {
             var cls = 'mode-pill' + (x === m ? (' sel-' + x[0]) : '');
             el('mp-' + x).className = cls;
         });
-        el('loan-pct').value = LOAN_DEFAULT[m];   // each mode brings its own loan target (can be edited after)
+        setLoan(LOAN_DEFAULT[m]);   // each mode brings its own loan target (can be changed after)
+    }
+
+    // Max assignment loan: one of LOAN_OPTIONS, picked with the three buttons
+    function setLoan(v) {
+        el('loan-pct').value = v;
+        LOAN_OPTIONS.forEach(function(o) {
+            el('loan-' + o).className = 'loan-btn' + (o === v ? ' active' : '');
+        });
         render();
     }
 

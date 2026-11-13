@@ -1,4 +1,4 @@
-# Put Coach — dokumentacija (v1.9)
+# Put Coach — dokumentacija (v1.10)
 
 Put Coach je alat za upravljanje rizikom kod prodaje short putova na IBKR računu s marginom.
 Odgovara na tri pitanja:
@@ -22,7 +22,7 @@ Svi izračuni rade se u pregledniku. Ništa se ne šalje na server.
    Toga podatka nema u Activity Statementu, pa ga import nikad ne mijenja.
 4. Provjeri **VIX** (učitava se iz `vix_povijest.json`, može se ručno pomaknuti) i **EUR/USD** tečaj
    (učitava se iz `tecajna_lista_usd.json`, zadano 1.17).
-5. Odaberi **mod** (Conservative / Moderate / Aggressive) i po potrebi promijeni **Max assignment loan**.
+5. Odaberi **mod** (Conservative / Moderate / Aggressive) i po potrebi odaberi drugi **Max assignment loan** (30 / 60 / 90 %).
 6. Pročitaj **status** (zelena / žuta / crvena poruka), **radar** i karticu **What can I sell today?**
 7. Prije nove pozicije upiši je u **What-if** (broj ugovora, strike u $, po želji ticker i datum isteka).
 
@@ -42,7 +42,7 @@ Nominal iznad importiranog (ručno podignut slider) ulazi u izloženost, ali ne 
 | Excess liquidity (TWS) | EUR/USD | **samo ručno**, iz TWS-a | Već ima odbijenu trenutnu maintenance marginu |
 | Put notional sold | EUR/USD (slider) | import: Σ \|qty\| × multiplier × strike svih short putova | U USD |
 | Stock holdings | EUR/USD | import (*Net Asset Value → Stock*) ili ručno | Tržišna vrijednost dionica |
-| Max assignment loan | % NLV | mod (0 / 20 / 50 %) ili ručno | Koliki margin kredit prihvaćaš ako se SVI putovi assignaju |
+| Max assignment loan | % NLV | tri gumba: 30 / 60 / 90 % (zadano 60 %) | Koliki margin kredit prihvaćaš ako se SVI putovi assignaju |
 | VIX | — | `vix_povijest.json` ili slider 5–60 | Utječe na cilj likvidnosti |
 | EUR/USD | — | `tecajna_lista_usd.json` ili ručno | Sve se interno računa u EUR |
 
@@ -58,11 +58,23 @@ TWS excess nikad ne može biti veći od NLV-a).
 
 | Mod | Hard stop (excess % NLV) | VIX base | VIX slope | VIX cap | Zadani loan |
 |---|---|---|---|---|---|
-| 🛡️ Conservative | 40 % | 50 % | 0.50 | 70 % | 0 % |
-| ⚖️ Moderate | 30 % | 40 % | 0.75 | 60 % | 20 % |
-| 🔥 Aggressive | 20 % | 30 % | 0.50 | 45 % | 50 % |
+| 🛡️ Conservative | 40 % | 50 % | 0.50 | 70 % | 30 % |
+| ⚖️ Moderate | 30 % | 40 % | 0.75 | 60 % | 60 % |
+| 🔥 Aggressive | 20 % | 30 % | 0.50 | 45 % | 90 % |
 
-Promjena moda postavlja *Max assignment loan* na zadanu vrijednost moda. Nakon toga se može ručno mijenjati.
+Promjena moda postavlja *Max assignment loan* na zadanu vrijednost moda. Nakon toga se gumbima može
+odabrati druga vrijednost (npr. Moderate uz 90 %). Zadano pri otvaranju: Moderate, loan 60 %.
+
+**Što loan znači.** To je najveći margin kredit koji prihvaćaš ako se SVI putovi assignaju odjednom:
+
+| Loan | Poluga nakon assignmenta | Pad do margin calla nakon assignmenta (maintenance 25 % / 50 %) |
+|---|---|---|
+| 30 % | 1.3x | oko 69 % / 54 % |
+| 60 % | 1.6x | oko 50 % / 25 % |
+| 90 % | 1.9x | oko 37 % / 5 % |
+
+Pad do margin calla je gruba procjena: `1 − loan / ((1 − maintenance) × (1 + loan))`. Volatilne dionice
+često imaju maintenance marginu 50 % ili više.
 
 ---
 
@@ -94,17 +106,18 @@ cushion        = max(0, excess) / totalExp            pad tržišta koji pojede 
 današnji excess, što znači margin call. Excess iz TWS-a već ima odbijenu marginu, pa se ona ne oduzima ponovno.
 Ako bi ni potpuni gubitak ne potrošio excess, prikazuje se **100%+**.
 
-**Primjer** (Moderate, VIX 18, loan 20 %): NLV 60 000, excess 26 000, dionice 59 500, putovi 138 000 EUR.
+**Primjer** (Moderate, VIX 18, loan 60 %): NLV 60 000, excess 26 000, dionice 59 500, putovi 138 000 EUR.
 
 ```
 target%      = 40 + (18 − 15) × 0.75 = 42.25 %   →  targetExcess = 25 350    (excess 26 000: zeleno)
 stopExcess   = 30 % × 60 000 = 18 000
 totalExp     = 59 500 + 138 000 = 197 500        →  leverage 3.29x
-maxTotal     = 72 000,  warnTotal = 87 000       (izloženost: crveno)
+maxTotal     = 96 000,  warnTotal = 111 000      (izloženost: crveno)
 cushion      = 26 000 / 197 500 ≈ 13 %           (žuto)
 ```
 
-Status: 🔴 Overexposed, smanji izloženost za 197 500 − 87 000 = 110 500 EUR; *Also: thin margin cushion*.
+Status: 🔴 Overexposed, smanji izloženost za 197 500 − 111 000 = 86 500 EUR; *Also: thin margin cushion*.
+Uz samo dionice (59 500) prostor za putove je 96 000 − 59 500 = 36 500 EUR.
 
 ---
 
@@ -121,10 +134,18 @@ ispod hard stopa.
 
 Put Quality i koncentracija prikazuju se na radaru, ali **ne mijenjaju ukupnu zonu ni status poruku**.
 
-**Margin cushion je osigurač za ručno podignut loan.** Uz zadani loan moda, čim su likvidnost i izloženost
-zelene, cushion je automatski ≥ VIXbase / (1 + loan %): 50 % (Conservative), 33 % (Moderate), 20 % (Aggressive).
-Tada cushion nikad nije binding, a poruke #3 i #6 se ne mogu pojaviti. Cushion postaje stvarna granica kad
-loan podigneš iznad zadanog (npr. 250 % uz leverage 3.3x), što je i slučaj za koji je uveden.
+**Kada je margin cushion stvarna granica.** Čim su likvidnost i izloženost zelene, cushion je automatski
+≥ target% / (1 + loan %), a target% je najmanje VIXbase:
+
+| Mod \ Loan | 30 % | 60 % | 90 % |
+|---|---|---|---|
+| Conservative (VIXbase 50 %) | 38 % | 31 % | 26 % |
+| Moderate (40 %) | 31 % | 25 % | 21 % |
+| Aggressive (30 %) | 23 % | 19 % | 16 % |
+
+Cushion (zeleno ≥ 20 %) zato može biti binding samo u modu Aggressive uz loan 60 % ili 90 % i nizak VIX.
+U ostalim kombinacijama ga likvidnost i izloženost već pokrivaju, pa se poruke #3 i #6 pojavljuju samo
+kao "Also" uz neki drugi problem.
 
 ---
 
@@ -417,7 +438,7 @@ Sklopiva kartica (klik na naslov).
   precijenjen. Short callovi se ne čitaju, pa goli callovi nisu u izloženosti.
 - **ETF iznimka je gruba:** svaki ETF se smatra raspršenim, i sektorski, jednodržavni ili leveraged.
 - **Dionice izvan EUR i USD** ulaze u izloženost (preko NLV izvoda), ali ne u koncentraciju po tickeru.
-- **Margin cushion** uz zadani loan moda nikad nije binding (§5).
+- **Margin cushion** je binding samo u modu Aggressive uz loan 60 % ili 90 % (§5).
 
 ---
 
@@ -428,7 +449,8 @@ Sklopiva kartica (klik na naslov).
 | `MARGIN` | 0.20 | margina novog puta po EUR nominala |
 | `CUSHION_GREEN` / `CUSHION_WARN` | 0.20 / 0.10 | granice margin cushiona |
 | `LOAN_WARN_BAND` | 25 | p.p. iznad loan cilja do crvene zone |
-| `LOAN_DEFAULT` | 0 / 20 / 50 | zadani loan po modu |
+| `LOAN_OPTIONS` | 30 / 60 / 90 | ponuđeni loan (gumbi) |
+| `LOAN_DEFAULT` | 30 / 60 / 90 | zadani loan po modu |
 | `NEAR_LOSS` / `DEEP_ITM` | 0.05 / 0.10 | gubitak L do kojeg je put near strike / od kojeg je deep ITM |
 | r pragovi | 0.35 / 1 | deep OTM / OTM |
 | Ticker koncentracija | 40 % / 60 % | zeleno / crveno na radaru; lista "Avoid" od 25 % |
@@ -441,6 +463,9 @@ Sklopiva kartica (klik na naslov).
 | Zone score | 0.70 / 0.40 | zeleno / crveno |
 
 ## Changelog
+
+- 2026-11-13 (v1.10): Max assignment loan su tri gumba 30 / 60 / 90 % umjesto polja za unos; zadano 60 %.
+  Zadani loan po modu 30 / 60 / 90 % (prije 0 / 20 / 50 %).
 
 - 2026-11-13 (v1.9): nakon pregleda formula.
   - Liquidity score skalira se prema NLV-u (1.0 kad je excess = NLV).
