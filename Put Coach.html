@@ -293,7 +293,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.7</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.8</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -456,8 +456,11 @@ input[type="range"]::-moz-range-thumb {
 
         <!-- Axis legend table -->
         <div id="axis-legend" style="margin-top:14px;">
-            <div style="font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Axis breakdown</div>
-            <div id="axis-rows"></div>
+            <button onclick="toggleAxes()" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:10px;border:0.5px solid var(--border);background:var(--surface2);cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;">
+                <span>Axis breakdown</span>
+                <span id="axis-arrow" style="font-size:14px;">▸</span>
+            </button>
+            <div id="axis-rows" style="display:none;margin-top:8px;"></div>
         </div>
 
         <!-- Put book risk (moneyness proxy + DTE) -->
@@ -721,7 +724,7 @@ input[type="range"]::-moz-range-thumb {
         onSliders();
     }
 
-    var AXES = ['Liquidity', 'VIX Buffer', 'Exposure', 'Margin Safety', 'Ticker Conc.', 'Date Conc.'];
+    var AXES = ['Liquidity', 'Put Quality', 'Exposure', 'Margin Safety', 'Ticker Conc.', 'Date Conc.'];
     var N = AXES.length;
     var CX = 195, CY = 190, R = 128;
 
@@ -897,16 +900,11 @@ input[type="range"]::-moz-range-thumb {
             liqScore = Math.max(0, (excess / stopExcess) * 0.40);
         }
 
-        // 2. VIX BUFFER
-        // Green: VIX < 20, Warn: 20–30, Danger: > 30
-        var vixScore;
-        if (vix < 20) {
-            vixScore = 0.70 + ((20 - vix) / 15) * 0.30; // 0.70..1.0
-        } else if (vix <= 30) {
-            vixScore = 0.40 + ((30 - vix) / 10) * 0.30; // 0.40..0.70
-        } else {
-            vixScore = Math.max(0, 0.40 - ((vix - 30) / 30) * 0.40); // 0..0.40
-        }
+        // 2. PUT QUALITY — how the short puts are doing (moneyness proxy, see putQuality)
+        // Notional-weighted average of q; ITM / deep ITM puts count double. The what-if put
+        // counts as freshly sold (q 0.80). VIX still drives the liquidity target (getTarget).
+        var pq = bookQuality(wiUSD);
+        var qualScore = pq.score;
 
         // 3. EXPOSURE SAFETY (stocks + puts, worst case all assigned)
         // Green: ≤ maxTotal, Warn: maxTotal–warnTotal, Danger: > warnTotal
@@ -956,7 +954,7 @@ input[type="range"]::-moz-range-thumb {
             : Math.max(0, 0.40 - ((dc - 0.70) / 0.30) * 0.40);
         var dateScore = rawDateScore + (1.0 - rawDateScore) * (1 - notionalWeight);
 
-        var scores = [liqScore, vixScore, expScore, marginScore, tickerScore, dateScore];
+        var scores = [liqScore, qualScore, expScore, marginScore, tickerScore, dateScore];
 
         // Target scores — the green zone boundary (0.70) on every axis
         var targetScores = [0.70, 0.70, 0.70, 0.70, 0.70, 0.70];
@@ -982,7 +980,7 @@ input[type="range"]::-moz-range-thumb {
             stocks: stocks, wiEUR: wiEUR, wiUSD: wiUSD, totalExp: totalExp, loanPct: loanPct,
             stopExcess: stopExcess, targetExcess: targetExcess,
             maxTotal: maxTotal, warnTotal: warnTotal, expZone: expZone,
-            marginUsed: marginUsed, cushion: cushion, conc: conc, scores: scores, targetScores: targetScores
+            marginUsed: marginUsed, cushion: cushion, conc: conc, pq: pq, scores: scores, targetScores: targetScores
         };
         // Room for new puts: after the what-if (status + sell card) and before it (what-if "fits")
         d.room       = roomCalc(excess, totalExp, maxTotal, targetExcess);
@@ -1034,7 +1032,7 @@ input[type="range"]::-moz-range-thumb {
     // ── PUT BOOK RISK CARD ────────────────────────────────────────────────
     // Flag: near strike / likely ITM, or expiring within 7 days without being clearly deep OTM
     function isFlagged(p) {
-        return p.status === 'near' || p.status === 'itm' ||
+        return p.status === 'near' || p.status === 'itm' || p.status === 'ditm' ||
                (p.dte <= 7 && (p.status === 'otm' || p.status === 'unknown'));
     }
 
@@ -1048,8 +1046,8 @@ input[type="range"]::-moz-range-thumb {
         var total = gNotionalUSD;
 
         // notional share per status
-        var order = ['deep', 'otm', 'near', 'itm', 'unknown'];
-        var share = { deep: 0, otm: 0, near: 0, itm: 0, unknown: 0 };
+        var order = ['deep', 'otm', 'near', 'itm', 'ditm', 'unknown'];
+        var share = { deep: 0, otm: 0, near: 0, itm: 0, ditm: 0, unknown: 0 };
         gPositions.forEach(function(p) { share[p.status] += p.notional; });
 
         var bar = '', legend = '';
@@ -1264,12 +1262,12 @@ input[type="range"]::-moz-range-thumb {
                 name: AXES[1],
                 score: d.scores[1],
                 tgtScore: d.targetScores[1],
-                value: 'VIX ' + d.vix.toFixed(1),
-                optimal: 'VIX < 20',
+                value: d.pq.n ? Math.round(d.pq.score * 100) + '% · ' + Math.round(d.pq.itmShare * 100) + '% ITM' : '—',
+                optimal: '≥ 70% (mostly OTM)',
                 zones: [
-                    { label: '🔴 Danger: VIX ≥ 30',  color: '#e86060' },
-                    { label: '🟡 Warn: VIX 20–30',    color: '#e8a03a' },
-                    { label: '🟢 Green: VIX < 20',    color: '#3aad72' },
+                    { label: '🔴 Danger: < 40% (mostly ITM)', color: '#e86060' },
+                    { label: '🟡 Warn: 40–70% (near strike / some ITM)', color: '#e8a03a' },
+                    { label: '🟢 Green: ≥ 70% (OTM)',  color: '#3aad72' },
                 ]
             },
             {
@@ -1365,6 +1363,13 @@ input[type="range"]::-moz-range-thumb {
                 row.querySelector('.ax-zones').innerHTML = zonesHTML;   // zones follow the loan target
             }
         });
+    }
+
+    function toggleAxes() {
+        var body = el('axis-rows');
+        var open = body.style.display === 'block';
+        body.style.display = open ? 'none' : 'block';
+        el('axis-arrow').textContent = open ? '▸' : '▾';
     }
 
     // ── WHAT CAN I SELL ───────────────────────────────────────────────────
@@ -1530,11 +1535,42 @@ input[type="range"]::-moz-range-thumb {
         var t0 = 0.6 + 0.4 * Math.min(1, Math.max(0, p.dte) / 45);
         var k  = Math.max(0, Math.min(1, (r - 0.2) / 0.3));   // 0 = clearly deep OTM, 1 = no discount
         var t  = t0 + (1 - t0) * k;
-        var status = r <= 0.35 ? 'deep' : r <= 1 ? 'otm' : r <= 2 ? 'near' : 'itm';
+        var status = r <= 0.35 ? 'deep' : r <= 1 ? 'otm' : r <= 2 ? 'near'
+                   : itmDepth(p) >= DEEP_ITM ? 'ditm' : 'itm';
         return { w: m * t, status: status };
     }
-    var RISK_LABEL = { deep: 'Deep OTM', otm: 'OTM', near: 'Near strike', itm: 'Likely ITM', unknown: 'n/a' };
-    var RISK_COLOR = { deep: '#3aad72', otm: 'rgba(58,173,114,0.55)', near: '#e8a03a', itm: '#e86060', unknown: '#7a756d' };
+    var RISK_LABEL = { deep: 'Deep OTM', otm: 'OTM', near: 'Near strike', itm: 'Likely ITM', ditm: 'Deep ITM', unknown: 'n/a' };
+    var RISK_COLOR = { deep: '#3aad72', otm: 'rgba(58,173,114,0.55)', near: '#e8a03a', itm: '#e86060', ditm: '#b83c3c', unknown: '#7a756d' };
+
+    // ── PUT QUALITY (radar axis) ──────────────────────────────────────────
+    // ITM depth estimate d = (option price − premium) / strike: loss per share as a share of the
+    // strike. Unlike r it does not depend on how small the premium was. d ≥ 10% = deep ITM.
+    const DEEP_ITM = 0.10;
+    function itmDepth(p) {
+        return (p.close > 0 && p.strike > 0) ? Math.max(0, (p.close - p.cost) / p.strike) : 0;
+    }
+    // q (0..1) per put:  r ≤ 1 (OTM, cheaper than sold): 1 − 0.2·r       → 1.00 … 0.80 (fresh)
+    //                    1 < r ≤ 2 (near strike):         0.80 − 0.35·(r−1) → 0.80 … 0.45
+    //                    r > 2 (ITM):                     0.45·(1 − d/10%)  → 0.45 … 0 (deep ITM)
+    // Weight in the book average = notional, ×2 for ITM / deep ITM (the source of real losses).
+    function putQuality(p) {
+        var r = p.ratio;
+        if (r === null) return { q: 0.70, k: 1 };
+        if (r <= 1) return { q: 1 - 0.2 * r, k: 1 };
+        if (r <= 2) return { q: 0.80 - 0.35 * (r - 1), k: 1 };
+        return { q: Math.max(0, 0.45 * (1 - itmDepth(p) / DEEP_ITM)), k: 2 };
+    }
+    // Book score incl. a what-if put (USD notional, counts as freshly sold). No puts → neutral 0.70.
+    function bookQuality(wiUSD) {
+        var sw = 0, sq = 0, itm = 0, tot = 0;
+        gPositions.forEach(function(p) {
+            var pq = putQuality(p), w = p.notional * pq.k;
+            sw += w; sq += w * pq.q; tot += p.notional;
+            if (p.status === 'itm' || p.status === 'ditm') itm += p.notional;
+        });
+        if (wiUSD > 0) { sw += wiUSD; sq += wiUSD * 0.80; tot += wiUSD; }
+        return { score: sw > 0 ? sq / sw : 0.70, itmShare: tot > 0 ? itm / tot : 0, n: sw > 0 };
+    }
 
     function escHTML(t) {
         return String(t).replace(/[&<>"']/g, function(c) {
@@ -1672,6 +1708,7 @@ input[type="range"]::-moz-range-thumb {
                     expiry: new Date(2000 + parseInt(sm[4], 10), MONTHS[sm[3]], parseInt(sm[2], 10)),
                     strike: strike, qty: Math.abs(qty), notional: n,
                     ratio: (costPx > 0 && !isNaN(closePx)) ? closePx / costPx : null,
+                    cost: costPx, close: isNaN(closePx) ? 0 : closePx,
                     dte: 0
                 });
             }
