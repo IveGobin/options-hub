@@ -229,7 +229,7 @@ input[type="range"]::-moz-range-thumb {
 .sell-meter-label { font-family:var(--mono); font-size:9px; color:var(--muted); width:80px; flex-shrink:0; }
 .sell-meter-bar { flex:1; height:5px; background:var(--border); border-radius:3px; overflow:hidden; }
 .sell-meter-fill { height:100%; border-radius:3px; }
-.sell-meter-val { font-family:var(--mono); font-size:9px; font-weight:700; width:32px; text-align:right; }
+.sell-meter-val { font-family:var(--mono); font-size:9px; font-weight:700; width:96px; text-align:right; white-space:nowrap; }
 
 /* Number inputs (stock holdings, loan target, what-if) */
 .num-in { width:100%; font-family:var(--mono); font-size:14px; font-weight:700; padding:7px 10px; border-radius:8px; border:1.5px solid var(--border); background:var(--surface2); color:var(--text); outline:none; -moz-appearance:textfield; appearance:textfield; box-sizing:border-box; }
@@ -267,7 +267,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.4</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.5</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -325,11 +325,7 @@ input[type="range"]::-moz-range-thumb {
                 </div>
                 <span class="slider-val" id="exc-val">—</span>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-                <button class="adj-btn" onclick="adjustSlider('exc-slider','-500',onSliders)">−</button>
-                <input type="range" id="exc-slider" min="0" step="500" oninput="onSliders()" style="flex:1;">
-                <button class="adj-btn" onclick="adjustSlider('exc-slider','500',onSliders)">+</button>
-            </div>
+            <input class="num-in" type="number" id="exc-in" min="0" step="100" value="0" oninput="onSliders()">
             <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;" id="exc-converted"></div>
         </div>
         <div class="slider-field">
@@ -410,7 +406,11 @@ input[type="range"]::-moz-range-thumb {
             <input class="num-in wi-in" type="number" id="wi-qty" min="0" step="1" placeholder="0" oninput="onSliders()">
             <span class="wi-txt">puts @ $</span>
             <input class="num-in wi-in" type="number" id="wi-strike" min="0" step="0.5" placeholder="strike" oninput="onSliders()" style="width:84px;">
-            <button class="adj-btn" title="Clear what-if" onclick="el('wi-qty').value='';el('wi-strike').value='';onSliders();">×</button>
+            <span class="wi-txt">on</span>
+            <input class="num-in wi-in" type="text" id="wi-tkr" placeholder="ticker" maxlength="8" oninput="this.value=this.value.toUpperCase();onSliders()" style="width:84px;text-transform:uppercase;" title="Underlying ticker (empty = a new ticker)">
+            <span class="wi-txt">exp</span>
+            <input class="num-in wi-in" type="date" id="wi-exp" oninput="onSliders()" style="width:auto;" title="Expiry date (empty = a new expiry)">
+            <button class="adj-btn" title="Clear what-if" onclick="['wi-qty','wi-strike','wi-tkr','wi-exp'].forEach(function(i){el(i).value='';});onSliders();">×</button>
         </div>
         <div class="wi-res" id="wi-res"></div>
         <div class="div"></div>
@@ -476,6 +476,8 @@ input[type="range"]::-moz-range-thumb {
     // TWS excess already has the current margin deducted, so no margin is subtracted again.
     const CUSHION_GREEN = 0.20;   // survives a ≥ 20% drop
     const CUSHION_WARN  = 0.10;   // < 10% drop = danger
+    // "13%", or "100%+" when even a total loss would not use up the excess
+    function fmtCushion(c) { return !isFinite(c) ? '—' : c >= 1 ? '100%+' : Math.round(c * 100) + '%'; }
 
     let currentMode = 'moderate';
     // Currency selections: 'EUR' or 'USD' for each field
@@ -484,17 +486,17 @@ input[type="range"]::-moz-range-thumb {
     var curNot = 'USD';
     var curStk = 'EUR';
 
-    // Concentration data parsed from IBKR CSV
-    var gTickerConc = 0;
-    var gDateConc   = 0;
+    // Concentration data parsed from IBKR CSV (short puts, USD notional per ticker / expiry)
     var gTickerMap  = {};
     var gDateMap    = {};
     var gNotionalUSD = 0;
+    var gStocks     = [];   // stocks held: { ticker, ccy, value (local ccy), etf }
     var gPositions  = [];   // short puts from the statement, each with risk weight/status
     var gRiskAvg    = null; // notional-weighted average risk weight (0.1 .. 1)
     var gStmtDate   = 0;    // statement date used as "today" for DTE
 
-    function getFX() { return parseFloat(el('fx-rate').value) || 1.08; }
+    const FX_DEFAULT = 1.17;   // same as the fx-rate field's default value
+    function getFX() { return parseFloat(el('fx-rate').value) || FX_DEFAULT; }
 
     function adjustSlider(id, delta, callback) {
         var s = el(id);
@@ -513,11 +515,23 @@ input[type="range"]::-moz-range-thumb {
         return cur === 'USD' ? val * getFX() : val;
     }
 
-    function setCur(field, cur) {
+    // Switch a field's currency. The amount is converted so its value stays the same
+    // (26 000 EUR → 30 420 USD), unless keepValue is set (import writes the value in the new currency).
+    var CUR_INPUT = { nlv: 'nlv', exc: 'exc-in', not: 'not-slider', stk: 'stk-val' };
+    function setCur(field, cur, keepValue) {
+        var prev = field === 'nlv' ? curNLV : field === 'exc' ? curExc : field === 'not' ? curNot : curStk;
         if (field === 'nlv') curNLV = cur;
         if (field === 'exc') curExc = cur;
         if (field === 'not') curNot = cur;
         if (field === 'stk') curStk = cur;
+
+        var inp = el(CUR_INPUT[field]);
+        var v = parseFloat(inp.value);
+        if (!keepValue && prev !== cur && !isNaN(v) && v > 0) {
+            var nv = Math.round(prev === 'EUR' ? v * getFX() : v / getFX());
+            if (inp.type === 'range') inp.max = Math.max(parseFloat(inp.max) || 0, nv);   // avoid clamping
+            inp.value = nv;
+        }
 
         // Update toggle button states
         var toggle = el(field + '-cur-toggle');
@@ -572,6 +586,70 @@ input[type="range"]::-moz-range-thumb {
         return (q > 0 && k > 0) ? q * 100 * k : 0;
     }
 
+    var MON3 = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    // What-if expiry (yyyy-mm-dd) → IBKR key "18DEC26" (empty = none)
+    function whatIfDateKey() {
+        var v = el('wi-exp').value;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return '';
+        return v.slice(8, 10) + MON3[parseInt(v.slice(5, 7), 10) - 1] + v.slice(2, 4);
+    }
+
+    // Concentration of the book incl. stocks held and the what-if trade.
+    //   ticker: (stock value + put notional on the ticker) / (all stocks + all put notional)
+    //           ETFs count in the total but never as one ticker (already diversified)
+    //   date:   put notional per expiry / all put notional
+    // A what-if without ticker / expiry counts as a new ticker / expiry.
+    function concNow(wiUSD, wiTicker, wiDate) {
+        var fx = getFX(), tmap = {}, dmap = {}, putTot = gNotionalUSD, stkTot = 0;
+        Object.keys(gTickerMap).forEach(function(k) { tmap[k] = gTickerMap[k]; });
+        Object.keys(gDateMap).forEach(function(k) { dmap[k] = gDateMap[k]; });
+        gStocks.forEach(function(s) {
+            var v = s.ccy === 'USD' ? s.value : s.ccy === 'EUR' ? s.value * fx : 0;   // other ccys: not converted, skipped
+            if (!(v > 0)) return;
+            stkTot += v;
+            if (!s.etf) tmap[s.ticker] = (tmap[s.ticker] || 0) + v;
+        });
+        var hasBook = putTot > 0 || stkTot > 0;
+        if (hasBook && wiUSD > 0) {
+            putTot += wiUSD;
+            if (wiTicker) tmap[wiTicker] = (tmap[wiTicker] || 0) + wiUSD;
+            if (wiDate)   dmap[wiDate]   = (dmap[wiDate]   || 0) + wiUSD;
+        }
+        var top = function(m) {
+            return Object.keys(m).reduce(function(a, k) { return a === null || m[k] > m[a] ? k : a; }, null);
+        };
+        var tt = top(tmap), td = top(dmap), tTot = putTot + stkTot;
+        return {
+            tmap: tmap, dmap: dmap, tTot: tTot, dTot: putTot, hasBook: hasBook,
+            topTicker: tt, tickerConc: tt && tTot > 0 ? tmap[tt] / tTot : 0,
+            topDate: td,   dateConc:   td && putTot > 0 ? dmap[td] / putTot : 0,
+            share: function(t) { return tTot > 0 ? (tmap[t] || 0) / tTot : 0; },
+            dshare: function(dk) { return putTot > 0 ? (dmap[dk] || 0) / putTot : 0; }
+        };
+    }
+
+    // How much NEW put notional (EUR) fits before any limit turns non-green.
+    // Every limit is linear in the added notional Δ (a new put uses MARGIN·Δ of excess):
+    //   exposure:  totalExp + Δ ≤ maxTotal
+    //   liquidity: excess − MARGIN·Δ ≥ targetExcess
+    //   margin:    (excess − MARGIN·Δ) / (totalExp + Δ) ≥ CUSHION_GREEN
+    // The status line, the sell card and the what-if "fits" all use this one function.
+    function roomCalc(excess, totalExp, maxTotal, targetExcess) {
+        var r = {
+            exposure:  Math.max(0, maxTotal - totalExp),
+            liquidity: Math.max(0, (excess - targetExcess) / MARGIN),
+            margin:    Math.max(0, (excess - CUSHION_GREEN * totalExp) / (MARGIN + CUSHION_GREEN))
+        };
+        r.room = Math.min(r.exposure, r.liquidity, r.margin);
+        r.binding = r.room === r.exposure ? 'exposure' : r.room === r.liquidity ? 'liquidity' : 'margin';
+        return r;
+    }
+    function bindingLabel(r, d) {
+        return r.binding === 'exposure' ? 'Loan target (' + d.loanPct + '% of NLV)'
+             : r.binding === 'liquidity' ? 'Liquidity — excess target ' + Math.round(d.targetExcess / d.nlv * 100) + '% of NLV'
+             : 'Margin — must survive a ' + Math.round(CUSHION_GREEN * 100) + '% drop';
+    }
+
     function getTarget() {
         var vix = parseFloat(el('vix-slider').value);
         var cfg = MODES[currentMode];
@@ -601,14 +679,18 @@ input[type="range"]::-moz-range-thumb {
 
         var warnTotal = nlvEUR * (1 + (getLoanPct() + LOAN_WARN_BAND) / 100);
 
-        // Slider max in their respective currencies (an import can raise the put slider further)
-        el('exc-slider').max = Math.round(fromEUR(nlvEUR, curExc));
-        el('not-slider').max = Math.max(Math.round(fromEUR(warnTotal * 1.5, curNot)), gNotionalUSD > 0 ? Math.round(fromEUR(gNotionalUSD / getFX(), curNot) * 1.5) : 0);
+        // Put slider max in its currency (an import can raise it further). Never below the
+        // current value, otherwise the browser silently clamps it when NLV / loan % change.
+        var ns = el('not-slider');
+        ns.max = Math.max(
+            Math.round(fromEUR(warnTotal * 1.5, curNot)),
+            gNotionalUSD > 0 ? Math.round(fromEUR(gNotionalUSD / getFX(), curNot) * 1.5) : 0,
+            Math.ceil((parseFloat(ns.value) || 0) * 1.2));
 
         onSliders();
     }
 
-    var AXES = ['Liquidity', 'VIX Buffer', 'Exposure Safety', 'Margin Safety', 'Ticker Conc.', 'Date Conc.'];
+    var AXES = ['Liquidity', 'VIX Buffer', 'Exposure', 'Margin Safety', 'Ticker Conc.', 'Date Conc.'];
     var N = AXES.length;
     var CX = 195, CY = 190, R = 128;
 
@@ -716,12 +798,14 @@ input[type="range"]::-moz-range-thumb {
         var nlvRaw = parseFloat(el('nlv').value);
         if (isNaN(nlvRaw) || nlvRaw <= 0) return;
 
-        var excessRaw   = parseFloat(el('exc-slider').value);
+        var excessRaw   = Math.max(0, parseFloat(el('exc-in').value) || 0);
         var notionalRaw = parseFloat(el('not-slider').value);
 
         var nlv      = toEUR(nlvRaw, curNLV);
-        var excess   = toEUR(excessRaw, curExc);
-        var wiEUR    = whatIfUSD() / getFX();
+        var excessIn = toEUR(excessRaw, curExc);                // today, from TWS
+        var wiUSD    = whatIfUSD();
+        var wiEUR    = wiUSD / getFX();
+        var excess   = excessIn - wiEUR * MARGIN;               // after the what-if trade (it uses margin)
         var notional = toEUR(notionalRaw, curNot) + wiEUR;     // put notional incl. the what-if trade
         var stkRaw   = parseFloat(el('stk-val').value);
         var stocks   = isNaN(stkRaw) || stkRaw < 0 ? 0 : toEUR(stkRaw, curStk);
@@ -734,13 +818,13 @@ input[type="range"]::-moz-range-thumb {
         // Show conversion hint
         var excConv = el('exc-converted');
         if (curExc === 'USD') {
-            excConv.textContent = '≈ ' + fmt(excess) + ' EUR';
+            excConv.textContent = '≈ ' + fmt(excessIn) + ' EUR';
         } else {
             excConv.textContent = '';
         }
         var notConv = el('not-converted');
         if (curNot === 'USD') {
-            notConv.textContent = '≈ ' + fmt(notional) + ' EUR';
+            notConv.textContent = '≈ ' + fmt(notional - wiEUR) + ' EUR';
         } else {
             notConv.textContent = '';
         }
@@ -820,46 +904,43 @@ input[type="range"]::-moz-range-thumb {
             marginScore = (cushion / CUSHION_WARN) * 0.40;
         }
 
-        // 5. TICKER CONCENTRATION
-        // Green: <40% (<0.40), Warn: 40-60%, Danger: >60%
-        // Weight by how loaded the portfolio is — small notional = low real risk
+        // 5. TICKER CONCENTRATION (stocks held + put notional per ticker, incl. the what-if)
+        // Green: <40%, Warn: 40-60%, Danger: >60%
+        // Blended toward 1.0 when the book is small vs. the loan limit (little real risk)
+        var conc = concNow(wiUSD, el('wi-tkr').value.trim().toUpperCase(), whatIfDateKey());
+        var tc = conc.tickerConc, dc = conc.dateConc;
+        var tickerWeight = totalExp <= 0 ? 0 : maxTotal > 0 ? Math.min(1, totalExp / maxTotal) : 1;
+        var rawTickerScore = tc <= 0.40
+            ? 0.70 + (1 - tc / 0.40) * 0.30
+            : Math.max(0, 0.70 - ((tc - 0.40) / 0.20) * 0.30);
+        var tickerScore = rawTickerScore + (1.0 - rawTickerScore) * (1 - tickerWeight);
+
+        // 6. DATE CONCENTRATION (put notional per expiry)
+        // Green: <35%, Warn: 35-70%, Danger: >70%; blended by how much of the put room is used
         var putRoom = maxTotal - stocks;   // put notional that fits the limit next to the stocks
         var notionalWeight = notional <= 0 ? 0 : putRoom > 0 ? Math.min(1, notional / putRoom) : 1;
-        var rawTickerScore = gTickerConc <= 0.40
-            ? 0.70 + (1 - gTickerConc / 0.40) * 0.30
-            : Math.max(0, 0.70 - ((gTickerConc - 0.40) / 0.20) * 0.30);
-        // Blend toward 1.0 (perfect) when notional is small
-        var tickerScore = rawTickerScore + (1.0 - rawTickerScore) * (1 - notionalWeight);
-
-        // 6. DATE CONCENTRATION
-        // Green: <35% (<0.35), Warn: 35-70%, Danger: >70%
-        var rawDateScore = gDateConc <= 0.35
-            ? 0.70 + (1 - gDateConc / 0.35) * 0.30
-            : gDateConc <= 0.70
-            ? 0.40 + ((0.70 - gDateConc) / 0.35) * 0.30
-            : Math.max(0, 0.40 - ((gDateConc - 0.70) / 0.30) * 0.40);
+        var rawDateScore = dc <= 0.35
+            ? 0.70 + (1 - dc / 0.35) * 0.30
+            : dc <= 0.70
+            ? 0.40 + ((0.70 - dc) / 0.35) * 0.30
+            : Math.max(0, 0.40 - ((dc - 0.70) / 0.30) * 0.40);
         var dateScore = rawDateScore + (1.0 - rawDateScore) * (1 - notionalWeight);
 
         var scores = [liqScore, vixScore, expScore, marginScore, tickerScore, dateScore];
 
-        // Target scores — the green zone boundary (0.70), not the theoretical maximum
-        var targetScores = [
-            0.70,  // Liquidity: just at the green threshold (= targetExcess)
-            vixScore < 0.70 ? vixScore : 0.70 + ((20 - Math.min(vix, 20)) / 15) * 0.30, // VIX: score at VIX=20
-            0.70,  // Exposure: score at the loan-target boundary (maxTotal)
-            0.70,  // Margin: score at a 20% drop cushion
-            0.70,  // Ticker: score at 40% boundary
-            0.70,  // Date: score at 35% boundary
-        ];
+        // Target scores — the green zone boundary (0.70) on every axis
+        var targetScores = [0.70, 0.70, 0.70, 0.70, 0.70, 0.70];
 
-        // Zone logic (same as before)
+        // Zones. Overall zone = worst of liquidity, exposure and margin cushion.
         var liqZone = excess < stopExcess ? 'danger' : excess < targetExcess ? 'warn' : 'safe';
         var expZone = totalExp <= maxTotal ? 'safe' : totalExp <= warnTotal ? 'warn' : 'danger';
+        var mrgZone = cushion >= CUSHION_GREEN ? 'safe' : cushion >= CUSHION_WARN ? 'warn' : 'danger';
         var zoneRank = { safe: 0, warn: 1, danger: 2 };
-        var effectiveLiq = notional > 0 ? liqZone : (excess < stopExcess ? 'danger' : 'safe');
-        var zone = zoneRank[effectiveLiq] >= zoneRank[expZone] ? effectiveLiq : expZone;
+        // Without any position (stocks or puts) low excess is only a problem below the hard stop
+        var effectiveLiq = totalExp > 0 ? liqZone : (excess < stopExcess ? 'danger' : 'safe');
+        var zone = [effectiveLiq, expZone, mrgZone].reduce(function(a, z) { return zoneRank[z] > zoneRank[a] ? z : a; }, 'safe');
 
-        // Colour slider values
+        // Colour input values
         el('exc-val').style.color = liqZone === 'danger' ? '#e86060' : liqZone === 'warn' ? '#e8a03a' : '#3aad72';
         el('not-val').style.color = expZone === 'danger' ? '#e86060' : expZone === 'warn' ? '#e8a03a' : '#3aad72';
 
@@ -867,12 +948,15 @@ input[type="range"]::-moz-range-thumb {
         drawRadar(scores, targetScores, zone);
 
         var d = {
-            nlv: nlv, excess: excess, notional: notional, notionalEff: notionalEff, vix: vix,
-            stocks: stocks, wiEUR: wiEUR, totalExp: totalExp, loanPct: loanPct,
+            nlv: nlv, excess: excess, excessIn: excessIn, notional: notional, notionalEff: notionalEff, vix: vix,
+            stocks: stocks, wiEUR: wiEUR, wiUSD: wiUSD, totalExp: totalExp, loanPct: loanPct,
             stopExcess: stopExcess, targetExcess: targetExcess,
             maxTotal: maxTotal, warnTotal: warnTotal, expZone: expZone,
-            marginUsed: marginUsed, cushion: cushion, scores: scores, targetScores: targetScores
+            marginUsed: marginUsed, cushion: cushion, conc: conc, scores: scores, targetScores: targetScores
         };
+        // Room for new puts: after the what-if (status + sell card) and before it (what-if "fits")
+        d.room       = roomCalc(excess, totalExp, maxTotal, targetExcess);
+        d.roomBefore = roomCalc(excessIn, totalExp - wiEUR, maxTotal, targetExcess);
         renderLeverage(d);
         renderAxisLegend(d);
         renderSell(d);
@@ -880,37 +964,40 @@ input[type="range"]::-moz-range-thumb {
         // Put book quality card (moneyness proxy + DTE)
         renderBookRisk(csvEUR, riskFactor);
 
-        // Status message
+        // Status message — the most severe problem first
         var status   = el('you-status');
         var headline = el('you-headline');
         var sub      = el('you-sub');
-        var bpLeft   = excess - targetExcess;
-        var maxCanSell = bpLeft > 0 ? bpLeft / MARGIN : 0;
-        var roomByExp  = Math.max(0, maxTotal - totalExp);
-        var canSell    = Math.min(maxCanSell, roomByExp);
+        var pctDrop  = fmtCushion(cushion);
+        // Exposure to cut (closing puts also frees ~MARGIN of excess) to lift the cushion to c
+        var cutForCushion = function(c) { return Math.max(0, (c * totalExp - excess) / (MARGIN + c)); };
 
         status.className = 'you-status ' + zone;
 
-        if (zone === 'danger' && excess < stopExcess) {
+        if (excess < stopExcess) {
             headline.textContent = '🔴 Reduce positions';
-            sub.textContent = 'Need ' + fmt(stopExcess - excess) + ' more excess to reach hard stop floor';
-        } else if (zone === 'danger') {
+            sub.textContent = 'Need ' + fmt(stopExcess - excess) + ' EUR more excess to reach the hard stop floor';
+        } else if (expZone === 'danger') {
             headline.textContent = '🔴 Overexposed';
-            sub.textContent = 'Close ' + fmt(totalExp - warnTotal) + ' EUR notional to enter caution zone';
+            sub.textContent = 'Reduce exposure by ' + fmt(totalExp - warnTotal) + ' EUR (puts or stocks) to reach the caution zone';
+        } else if (mrgZone === 'danger') {
+            headline.textContent = '🔴 Margin call risk';
+            sub.textContent = 'A ' + pctDrop + ' drop wipes out your excess — reduce exposure by ~' + fmt(cutForCushion(CUSHION_WARN)) + ' EUR';
         } else if (zone === 'warn' && liqZone === 'warn') {
             headline.textContent = '⚠️ Hold — liquidity low';
-            sub.textContent = 'Need ' + fmt(targetExcess - excess) + ' more excess to enter green';
-        } else if (zone === 'warn') {
+            sub.textContent = 'Need ' + fmt(targetExcess - excess) + ' EUR more excess to enter green';
+        } else if (expZone === 'warn') {
             headline.textContent = '⚠️ Caution — above loan target';
-            sub.textContent = 'Close ' + fmt(totalExp - maxTotal) + ' EUR notional to get within ' + loanPct + '% loan';
+            sub.textContent = 'Reduce exposure by ' + fmt(totalExp - maxTotal) + ' EUR (puts or stocks) to get within ' + loanPct + '% loan';
+        } else if (mrgZone === 'warn') {
+            headline.textContent = '⚠️ Caution — thin margin cushion';
+            sub.textContent = 'Survives a ' + pctDrop + ' drop (target ≥ ' + Math.round(CUSHION_GREEN * 100) + '%) — reduce exposure by ~' + fmt(cutForCushion(CUSHION_GREEN)) + ' EUR';
+        } else if (d.room.room > 100) {
+            headline.textContent = '✅ Free to sell';
+            sub.textContent = 'Can add ~' + fmt(d.room.room) + ' EUR more put notional (binding: ' + bindingLabel(d.room, d) + ')';
         } else {
-            if (canSell > 100) {
-                headline.textContent = '✅ Free to sell';
-                sub.textContent = 'Can add ~' + fmt(canSell) + ' EUR more notional (binding: ' + (roomByExp <= maxCanSell ? 'loan target' : 'liquidity') + ')';
-            } else {
-                headline.textContent = '✅ Green — at the limit';
-                sub.textContent = 'Little room to add more at current levels';
-            }
+            headline.textContent = '✅ Green — at the limit';
+            sub.textContent = 'Little room to add more at current levels';
         }
     }
 
@@ -1038,7 +1125,10 @@ input[type="range"]::-moz-range-thumb {
                 var stopPct = nlv > 0 ? d.stopExcess / nlv * 100 : 0;
                 var c = d.excess < d.stopExcess ? '#e86060' : d.excess < d.targetExcess ? '#e8a03a' : '#3aad72';
                 return '<div class="lev-grid" style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);">' +
-                    '<span>Excess liquidity today</span><span style="color:' + c + ';font-weight:700;">' + eur(d.excess) + ' · ' + exPct.toFixed(0) + '% of NLV</span>' +
+                    (d.wiEUR > 0
+                        ? '<span>Excess liquidity today</span><span>' + eur(d.excessIn) + '</span>' +
+                          '<span>after the what-if</span><span style="color:' + c + ';font-weight:700;">' + eur(d.excess) + ' · ' + exPct.toFixed(0) + '% of NLV</span>'
+                        : '<span>Excess liquidity today</span><span style="color:' + c + ';font-weight:700;">' + eur(d.excess) + ' · ' + exPct.toFixed(0) + '% of NLV</span>') +
                     '<span></span><span style="color:var(--muted);font-size:10px;">target ≥ ' + tgtPct.toFixed(0) + '% (VIX) · hard stop ' + stopPct.toFixed(0) + '%</span>' +
                 '</div>';
             })();
@@ -1047,13 +1137,27 @@ input[type="range"]::-moz-range-thumb {
         var strike = parseFloat(el('wi-strike').value);
         var res = '';
         if (strike > 0) {
-            var roomBefore = d.maxTotal - base;                       // EUR, before the what-if
-            var fit = Math.max(0, Math.floor(roomBefore * fx / (100 * strike)));
-            res = 'Fits within the ' + d.loanPct + '% loan target at $' + strike + ': <b style="color:var(--text)">' + fit + ' contract' + (fit === 1 ? '' : 's') + '</b>';
+            // Same room as the status line / sell card, measured before the what-if trade
+            var fit = Math.max(0, Math.floor(d.roomBefore.room * fx / (100 * strike)));
+            res = 'Fits at $' + strike + ' (all limits green): <b style="color:var(--text)">' + fit + ' contract' + (fit === 1 ? '' : 's') + '</b>' +
+                  ' <span style="opacity:.8">· binding: ' + bindingLabel(d.roomBefore, d) + '</span>';
             if (d.wiEUR > 0) {
                 var levBefore = nlv > 0 ? base / nlv : 0;
-                res += ' · this trade: ' + levBefore.toFixed(2) + 'x → <b style="color:' + color + '">' + lev.toFixed(2) + 'x</b>' +
+                res += '<br>This trade: ' + levBefore.toFixed(2) + 'x → <b style="color:' + color + '">' + lev.toFixed(2) + 'x</b>' +
                        ' (+' + usd(d.wiEUR) + ' notional, margin ~' + usd(d.wiEUR * MARGIN) + ')';
+                // Concentration impact (needs an imported book)
+                if (d.conc.hasBook) {
+                    var c0 = concNow(0, '', '');
+                    var tkr = el('wi-tkr').value.trim().toUpperCase();
+                    var dk = whatIfDateKey();
+                    var pc = function(v) { return Math.round(v * 100) + '%'; };
+                    res += '<br>' + (tkr
+                        ? escHTML(tkr) + ' ' + pc(c0.share(tkr)) + ' → <b style="color:var(--text)">' + pc(d.conc.share(tkr)) + '</b> of the book'
+                        : 'New ticker · top ' + escHTML(c0.topTicker || '—') + ' ' + pc(c0.tickerConc) + ' → ' + pc(d.conc.share(c0.topTicker)));
+                    res += ' · ' + (dk
+                        ? dk + ' ' + pc(c0.dshare(dk)) + ' → <b style="color:var(--text)">' + pc(d.conc.dshare(dk)) + '</b> of put notional'
+                        : 'new expiry · top ' + (c0.topDate || '—') + ' ' + pc(c0.dateConc) + ' → ' + pc(d.conc.dshare(c0.topDate)));
+                }
             }
         } else {
             res = 'Enter contracts and strike to see the impact of a new put before placing it.';
@@ -1068,10 +1172,10 @@ input[type="range"]::-moz-range-thumb {
 
         var axes = [
             {
-                name: 'Liquidity (Excess)',
+                name: AXES[0],
                 score: d.scores[0],
                 tgtScore: d.targetScores[0],
-                value: fmtE(d.excess),
+                value: fmtE(d.excess) + ' · ' + (d.nlv > 0 ? Math.round(d.excess / d.nlv * 100) : 0) + '% NLV',
                 optimal: '≥ ' + fmtE(d.targetExcess),
                 zones: [
                     { label: '🔴 Danger: < ' + fmtE(d.stopExcess),   color: '#e86060' },
@@ -1080,7 +1184,7 @@ input[type="range"]::-moz-range-thumb {
                 ]
             },
             {
-                name: 'VIX Buffer',
+                name: AXES[1],
                 score: d.scores[1],
                 tgtScore: d.targetScores[1],
                 value: 'VIX ' + d.vix.toFixed(1),
@@ -1092,7 +1196,7 @@ input[type="range"]::-moz-range-thumb {
                 ]
             },
             {
-                name: 'Exposure (stocks + puts)',
+                name: AXES[2] + ' (stocks + puts)',
                 score: d.scores[2],
                 tgtScore: d.targetScores[2],
                 value: fmtE(d.totalExp) + ' · ' + (d.nlv > 0 ? (d.totalExp / d.nlv).toFixed(2) : '0') + 'x',
@@ -1104,10 +1208,10 @@ input[type="range"]::-moz-range-thumb {
                 ]
             },
             {
-                name: 'Margin Safety',
+                name: AXES[3],
                 score: d.scores[3],
                 tgtScore: d.targetScores[3],
-                value: isFinite(d.cushion) ? 'survives ' + Math.round(d.cushion * 100) + '% drop' : 'no positions',
+                value: isFinite(d.cushion) ? 'survives ' + fmtCushion(d.cushion) + ' drop' : 'no positions',
                 optimal: '≥ ' + Math.round(CUSHION_GREEN * 100) + '% drop',
                 zones: [
                     { label: '🔴 Danger: < ' + Math.round(CUSHION_WARN * 100) + '% drop', color: '#e86060' },
@@ -1116,13 +1220,11 @@ input[type="range"]::-moz-range-thumb {
                 ]
             },
             {
-                name: 'Ticker Conc.',
+                name: AXES[4] + ' (stocks + puts)',
                 score: d.scores[4],
                 tgtScore: d.targetScores[4],
-                value: fmtP(gTickerConc) + ' in top ticker',
+                value: (d.conc.topTicker ? d.conc.topTicker + ' ' : '') + fmtP(d.conc.tickerConc),
                 optimal: '< 40% in any ticker',
-                rawPct: Math.round(gTickerConc * 100),
-                dangerPct: 60,
                 zones: [
                     { label: '🔴 Danger: > 60% one ticker', color: '#e86060' },
                     { label: '🟡 Warn: 40–60% one ticker',  color: '#e8a03a' },
@@ -1130,13 +1232,11 @@ input[type="range"]::-moz-range-thumb {
                 ]
             },
             {
-                name: 'Date Conc.',
+                name: AXES[5],
                 score: d.scores[5],
                 tgtScore: d.targetScores[5],
-                value: fmtP(gDateConc) + ' one expiry',
+                value: (d.conc.topDate ? d.conc.topDate + ' ' : '') + fmtP(d.conc.dateConc),
                 optimal: '< 35% on any date',
-                rawPct: Math.round(gDateConc * 100),
-                dangerPct: 70,
                 zones: [
                     { label: '🔴 Danger: > 70% one date', color: '#e86060' },
                     { label: '🟡 Warn: 35–70% one date',  color: '#e8a03a' },
@@ -1155,10 +1255,9 @@ input[type="range"]::-moz-range-thumb {
             var sc = ax.score;
             var barColor  = sc >= 0.7 ? '#3aad72' : sc >= 0.4 ? '#e8a03a' : '#e86060';
             var valColor  = barColor;
-            var fillPct   = ax.rawPct !== undefined ? Math.min(ax.rawPct, 100) : Math.round(sc * 100);
-            var tgtMarker = ax.rawPct !== undefined
-                ? (ax.name.indexOf('Ticker') >= 0 ? 40 : 35)
-                : Math.round(ax.tgtScore * 100);
+            // Every bar shows the score (longer = better); the marker is the green boundary
+            var fillPct   = Math.round(sc * 100);
+            var tgtMarker = Math.round(ax.tgtScore * 100);
 
             var zonesHTML = ax.zones.map(function(z) {
                 return '<span class="ax-zone-pill" style="background:' + z.color + '18;color:' + z.color + '">' + z.label + '</span>';
@@ -1168,7 +1267,7 @@ input[type="range"]::-moz-range-thumb {
                 row.className = 'ax-row';
                 row.innerHTML =
                     '<span class="ax-name">' + ax.name + '</span>' +
-                    '<span class="ax-val" style="color:' + valColor + '">' + ax.value + '</span>' +
+                    '<span class="ax-val" style="color:' + valColor + '">' + escHTML(ax.value) + '</span>' +
                     '<span class="ax-opt" style="color:var(--muted)">target: ' + ax.optimal + '</span>' +
                     '<div class="ax-bar-wrap" style="grid-column:1/-1">' +
                         '<div class="ax-bar-fill" style="width:' + fillPct + '%;background:' + barColor + '"></div>' +
@@ -1203,62 +1302,52 @@ input[type="range"]::-moz-range-thumb {
     function renderSell(d) {
         el('sell-section').style.display = 'block';
 
-        var nlv            = d.nlv;
-        var excess         = d.excess;
-        var notional       = d.notional;
-        var targetExcess   = d.targetExcess;
-        var stopExcess     = d.stopExcess;
+        var nlv = d.nlv, conc = d.conc;
+        var r = d.room;                        // shared with the status line (after any what-if)
+        var roomEUR = r.room;
+        var hasRoom = roomEUR > 100;
 
-        // How much more notional can we add before hitting the binding constraint?
-        // Constraint 1: Exposure — stocks + puts must stay within NLV × (1 + loan%)
-        var roomExposure = Math.max(0, d.maxTotal - d.totalExp);
-        // Constraint 2: Liquidity — each 1 EUR notional uses MARGIN EUR of margin
-        var excessAboveTarget = excess - targetExcess;
-        var roomLiquidity = excessAboveTarget > 0 ? excessAboveTarget / MARGIN : 0;
-        // Constraint 3: Margin cushion — after adding Δ notional (uses MARGIN·Δ of excess),
-        // (excess − MARGIN·Δ) / (totalExp + Δ) must stay ≥ CUSHION_GREEN
-        var roomMargin = Math.max(0, (excess - CUSHION_GREEN * d.totalExp) / (MARGIN + CUSHION_GREEN));
-
-        var roomEUR = Math.min(roomExposure, roomLiquidity, roomMargin);
-        roomEUR = Math.max(0, roomEUR);
-
-        var bindingLabel = roomExposure <= roomLiquidity && roomExposure <= roomMargin
-            ? 'Loan target (' + d.loanPct + '% of NLV)'
-            : roomLiquidity <= roomMargin
-                ? 'Liquidity — excess near target floor'
-                : 'Margin — must survive a ' + Math.round(CUSHION_GREEN * 100) + '% drop';
-
-        // Blocked tickers — use original USD notional as denominator (not slider)
-        var totalUSD = gNotionalUSD > 0 ? gNotionalUSD : 1;
+        // Tickers / expiries already heavy in the book (incl. stocks and the what-if)
         var blockedTickers = [];
         var blockedDates   = [];
-        Object.keys(gTickerMap || {}).forEach(function(t) {
-            var pct = gTickerMap[t] / totalUSD;
+        Object.keys(conc.tmap).forEach(function(t) {
+            var pct = conc.share(t);
             if (pct >= 0.25) blockedTickers.push({ name: t, pct: Math.round(pct * 100) });
         });
         blockedTickers.sort(function(a,b){ return b.pct - a.pct; });
-
-        Object.keys(gDateMap || {}).forEach(function(dd) {
-            var pct = gDateMap[dd] / totalUSD;
+        Object.keys(conc.dmap).forEach(function(dd) {
+            var pct = conc.dshare(dd);
             if (pct >= 0.30) blockedDates.push({ name: dd, pct: Math.round(pct * 100) });
         });
         blockedDates.sort(function(a,b){ return b.pct - a.pct; });
 
-        // Suggest good expiry months (not blocked)
-        var blockedDateNames = blockedDates.map(function(d){ return d.name; });
-        var suggestions = ['Sep 2026','Dec 2026','Mar 2027'].filter(function(s) {
-            return !blockedDateNames.some(function(b){ return b.indexOf(s.split(' ')[0].toUpperCase().slice(0,3)) >= 0; });
-        });
+        // Suggested expiry months: the next 6 months from today, skipping any month+year
+        // that already holds a concentrated expiry ("18DEC26" blocks Dec 2026 only)
+        var blockedMonths = blockedDates.map(function(b) { return b.name.slice(-5); });   // "DEC26"
+        var suggestions = [];
+        var now = new Date();
+        for (var i = 1; i <= 6 && suggestions.length < 3; i++) {
+            var m = new Date(now.getFullYear(), now.getMonth() + i, 1);
+            var key = MON3[m.getMonth()] + String(m.getFullYear()).slice(2);
+            if (blockedMonths.indexOf(key) >= 0) continue;
+            suggestions.push(m.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }));
+        }
 
+        // Meters: bar = axis score, text = the real figure vs. its green limit
         var scores = d.scores;
-        var liqPct  = Math.round(scores[0] * 100);
-        var expPct  = Math.round(scores[2] * 100);
-        var mrgPct  = Math.round(scores[3] * 100);
-
+        var liqPct = Math.round(scores[0] * 100), expPct = Math.round(scores[2] * 100), mrgPct = Math.round(scores[3] * 100);
+        var liqTxt = Math.round(d.excess / nlv * 100) + '% NLV / ≥' + Math.round(d.targetExcess / nlv * 100) + '%';
+        var expTxt = (d.totalExp / nlv).toFixed(2) + 'x / ≤' + (d.maxTotal / nlv).toFixed(2) + 'x';
+        var mrgTxt = (isFinite(d.cushion) ? fmtCushion(d.cushion) + ' drop' : '—') + ' / ≥' + Math.round(CUSHION_GREEN * 100) + '%';
         function meterColor(s) { return s >= 70 ? '#3aad72' : s >= 40 ? '#e8a03a' : '#e86060'; }
+        function meter(label, pct, txt) {
+            return '<div class="sell-meter-row"><div class="sell-meter-label">' + label + '</div>' +
+                '<div class="sell-meter-bar"><div class="sell-meter-fill" style="width:' + pct + '%;background:' + meterColor(pct) + '"></div></div>' +
+                '<div class="sell-meter-val" style="color:' + meterColor(pct) + '">' + txt + '</div></div>';
+        }
 
         var blockedTickerHTML = blockedTickers.length
-            ? blockedTickers.map(function(t){ return '<span class="sell-tag sell-tag-r">'+t.name+' '+t.pct+'%</span>'; }).join('')
+            ? blockedTickers.map(function(t){ return '<span class="sell-tag sell-tag-r">'+escHTML(t.name)+' '+t.pct+'%</span>'; }).join('')
             : '<span class="sell-tag sell-tag-g">No ticker near limit</span>';
 
         var blockedDateHTML = blockedDates.length
@@ -1270,28 +1359,33 @@ input[type="range"]::-moz-range-thumb {
             : '<span class="sell-tag sell-tag-o">Spread across all available months</span>';
 
         var idealNotional = Math.min(roomEUR, nlv * 0.15);
+        var idealHTML = hasRoom
+            ? '<span class="sell-tag sell-tag-g">New ticker</span>' +
+              (suggestions[0] ? '<span class="sell-tag sell-tag-g">Exp ' + suggestions[0] + '</span>' : '') +
+              '<span class="sell-tag sell-tag-g">Notional ≤ ' + fmt(idealNotional) + ' EUR</span>'
+            : '<span class="sell-tag sell-tag-o">None — no room for new puts right now</span>';
 
         el('sell-content').innerHTML =
             '<div class="sell-card" style="border-color:rgba(58,173,114,0.3)">' +
-                '<div class="sell-headline" style="color:' + (roomEUR > 0 ? '#3aad72' : '#e86060') + '">' +
-                    (roomEUR > 0 ? '+' + fmt(roomEUR) + ' EUR notional' : 'No room to add') +
+                '<div class="sell-headline" style="color:' + (hasRoom ? '#3aad72' : '#e86060') + '">' +
+                    (hasRoom ? '+' + fmt(roomEUR) + ' EUR notional' : 'No room to add') +
                 '</div>' +
                 '<div class="sell-sub">' +
-                    (roomEUR > 0
-                        ? 'You can open new short put positions up to this amount before entering warn zone.'
+                    (hasRoom
+                        ? 'You can open new short puts up to this amount while every limit stays green' + (d.wiEUR > 0 ? ' (after the what-if trade).' : '.')
                         : 'Reduce existing positions before opening new ones.') +
                 '</div>' +
-                '<div class="sell-constraint">Binding constraint: ' + bindingLabel + '</div>' +
+                '<div class="sell-constraint">Binding constraint: ' + bindingLabel(r, d) + '</div>' +
                 '<div style="margin-top:10px">' +
-                    '<div class="sell-meter-row"><div class="sell-meter-label">Liquidity</div><div class="sell-meter-bar"><div class="sell-meter-fill" style="width:'+liqPct+'%;background:'+meterColor(liqPct)+'"></div></div><div class="sell-meter-val" style="color:'+meterColor(liqPct)+'">'+liqPct+'%</div></div>' +
-                    '<div class="sell-meter-row"><div class="sell-meter-label">Exposure</div><div class="sell-meter-bar"><div class="sell-meter-fill" style="width:'+expPct+'%;background:'+meterColor(expPct)+'"></div></div><div class="sell-meter-val" style="color:'+meterColor(expPct)+'">'+expPct+'%</div></div>' +
-                    '<div class="sell-meter-row"><div class="sell-meter-label">Margin</div><div class="sell-meter-bar"><div class="sell-meter-fill" style="width:'+mrgPct+'%;background:'+meterColor(mrgPct)+'"></div></div><div class="sell-meter-val" style="color:'+meterColor(mrgPct)+'">'+mrgPct+'%</div></div>' +
+                    meter('Liquidity', liqPct, liqTxt) +
+                    meter('Exposure', expPct, expTxt) +
+                    meter('Margin', mrgPct, mrgTxt) +
                 '</div>' +
             '</div>' +
             '<div class="sell-card">' +
                 '<div class="sell-rule">' +
                     '<div class="sell-rule-icon" style="background:rgba(232,96,96,0.10)">🚫</div>' +
-                    '<div class="sell-rule-text">Avoid these tickers<span class="sell-rule-sub">Getting close to 40% ticker limit</span><div style="margin-top:5px">'+blockedTickerHTML+'</div></div>' +
+                    '<div class="sell-rule-text">Avoid these tickers<span class="sell-rule-sub">≥ 25% of the book (stocks + puts), limit 40%</span><div style="margin-top:5px">'+blockedTickerHTML+'</div></div>' +
                 '</div>' +
                 '<div class="sell-rule">' +
                     '<div class="sell-rule-icon" style="background:rgba(232,96,96,0.10)">📅</div>' +
@@ -1299,14 +1393,12 @@ input[type="range"]::-moz-range-thumb {
                 '</div>' +
                 '<div class="sell-rule">' +
                     '<div class="sell-rule-icon" style="background:rgba(58,173,114,0.10)">✅</div>' +
-                    '<div class="sell-rule-text">Prefer these expiry months<span class="sell-rule-sub">Spreads date concentration and improves score</span><div style="margin-top:5px">'+suggestHTML+'</div></div>' +
+                    '<div class="sell-rule-text">Prefer these expiry months<span class="sell-rule-sub">Next months without a concentrated expiry</span><div style="margin-top:5px">'+suggestHTML+'</div></div>' +
                 '</div>' +
                 '<div class="sell-rule">' +
                     '<div class="sell-rule-icon" style="background:rgba(58,173,114,0.10)">🎯</div>' +
                     '<div class="sell-rule-text">Ideal next trade<span class="sell-rule-sub">Maximises diversification without breaking other axes</span><div style="margin-top:5px">' +
-                        '<span class="sell-tag sell-tag-g">New ticker</span>' +
-                        (suggestions[0] ? '<span class="sell-tag sell-tag-g">Exp '+suggestions[0]+'</span>' : '') +
-                        '<span class="sell-tag sell-tag-g">Notional &lt; '+fmt(Math.round(idealNotional/1000)*1000)+' EUR</span>' +
+                        idealHTML +
                     '</div></div>' +
                 '</div>' +
             '</div>';
@@ -1404,6 +1496,7 @@ input[type="range"]::-moz-range-thumb {
         var out = {
             periodEnd: 0, nlvEUR: null, stockEUR: null, notionalUSD: 0,
             tickerMap: {}, dateMap: {}, positions: [],
+            stocks: [], etf: {},
             openPosSeen: false, putsFound: 0
         };
         var MONTHS = { JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11 };
@@ -1442,6 +1535,16 @@ input[type="range"]::-moz-range-thumb {
                 return;
             }
 
+            // ETFs (already diversified) never count as one-ticker concentration
+            if (sec === 'Financial Instrument Information') {
+                var fm = headers[sec] || {};
+                var iFc = ibkrCol(fm, ['asset category'], 2), iFs = ibkrCol(fm, ['symbol'], 3), iFt = ibkrCol(fm, ['type'], -1);
+                if (iFt >= 0 && /^stocks$/i.test(cols[iFc] || '') && /^etf$/i.test((cols[iFt] || '').trim())) {
+                    (cols[iFs] || '').split(',').forEach(function(sy) { if (sy.trim()) out.etf[sy.trim()] = true; });
+                }
+                return;
+            }
+
             // Open short puts notional
             if (sec === 'Open Positions') {
                 var m = headers[sec] || {};
@@ -1453,9 +1556,18 @@ input[type="range"]::-moz-range-thumb {
                 var iMul  = ibkrCol(m, ['mult', 'multiplier'], 7);
                 var iCost = ibkrCol(m, ['cost price'], 8);
                 var iClos = ibkrCol(m, ['close price'], 10);
+                var iCcy  = ibkrCol(m, ['currency'], 4);
+                var iVal  = ibkrCol(m, ['value'], 11);
 
                 // Skip "Lot" detail rows when the statement has a discriminator column
                 if ((noHeader || m['datadiscriminator'] !== undefined) && (cols[iDisc] || '') !== 'Summary') return;
+
+                // Stocks held: market value per ticker (in the position's currency) for ticker concentration
+                if (/^stocks$/i.test(cols[iCat] || '')) {
+                    var sv = numIBKR(cols[iVal]);
+                    if (!isNaN(sv) && sv > 0) out.stocks.push({ ticker: (cols[iSym] || '').trim(), ccy: (cols[iCcy] || '').trim(), value: sv });
+                    return;
+                }
                 if (!/option/i.test(cols[iCat] || '')) return;
                 out.openPosSeen = true;
 
@@ -1497,6 +1609,7 @@ input[type="range"]::-moz-range-thumb {
             pos.w = rk.w; pos.status = rk.status;
         });
 
+        out.stocks.forEach(function(st) { st.etf = !!out.etf[st.ticker]; });
         return out;
     }
 
@@ -1524,28 +1637,25 @@ input[type="range"]::-moz-range-thumb {
         gRiskAvg = notionalUSD > 0 ? wSum / notionalUSD : null;
 
         if (notionalUSD > 0) {
-            var maxTicker = Math.max.apply(null, Object.keys(tickerMap).map(function(k){ return tickerMap[k]; }));
-            var maxDate   = Math.max.apply(null, Object.keys(dateMap).map(function(k){ return dateMap[k]; }));
-            gTickerConc  = maxTicker / notionalUSD;
-            gDateConc    = maxDate   / notionalUSD;
             gTickerMap   = tickerMap;
             gDateMap     = dateMap;
             gNotionalUSD = notionalUSD;
         } else {
-            gTickerConc = 0; gDateConc = 0; gTickerMap = {}; gDateMap = {}; gNotionalUSD = 0;
+            gTickerMap = {}; gDateMap = {}; gNotionalUSD = 0;
         }
+        gStocks = newest.stocks.slice();   // snapshot of the newest statement, like the puts
 
         var messages = [];
 
         if (nlvEUR !== null) {
             el('nlv').value = Math.round(nlvEUR);
-            setCur('nlv', 'EUR');
+            setCur('nlv', 'EUR', true);
             messages.push('NLV: ' + fmt(nlvEUR) + ' EUR');
         }
 
         if (newest.stockEUR !== null) {
             el('stk-val').value = Math.round(newest.stockEUR);
-            setCur('stk', 'EUR');
+            setCur('stk', 'EUR', true);
             messages.push('Stocks: ' + fmt(newest.stockEUR) + ' EUR');
         }
 
@@ -1555,12 +1665,11 @@ input[type="range"]::-moz-range-thumb {
         if (notionalUSD > 0) {
             el('not-slider').max = Math.max(el('not-slider').max, Math.round(notionalUSD * 1.5));
             el('not-slider').value = Math.round(notionalUSD);
-            setCur('not', 'USD');
-            var bigTicker = Object.keys(tickerMap).reduce(function(a,b){ return tickerMap[a]>tickerMap[b]?a:b; });
-            var bigDate   = Object.keys(dateMap).reduce(function(a,b){ return dateMap[a]>dateMap[b]?a:b; });
+            setCur('not', 'USD', true);
+            var c0 = concNow(0, '', '');
             messages.push('Put notional: ' + fmt(notionalUSD) + ' USD');
-            messages.push('Top ticker: ' + bigTicker + ' ' + Math.round(gTickerConc*100) + '%');
-            messages.push('Top expiry: ' + bigDate + ' ' + Math.round(gDateConc*100) + '%');
+            messages.push('Top ticker: ' + c0.topTicker + ' ' + Math.round(c0.tickerConc*100) + '% (stocks + puts)');
+            messages.push('Top expiry: ' + c0.topDate + ' ' + Math.round(c0.dateConc*100) + '%');
             var flagged = gPositions.filter(isFlagged).length;
             messages.push('Risk-weighted: ' + Math.round((0.6 + 0.4 * gRiskAvg) * 100) + '% of raw' +
                 (flagged ? ' \u00b7 ' + flagged + ' flagged' : ''));
