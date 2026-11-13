@@ -244,6 +244,33 @@ input[type="range"]::-moz-range-thumb {
 .sell-meter-bar { flex:1; height:5px; background:var(--border); border-radius:3px; overflow:hidden; }
 .sell-meter-fill { height:100%; border-radius:3px; }
 .sell-meter-val { font-family:var(--mono); font-size:9px; font-weight:700; width:32px; text-align:right; }
+
+/* Number inputs (stock holdings, loan target, what-if) */
+.num-in { width:100%; font-family:var(--mono); font-size:14px; font-weight:700; padding:7px 10px; border-radius:8px; border:1.5px solid var(--border); background:var(--surface2); color:var(--text); outline:none; -moz-appearance:textfield; appearance:textfield; box-sizing:border-box; }
+.num-in::-webkit-outer-spin-button, .num-in::-webkit-inner-spin-button { -webkit-appearance:none; }
+.num-in:focus { border-color:var(--accent); }
+
+/* Leverage card: exposure if every short put is assigned */
+.lev-card { border-radius:11px; padding:14px 16px; background:var(--surface2); border:1.5px solid var(--border); }
+.lev-card.safe   { border-color:#3aad72; }
+.lev-card.warn   { border-color:#e8a03a; }
+.lev-card.danger { border-color:#e86060; }
+.lev-top { display:flex; justify-content:space-between; align-items:flex-end; gap:10px; flex-wrap:wrap; }
+.lev-big { font-family:var(--mono); font-size:28px; font-weight:700; line-height:1; }
+.lev-cap { font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-top:5px; }
+.lev-loan { font-family:var(--mono); font-size:12px; text-align:right; }
+.lev-bar { position:relative; height:10px; border-radius:5px; background:var(--border); margin:22px 0 20px; }
+.lev-fill { position:absolute; left:0; top:0; bottom:0; border-radius:5px; transition:width .3s; }
+.lev-wi { position:absolute; top:0; bottom:0; border-radius:0 5px 5px 0; opacity:.45; }
+.lev-mark { position:absolute; top:-4px; bottom:-4px; width:2px; background:var(--text); opacity:.55; }
+.lev-mark span { position:absolute; top:16px; transform:translateX(-50%); font-family:var(--mono); font-size:8.5px; color:var(--muted); white-space:nowrap; }
+.lev-grid { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-family:var(--mono); font-size:11px; }
+.lev-grid > span:nth-child(odd) { color:var(--muted); }
+.lev-grid > span:nth-child(even) { text-align:right; }
+.wi-row { display:flex; align-items:center; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.wi-in { width:64px; font-size:13px; padding:5px 8px; }
+.wi-txt { font-family:var(--mono); font-size:11px; color:var(--muted); }
+.wi-res { font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:6px; line-height:1.6; min-height:1px; }
 </style>
 </head>
 <body data-theme="dark">
@@ -254,7 +281,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.1</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.2</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -272,9 +299,9 @@ input[type="range"]::-moz-range-thumb {
 
     <!-- Mode -->
     <div class="mode-row">
-        <button class="mode-pill" id="mp-conservative" onclick="setMode('conservative')">🛡️ Conservative<br><small>Stop 40%</small></button>
-        <button class="mode-pill sel-m" id="mp-moderate"     onclick="setMode('moderate')">⚖️ Moderate<br><small>Stop 30%</small></button>
-        <button class="mode-pill" id="mp-aggressive"   onclick="setMode('aggressive')">🔥 Aggressive<br><small>Stop 20%</small></button>
+        <button class="mode-pill" id="mp-conservative" onclick="setMode('conservative')">🛡️ Conservative<br><small>Stop 40% · loan 0%</small></button>
+        <button class="mode-pill sel-m" id="mp-moderate"     onclick="setMode('moderate')">⚖️ Moderate<br><small>Stop 30% · loan 20%</small></button>
+        <button class="mode-pill" id="mp-aggressive"   onclick="setMode('aggressive')">🔥 Aggressive<br><small>Stop 20% · loan 50%</small></button>
     </div>
 
     <!-- VIX slider -->
@@ -337,6 +364,29 @@ input[type="range"]::-moz-range-thumb {
             </div>
             <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;" id="not-converted"></div>
         </div>
+        <div class="slider-field">
+            <div class="slider-header">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="slider-label" title="Market value of the stocks you hold. They already use part of your NLV, so they count toward exposure.">Stock holdings</span>
+                    <div class="cur-toggle" id="stk-cur-toggle">
+                        <button class="cur-btn active" onclick="setCur('stk','EUR')">EUR</button>
+                        <button class="cur-btn" onclick="setCur('stk','USD')">USD</button>
+                    </div>
+                </div>
+                <span style="font-family:var(--mono);font-size:10px;color:var(--muted);" id="stk-converted"></span>
+            </div>
+            <input class="num-in" type="number" id="stk-val" min="0" step="1000" value="0" oninput="onSliders()">
+        </div>
+        <div class="slider-field">
+            <div class="slider-header">
+                <span class="slider-label" title="How much margin loan (as % of NLV) you accept in the worst case: every short put assigned at once. Max exposure = NLV × (1 + loan %).">Max assignment loan</span>
+                <span style="font-family:var(--mono);font-size:10px;color:var(--muted);" id="loan-hint"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <input class="num-in" type="number" id="loan-pct" min="0" max="300" step="5" value="20" oninput="onSliders()" style="flex:1;">
+                <span style="font-family:var(--mono);font-size:12px;color:var(--muted);">% of NLV</span>
+            </div>
+        </div>
     </div>
 
     <!-- Net liq + FX rate -->
@@ -363,6 +413,21 @@ input[type="range"]::-moz-range-thumb {
     <!-- Radar chart -->
     <div id="table-section" style="display:none;">
         <div class="div" style="margin-top:0;"></div>
+
+        <!-- Leverage if every short put is assigned -->
+        <div class="lev-card" id="lev-card"></div>
+
+        <!-- What-if: one new put trade -->
+        <div class="wi-row">
+            <span class="slider-label">What-if</span>
+            <span class="wi-txt">sell</span>
+            <input class="num-in wi-in" type="number" id="wi-qty" min="0" step="1" placeholder="0" oninput="onSliders()">
+            <span class="wi-txt">puts @ $</span>
+            <input class="num-in wi-in" type="number" id="wi-strike" min="0" step="0.5" placeholder="strike" oninput="onSliders()" style="width:84px;">
+            <button class="adj-btn" title="Clear what-if" onclick="el('wi-qty').value='';el('wi-strike').value='';onSliders();">×</button>
+        </div>
+        <div class="wi-res" id="wi-res"></div>
+        <div class="div"></div>
 
         <div class="radar-wrap">
             <svg id="radar-svg" viewBox="0 0 390 390" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:100%;"></svg>
@@ -419,12 +484,11 @@ input[type="range"]::-moz-range-thumb {
         moderate:     { hardStop: 30, vixBase: 40, vixSlope: 0.75, vixCap: 60 },
         aggressive:   { hardStop: 20, vixBase: 30, vixSlope: 0.50, vixCap: 45 },
     };
-    // Exposure zone multiples per mode
-    const EXP = {
-        conservative: { g: 0.75, o: 1.5 },
-        moderate:     { g: 1.0,  o: 2.0 },
-        aggressive:   { g: 1.5,  o: 3.0 },
-    };
+    // Exposure limit = max margin loan you accept if EVERY short put is assigned (worst case), as % of NLV.
+    // Total exposure = stock holdings + raw put notional. Green ≤ NLV × (1 + loan%),
+    // warn up to LOAN_WARN_BAND percentage points above that, danger beyond.
+    const LOAN_DEFAULT = { conservative: 0, moderate: 20, aggressive: 50 };
+    const LOAN_WARN_BAND = 25;
     const MARGIN = 0.20;
 
     let currentMode = 'moderate';
@@ -432,6 +496,7 @@ input[type="range"]::-moz-range-thumb {
     var curNLV = 'EUR';
     var curExc = 'EUR';
     var curNot = 'USD';
+    var curStk = 'EUR';
 
     // Concentration data parsed from IBKR CSV
     var gTickerConc = 0;
@@ -466,6 +531,7 @@ input[type="range"]::-moz-range-thumb {
         if (field === 'nlv') curNLV = cur;
         if (field === 'exc') curExc = cur;
         if (field === 'not') curNot = cur;
+        if (field === 'stk') curStk = cur;
 
         // Update toggle button states
         var toggle = el(field + '-cur-toggle');
@@ -495,6 +561,7 @@ input[type="range"]::-moz-range-thumb {
             var cls = 'mode-pill' + (x === m ? (' sel-' + x[0]) : '');
             el('mp-' + x).className = cls;
         });
+        el('loan-pct').value = LOAN_DEFAULT[m];   // each mode brings its own loan target (can be edited after)
         render();
     }
 
@@ -506,6 +573,17 @@ input[type="range"]::-moz-range-thumb {
         else if (v < 30) { el('vix-val').style.color = '#e8a03a'; tag.textContent = 'Tense'; tag.className = 'vix-tag vt-tense'; }
         else             { el('vix-val').style.color = '#e86060'; tag.textContent = 'Fear';  tag.className = 'vix-tag vt-fear'; }
         render();
+    }
+
+    function getLoanPct() {
+        var v = parseFloat(el('loan-pct').value);
+        return isNaN(v) || v < 0 ? 0 : v;
+    }
+
+    // What-if trade: contracts × 100 × strike, in USD (0 when incomplete)
+    function whatIfUSD() {
+        var q = parseFloat(el('wi-qty').value), k = parseFloat(el('wi-strike').value);
+        return (q > 0 && k > 0) ? q * 100 * k : 0;
     }
 
     function getTarget() {
@@ -535,15 +613,11 @@ input[type="range"]::-moz-range-thumb {
             nlvConv.textContent = '';
         }
 
-        var cfg = MODES[currentMode];
-        var target = getTarget();
-        var exp = EXP[currentMode];
+        var warnTotal = nlvEUR * (1 + (getLoanPct() + LOAN_WARN_BAND) / 100);
 
-        var orangeNotional = exp.o * nlvEUR;
-
-        // Slider max in their respective currencies
+        // Slider max in their respective currencies (an import can raise the put slider further)
         el('exc-slider').max = Math.round(fromEUR(nlvEUR, curExc));
-        el('not-slider').max = Math.round(fromEUR(orangeNotional * 1.5, curNot));
+        el('not-slider').max = Math.max(Math.round(fromEUR(warnTotal * 1.5, curNot)), gNotionalUSD > 0 ? Math.round(fromEUR(gNotionalUSD / getFX(), curNot) * 1.5) : 0);
 
         onSliders();
     }
@@ -710,7 +784,11 @@ input[type="range"]::-moz-range-thumb {
 
         var nlv      = toEUR(nlvRaw, curNLV);
         var excess   = toEUR(excessRaw, curExc);
-        var notional = toEUR(notionalRaw, curNot);
+        var wiEUR    = whatIfUSD() / getFX();
+        var notional = toEUR(notionalRaw, curNot) + wiEUR;     // put notional incl. the what-if trade
+        var stkRaw   = parseFloat(el('stk-val').value);
+        var stocks   = isNaN(stkRaw) || stkRaw < 0 ? 0 : toEUR(stkRaw, curStk);
+        el('stk-converted').textContent = stocks > 0 && curStk === 'USD' ? '≈ ' + fmt(stocks) + ' EUR' : '';
 
         // Display values with currency symbol
         el('exc-val').textContent = fmt(excessRaw) + ' ' + curExc;
@@ -732,17 +810,21 @@ input[type="range"]::-moz-range-thumb {
 
         var cfg    = MODES[currentMode];
         var target = getTarget();
-        var exp    = EXP[currentMode];
         var vix    = parseFloat(el('vix-slider').value);
+        var loanPct = getLoanPct();
 
         var stopExcess    = (cfg.hardStop / 100) * nlv;
         var targetExcess  = (target / 100) * nlv;
-        var greenNotional  = exp.g * nlv;
-        var orangeNotional = exp.o * nlv;
 
-        // Risk-weighted exposure: the imported book counts with factor 0.66..1.0 depending on
-        // moneyness/DTE (see putRisk); any extra notional above the imported book counts fully.
-        // Margin stays on the RAW notional — the broker margins the full amount.
+        // Exposure if every short put is assigned (worst case): stocks + RAW put notional.
+        var totalExp  = stocks + notional;
+        var maxTotal  = nlv * (1 + loanPct / 100);                     // green limit
+        var warnTotal = nlv * (1 + (loanPct + LOAN_WARN_BAND) / 100);  // danger beyond this
+        el('loan-hint').textContent = '= max ' + (1 + loanPct / 100).toFixed(2) + 'x NLV';
+
+        // Risk-weighted put notional (info only): the imported book counts with factor 0.66..1.0
+        // depending on moneyness/DTE (see putRisk); notional above the imported book counts fully.
+        // The exposure limit and margin use the RAW notional.
         var csvEUR = gNotionalUSD > 0 ? gNotionalUSD / getFX() : 0;
         var riskFactor = (csvEUR > 0 && gRiskAvg !== null) ? (0.6 + 0.4 * gRiskAvg) : 1;
         var notionalEff = csvEUR > 0
@@ -775,17 +857,17 @@ input[type="range"]::-moz-range-thumb {
             vixScore = Math.max(0, 0.40 - ((vix - 30) / 30) * 0.40); // 0..0.40
         }
 
-        // 3. EXPOSURE SAFETY
-        // Green: ≤ greenNotional, Warn: green–orange, Danger: > orangeNotional
+        // 3. EXPOSURE SAFETY (stocks + puts, worst case all assigned)
+        // Green: ≤ maxTotal, Warn: maxTotal–warnTotal, Danger: > warnTotal
         var expScore;
-        if (notionalEff <= 0) {
+        if (totalExp <= 0) {
             expScore = 1.0;
-        } else if (notionalEff <= greenNotional) {
-            expScore = 0.70 + (1 - notionalEff / greenNotional) * 0.30;
-        } else if (notionalEff <= orangeNotional) {
-            expScore = 0.40 + ((orangeNotional - notionalEff) / (orangeNotional - greenNotional)) * 0.30;
+        } else if (totalExp <= maxTotal) {
+            expScore = 0.70 + (1 - totalExp / maxTotal) * 0.30;
+        } else if (totalExp <= warnTotal) {
+            expScore = 0.40 + ((warnTotal - totalExp) / (warnTotal - maxTotal)) * 0.30;
         } else {
-            expScore = Math.max(0, 0.40 - ((notionalEff - orangeNotional) / orangeNotional) * 0.40);
+            expScore = Math.max(0, 0.40 - ((totalExp - warnTotal) / warnTotal) * 0.40);
         }
 
         // 4. MARGIN SAFETY
@@ -804,7 +886,8 @@ input[type="range"]::-moz-range-thumb {
         // 5. TICKER CONCENTRATION
         // Green: <40% (<0.40), Warn: 40-60%, Danger: >60%
         // Weight by how loaded the portfolio is — small notional = low real risk
-        var notionalWeight = greenNotional > 0 ? Math.min(1, notional / greenNotional) : 0;
+        var putRoom = maxTotal - stocks;   // put notional that fits the limit next to the stocks
+        var notionalWeight = notional <= 0 ? 0 : putRoom > 0 ? Math.min(1, notional / putRoom) : 1;
         var rawTickerScore = gTickerConc <= 0.40
             ? 0.70 + (1 - gTickerConc / 0.40) * 0.30
             : Math.max(0, 0.70 - ((gTickerConc - 0.40) / 0.20) * 0.30);
@@ -826,7 +909,7 @@ input[type="range"]::-moz-range-thumb {
         var targetScores = [
             0.70,  // Liquidity: just at the green threshold (= targetExcess)
             vixScore < 0.70 ? vixScore : 0.70 + ((20 - Math.min(vix, 20)) / 15) * 0.30, // VIX: score at VIX=20
-            0.70,  // Exposure: score at greenNotional boundary
+            0.70,  // Exposure: score at the loan-target boundary (maxTotal)
             0.70,  // Margin: score at margin+stop boundary
             0.70,  // Ticker: score at 40% boundary
             0.70,  // Date: score at 35% boundary
@@ -834,35 +917,29 @@ input[type="range"]::-moz-range-thumb {
 
         // Zone logic (same as before)
         var liqZone = excess < stopExcess ? 'danger' : excess < targetExcess ? 'warn' : 'safe';
-        var expZone = notionalEff <= greenNotional ? 'safe' : notionalEff <= orangeNotional ? 'warn' : 'danger';
+        var expZone = totalExp <= maxTotal ? 'safe' : totalExp <= warnTotal ? 'warn' : 'danger';
         var zoneRank = { safe: 0, warn: 1, danger: 2 };
         var effectiveLiq = notional > 0 ? liqZone : (excess < stopExcess ? 'danger' : 'safe');
         var zone = zoneRank[effectiveLiq] >= zoneRank[expZone] ? effectiveLiq : expZone;
 
         // Colour slider values
         el('exc-val').style.color = liqZone === 'danger' ? '#e86060' : liqZone === 'warn' ? '#e8a03a' : '#3aad72';
-        el('not-val').style.color = notionalEff > orangeNotional ? '#e86060' : notionalEff > greenNotional ? '#e8a03a' : '#3aad72';
+        el('not-val').style.color = expZone === 'danger' ? '#e86060' : expZone === 'warn' ? '#e8a03a' : '#3aad72';
 
         // Draw radar
         drawRadar(scores, targetScores, zone);
         updateMarginGrid(nlv > 0 ? excess / nlv : 0, nlv);
 
-        // Render axis legend table
-        renderAxisLegend({
+        var d = {
             nlv: nlv, excess: excess, notional: notional, notionalEff: notionalEff, vix: vix,
+            stocks: stocks, wiEUR: wiEUR, totalExp: totalExp, loanPct: loanPct,
             stopExcess: stopExcess, targetExcess: targetExcess,
-            greenNotional: greenNotional, orangeNotional: orangeNotional,
-            marginUsed: marginUsed,
-            scores: scores, targetScores: targetScores
-        });
-
-        // Render what can I sell
-        renderSell({
-            nlv: nlv, excess: excess, notional: notional, notionalEff: notionalEff,
-            stopExcess: stopExcess, targetExcess: targetExcess,
-            greenNotional: greenNotional, orangeNotional: orangeNotional,
-            marginUsed: marginUsed, scores: scores
-        });
+            maxTotal: maxTotal, warnTotal: warnTotal, expZone: expZone,
+            marginUsed: marginUsed, scores: scores, targetScores: targetScores
+        };
+        renderLeverage(d);
+        renderAxisLegend(d);
+        renderSell(d);
 
         // Put book quality card (moneyness proxy + DTE)
         renderBookRisk(csvEUR, riskFactor);
@@ -873,8 +950,7 @@ input[type="range"]::-moz-range-thumb {
         var sub      = el('you-sub');
         var bpLeft   = excess - targetExcess;
         var maxCanSell = bpLeft > 0 ? bpLeft / MARGIN : 0;
-        var roomByExp  = Math.max(0, greenNotional - notionalEff);
-        var wtd        = riskFactor < 0.995 ? ' risk-weighted' : '';
+        var roomByExp  = Math.max(0, maxTotal - totalExp);
         var canSell    = Math.min(maxCanSell, roomByExp);
 
         status.className = 'you-status ' + zone;
@@ -884,17 +960,17 @@ input[type="range"]::-moz-range-thumb {
             sub.textContent = 'Need ' + fmt(stopExcess - excess) + ' more excess to reach hard stop floor';
         } else if (zone === 'danger') {
             headline.textContent = '🔴 Overexposed';
-            sub.textContent = 'Close ' + fmt(notionalEff - orangeNotional) + wtd + ' notional to enter caution zone';
+            sub.textContent = 'Close ' + fmt(totalExp - warnTotal) + ' EUR notional to enter caution zone';
         } else if (zone === 'warn' && liqZone === 'warn') {
             headline.textContent = '⚠️ Hold — liquidity low';
             sub.textContent = 'Need ' + fmt(targetExcess - excess) + ' more excess to enter green';
         } else if (zone === 'warn') {
-            headline.textContent = '⚠️ Caution — near exposure limit';
-            sub.textContent = 'Close ' + fmt(notionalEff - greenNotional) + wtd + ' notional to enter green zone';
+            headline.textContent = '⚠️ Caution — above loan target';
+            sub.textContent = 'Close ' + fmt(totalExp - maxTotal) + ' EUR notional to get within ' + loanPct + '% loan';
         } else {
             if (canSell > 100) {
                 headline.textContent = '✅ Free to sell';
-                sub.textContent = 'Can add ~' + fmt(canSell) + ' more notional (binding: ' + (roomByExp <= maxCanSell ? 'exposure limit' : 'liquidity') + ')';
+                sub.textContent = 'Can add ~' + fmt(canSell) + ' EUR more notional (binding: ' + (roomByExp <= maxCanSell ? 'loan target' : 'liquidity') + ')';
             } else {
                 headline.textContent = '✅ Green — at the limit';
                 sub.textContent = 'Little room to add more at current levels';
@@ -970,8 +1046,72 @@ input[type="range"]::-moz-range-thumb {
                 listHTML +
                 '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5;">' +
                     'Estimated from option price vs premium collected \u2014 the statement has no underlying prices. ' +
-                    'Margin still uses the raw notional.</div>' +
+                    'Info only: the loan target and margin use the raw notional.</div>' +
             '</div>';
+    }
+
+    // ── LEVERAGE CARD (worst case: every short put assigned) ─────────────
+    //   leverage = (stocks + put notional) / NLV,  loan = max(0, total − NLV)
+    //   max at target = NLV × (1 + loan%),  buffer = max − total (negative = over the target)
+    function renderLeverage(d) {
+        var nlv = d.nlv, tot = d.totalExp;
+        var lev  = nlv > 0 ? tot / nlv : 0;
+        var loan = Math.max(0, tot - nlv);
+        var loanPctNow = nlv > 0 ? loan / nlv * 100 : 0;
+        var buffer = d.maxTotal - tot;
+        var color = d.expZone === 'danger' ? '#e86060' : d.expZone === 'warn' ? '#e8a03a' : '#3aad72';
+        var fx = getFX();
+        var usd = function(v) { return fmt(Math.abs(v) * fx) + ' USD'; };
+        var eur = function(v) { return fmt(Math.abs(v)) + ' EUR'; };
+
+        // Bar scale: 0 .. a bit past the larger of total exposure and the danger line
+        var scale = Math.max(tot, d.warnTotal) * 1.08;
+        var pos = function(v) { return Math.max(0, Math.min(100, v / scale * 100)).toFixed(2) + '%'; };
+        var base = tot - d.wiEUR;   // exposure before the what-if trade
+        var bar =
+            '<div class="lev-fill" style="width:' + pos(base) + ';background:' + color + ';"></div>' +
+            (d.wiEUR > 0 ? '<div class="lev-wi" style="left:' + pos(base) + ';width:' + (Math.min(100, tot / scale * 100) - Math.min(100, base / scale * 100)).toFixed(2) + '%;background:' + color + ';"></div>' : '') +
+            '<div class="lev-mark" style="left:' + pos(nlv) + '"><span>NLV</span></div>' +
+            (d.loanPct > 0 ? '<div class="lev-mark" style="left:' + pos(d.maxTotal) + '"><span style="top:-15px;">' + d.loanPct + '%</span></div>' : '') +
+            '<div class="lev-mark" style="left:' + pos(d.warnTotal) + ';background:#e86060;"><span style="color:#e86060">' + (d.loanPct + LOAN_WARN_BAND) + '%</span></div>';
+
+        var effLev = nlv > 0 ? (d.stocks + d.notionalEff) / nlv : 0;
+        el('lev-card').className = 'lev-card ' + d.expZone;
+        el('lev-card').innerHTML =
+            '<div class="lev-top">' +
+                '<div><div class="lev-big" style="color:' + color + '">' + lev.toFixed(2) + 'x</div>' +
+                '<div class="lev-cap">Leverage if all puts assigned</div></div>' +
+                '<div class="lev-loan"><span style="color:' + color + ';font-weight:700;">Loan ' + loanPctNow.toFixed(1) + '%</span> of NLV' +
+                '<div class="lev-cap" style="text-align:right;">target ≤ ' + d.loanPct + '%</div></div>' +
+            '</div>' +
+            '<div class="lev-bar">' + bar + '</div>' +
+            '<div class="lev-grid">' +
+                '<span>Stocks</span><span>' + eur(d.stocks) + '</span>' +
+                '<span>Short puts' + (d.wiEUR > 0 ? ' (incl. what-if)' : '') + '</span><span>' + eur(d.notional) + ' · ' + usd(d.notional) + '</span>' +
+                '<span>Total exposure</span><span><b>' + eur(tot) + '</b></span>' +
+                '<span>Loan if all assigned</span><span>' + eur(loan) + ' · ' + usd(loan) + '</span>' +
+                '<span>Max at ' + d.loanPct + '% loan</span><span>' + eur(d.maxTotal) + '</span>' +
+                '<span>' + (buffer >= 0 ? 'Room left' : 'Over target') + '</span><span style="color:' + (buffer >= 0 ? '#3aad72' : '#e86060') + ';font-weight:700;">' +
+                    (buffer >= 0 ? '+' : '−') + eur(buffer) + ' · ' + usd(buffer) + '</span>' +
+                (Math.abs(effLev - lev) > 0.005 ? '<span>Risk-weighted (info)</span><span>' + effLev.toFixed(2) + 'x</span>' : '') +
+            '</div>';
+
+        // What-if result: impact of the trade + how many contracts fit at that strike
+        var strike = parseFloat(el('wi-strike').value);
+        var res = '';
+        if (strike > 0) {
+            var roomBefore = d.maxTotal - base;                       // EUR, before the what-if
+            var fit = Math.max(0, Math.floor(roomBefore * fx / (100 * strike)));
+            res = 'Fits within the ' + d.loanPct + '% loan target at $' + strike + ': <b style="color:var(--text)">' + fit + ' contract' + (fit === 1 ? '' : 's') + '</b>';
+            if (d.wiEUR > 0) {
+                var levBefore = nlv > 0 ? base / nlv : 0;
+                res += ' · this trade: ' + levBefore.toFixed(2) + 'x → <b style="color:' + color + '">' + lev.toFixed(2) + 'x</b>' +
+                       ' (+' + usd(d.wiEUR) + ' notional, margin ~' + usd(d.wiEUR * MARGIN) + ')';
+            }
+        } else {
+            res = 'Enter contracts and strike to see the impact of a new put before placing it.';
+        }
+        el('wi-res').innerHTML = res;
     }
 
     // ── AXIS LEGEND TABLE ─────────────────────────────────────────────────
@@ -1005,15 +1145,15 @@ input[type="range"]::-moz-range-thumb {
                 ]
             },
             {
-                name: 'Exposure Safety',
+                name: 'Exposure (stocks + puts)',
                 score: d.scores[2],
                 tgtScore: d.targetScores[2],
-                value: fmtE(d.notionalEff) + (Math.abs(d.notionalEff - d.notional) > 1 ? ' (raw ' + fmt(d.notional) + ')' : ''),
-                optimal: '≤ ' + fmtE(d.greenNotional),
+                value: fmtE(d.totalExp) + ' · ' + (d.nlv > 0 ? (d.totalExp / d.nlv).toFixed(2) : '0') + 'x',
+                optimal: '≤ ' + fmtE(d.maxTotal),
                 zones: [
-                    { label: '🔴 Danger: > ' + fmtE(d.orangeNotional), color: '#e86060' },
-                    { label: '🟡 Warn: ' + fmtE(d.greenNotional) + ' – ' + fmtE(d.orangeNotional), color: '#e8a03a' },
-                    { label: '🟢 Green: ≤ ' + fmtE(d.greenNotional),   color: '#3aad72' },
+                    { label: '🔴 Danger: loan > ' + (d.loanPct + LOAN_WARN_BAND) + '%', color: '#e86060' },
+                    { label: '🟡 Warn: loan ' + d.loanPct + '–' + (d.loanPct + LOAN_WARN_BAND) + '%', color: '#e8a03a' },
+                    { label: '🟢 Green: loan ≤ ' + d.loanPct + '%',   color: '#3aad72' },
                 ]
             },
             {
@@ -1072,12 +1212,12 @@ input[type="range"]::-moz-range-thumb {
                 ? (ax.name.indexOf('Ticker') >= 0 ? 40 : 35)
                 : Math.round(ax.tgtScore * 100);
 
+            var zonesHTML = ax.zones.map(function(z) {
+                return '<span class="ax-zone-pill" style="background:' + z.color + '18;color:' + z.color + '">' + z.label + '</span>';
+            }).join('');
             if (firstRender) {
                 var row = document.createElement('div');
                 row.className = 'ax-row';
-                var zonesHTML = ax.zones.map(function(z) {
-                    return '<span class="ax-zone-pill" style="background:' + z.color + '18;color:' + z.color + '">' + z.label + '</span>';
-                }).join('');
                 row.innerHTML =
                     '<span class="ax-name">' + ax.name + '</span>' +
                     '<span class="ax-val" style="color:' + valColor + '">' + ax.value + '</span>' +
@@ -1097,6 +1237,8 @@ input[type="range"]::-moz-range-thumb {
                 fill.style.width      = fillPct + '%';
                 fill.style.background = barColor;
                 row.querySelector('.ax-bar-tgt').style.left = tgtMarker + '%';
+                row.querySelector('.ax-name').textContent = ax.name;
+                row.querySelector('.ax-zones').innerHTML = zonesHTML;   // zones follow the loan target
             }
         });
     }
@@ -1116,16 +1258,12 @@ input[type="range"]::-moz-range-thumb {
         var nlv            = d.nlv;
         var excess         = d.excess;
         var notional       = d.notional;
-        var notionalEff    = d.notionalEff !== undefined ? d.notionalEff : d.notional;
-        var greenNotional  = d.greenNotional;
-        var orangeNotional = d.orangeNotional;
         var targetExcess   = d.targetExcess;
         var stopExcess     = d.stopExcess;
-        var marginUsed     = d.marginUsed;
 
         // How much more notional can we add before hitting the binding constraint?
-        // Constraint 1: Exposure — room to greenNotional
-        var roomExposure = Math.max(0, greenNotional - notionalEff);
+        // Constraint 1: Exposure — stocks + puts must stay within NLV × (1 + loan%)
+        var roomExposure = Math.max(0, d.maxTotal - d.totalExp);
         // Constraint 2: Liquidity — each 1 EUR notional uses MARGIN EUR of margin
         var excessAboveTarget = excess - targetExcess;
         var roomLiquidity = excessAboveTarget > 0 ? excessAboveTarget / MARGIN : 0;
@@ -1136,7 +1274,7 @@ input[type="range"]::-moz-range-thumb {
         roomEUR = Math.max(0, roomEUR);
 
         var bindingLabel = roomExposure <= roomLiquidity && roomExposure <= roomMargin
-            ? 'Exposure limit'
+            ? 'Loan target (' + d.loanPct + '% of NLV)'
             : roomLiquidity <= roomMargin
                 ? 'Liquidity — excess near target floor'
                 : 'Margin — excess covers margin + stop floor';
@@ -1182,7 +1320,7 @@ input[type="range"]::-moz-range-thumb {
             ? suggestions.map(function(s){ return '<span class="sell-tag sell-tag-g">'+s+'</span>'; }).join('')
             : '<span class="sell-tag sell-tag-o">Spread across all available months</span>';
 
-        var idealNotional = Math.min(roomEUR, greenNotional * 0.15);
+        var idealNotional = Math.min(roomEUR, nlv * 0.15);
 
         el('sell-content').innerHTML =
             '<div class="sell-card" style="border-color:rgba(58,173,114,0.3)">' +
@@ -1315,7 +1453,7 @@ input[type="range"]::-moz-range-thumb {
     // when IBKR adds/removes/reorders columns (e.g. an extra "Account" column).
     function parseIBKRSingle(csv) {
         var out = {
-            periodEnd: 0, nlvEUR: null, cashEUR: null, notionalUSD: 0,
+            periodEnd: 0, nlvEUR: null, cashEUR: null, stockEUR: null, notionalUSD: 0,
             tickerMap: {}, dateMap: {}, positions: [],
             openPosSeen: false, putsFound: 0
         };
@@ -1352,6 +1490,7 @@ input[type="range"]::-moz-range-thumb {
                 var val = numIBKR(cols[iTot]);
                 if (isNaN(val)) return;
                 if (label === 'Total') out.nlvEUR = val;
+                else if (label === 'Stock') out.stockEUR = val;   // market value of all stocks (base currency)
                 else if (label.toLowerCase() === 'cash') cashExact = val;
                 else if (label.toLowerCase().indexOf('cash') === 0) cashLoose = val;
                 return;
@@ -1458,6 +1597,12 @@ input[type="range"]::-moz-range-thumb {
             el('nlv').value = Math.round(nlvEUR);
             setCur('nlv', 'EUR');
             messages.push('NLV: ' + fmt(nlvEUR) + ' EUR');
+        }
+
+        if (newest.stockEUR !== null) {
+            el('stk-val').value = Math.round(newest.stockEUR);
+            setCur('stk', 'EUR');
+            messages.push('Stocks: ' + fmt(newest.stockEUR) + ' EUR');
         }
 
         if (cashEUR !== null) {
