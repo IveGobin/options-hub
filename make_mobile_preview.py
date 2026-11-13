@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 # Preview iteration, shown after the original's version (e.g. "v2.6 · m5"). Bump on every change to this script.
-PREVIEW_VERSION = 9
+PREVIEW_VERSION = 10
 
 HERE = Path(__file__).resolve().parent
 SRC = HERE / 'IBKR Unified Analyzer.html'
@@ -461,6 +461,93 @@ function renderDetailCards(rows) {
   </div>`;
   box.innerHTML = html;
 }""")
+
+# ════════════════════════════════════════════════════════════════════
+# Stocks & CC as cards: adjusted avg on top, premiums and free contracts below, short calls in details
+# ════════════════════════════════════════════════════════════════════
+rep("""          <tbody id="cc-tbody"></tbody>
+        </table>
+      </div>""", """          <tbody id="cc-tbody"></tbody>
+        </table>
+      </div>
+      <div class="stock-cards cc-cards" id="cc-cards"></div>""")
+
+rep("</style>", """  /* ── Mobile preview: Stocks & CC as cards ── */
+  @media(max-width:700px) {
+    #tab-cc .table-wrapper { display:none; }
+    #cc-stat-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    #cc-stat-row .stat-badge { min-width:0; padding:10px 12px; }
+    #cc-stat-row .stat-badge-value { font-size:17px; white-space:nowrap; }
+  }
+  body.force-cards #tab-cc .table-wrapper { display:none; }
+  .cc-adj { text-align:right; }
+  .cc-adj small { display:block; font-family:'Space Mono',monospace; font-size:10.5px; font-weight:400; }
+  .cc-calls { margin-top:10px; font-family:'Space Mono',monospace; font-size:11px; }
+  .cc-calls > div { display:flex; justify-content:space-between; gap:8px; padding:4px 0; border-top:1px solid var(--border); }
+  .cc-calls > div > span:first-child { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+</style>""")
+
+rep("""  try { renderCoveredCalls(data); } catch(e) { console.error('renderCoveredCalls error:', e); }
+""", """  try { renderCoveredCalls(data); } catch(e) { console.error('renderCoveredCalls error:', e); }
+  try { renderCoveredCallCards(data); } catch(e) { console.error('renderCoveredCallCards error:', e); }
+""")
+
+rep("""function renderCoveredCalls(data) {""", """// Mobile card view of the Stocks & CC table: same buildCoveredCalls() figures as the table.
+function renderCoveredCallCards(data) {
+  const box = document.getElementById('cc-cards');
+  if (!box) return;
+  const { rows, totals } = buildCoveredCalls(data);
+  if (!rows.length) { box.innerHTML = '<div class="empty-state">No stock positions held.</div>'; return; }
+  const pct = v => (v * 100).toFixed(1) + '%';
+  let html = '', grp = null;
+  for (const r of rows) {
+    if (r.active !== grp) {
+      grp = r.active;
+      html += `<div class="sc-group">${r.active ? 'With covered calls / wheel' : 'No option premium in the current position'} (${rows.filter(x => x.active === r.active).length})</div>`;
+    }
+    const s = r.s, sym = cs(s);
+    const canTxt = r.ccy !== 'USD' ? '—' : r.canSell < 0 ? `<b class="neg">${r.canSell}</b> (more calls than shares)`
+                 : r.maxContracts === 0 ? '<b>0</b> (&lt; 100 sh)' : `<b class="${r.canSell > 0 ? 'pos' : ''}">${r.canSell}</b>`;
+    const calls = r.calls.map(c => `<div><span>${escHtml(c.sym)} <span class="cc-status ${c.status}">${c.status.toUpperCase()}</span></span>
+        <span class="${pnlCls(c.open ? c.open.unrPL : c.real)}">${c.open ? fmtPnl(c.open.unrPL, sym) + ' / ' + fmtMoney(c.open.premiumCollected, sym) : fmtPnl(c.real, sym)}</span></div>`).join('');
+    const puts = r.puts.map(a => `<div><span>${escHtml(a.sym)} <span class="cc-status assigned">ASSIGNED</span></span><span class="${pnlCls(a.premCollected)}">${fmtPnl(a.premCollected, sym)}</span></div>`).join('');
+    html += `<div class="sc-card">
+      <div class="sc-head">
+        <span class="sc-sym">${escHtml(s.sym)}</span>
+        <span class="sc-total cc-adj">${fmtMoney(r.adjAvg, sym)}<small class="${pnlCls(r.reduction)}">${r.reduction ? '−' + pct(r.reduction) + ' vs ' + fmtMoney(s.avgCost, sym) : 'avg cost'}</small></span>
+      </div>
+      <div class="sc-desc">${s.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} sh · last ${s.lastPrice ? fmtMoney(s.lastPrice, sym) : '—'}${r.fullHistory ? ' · since ' + r.since : ''}</div>
+      <div class="sc-split">
+        ${r.ccReal ? `<span>CC realized <b class="${pnlCls(r.ccReal)}">${fmtPnl(r.ccReal, sym)}</b></span>` : ''}
+        ${r.putPrem ? `<span>Put premium <b class="${pnlCls(r.putPrem)}">${fmtPnl(r.putPrem, sym)}</b></span>` : ''}
+        ${r.openContracts ? `<span>Open CC ×${r.openContracts} <b class="${pnlCls(r.openUnr)}">${fmtPnl(r.openUnr, sym)}</b> of ${fmtMoney(r.openPrem, sym)}</span>` : ''}
+        ${r.ccy === 'USD' ? `<span>Can sell ${canTxt}</span>` : ''}
+      </div>
+      ${r.calls.length || r.puts.length ? `<details class="sc-more"><summary>Details · ${r.calls.length} call${r.calls.length !== 1 ? 's' : ''}${r.puts.length ? ' · ' + r.puts.length + ' put' + (r.puts.length !== 1 ? 's' : '') : ''}</summary>
+        <div class="sc-grid">
+          <span>Avg cost</span><span>${fmtMoney(s.avgCost, sym)}</span>
+          <span>Adjusted avg</span><span>${fmtMoney(r.adjAvg, sym)}</span>
+          ${r.openPrem ? `<span>If open calls expire</span><span>${fmtMoney(r.adjIfExpire, sym)}</span>
+          <span>Left to capture</span><span>${fmtMoney(r.openVal, sym)}</span>` : ''}
+        </div>
+        <div class="cc-calls">${calls}${puts}</div>
+      </details>` : ''}
+    </div>`;
+  }
+  html += `<div class="sc-card sc-total-card">
+    <div class="sc-head"><span class="sc-sym">TOTAL (${DISP})</span><span class="sc-total ${pnlCls(totals.ccReal + totals.putPrem)}">${fmtPnl(totals.ccReal + totals.putPrem, dispSym())}</span></div>
+    <div class="sc-split">
+      <span>CC realized <b class="${pnlCls(totals.ccReal)}">${fmtPnl(totals.ccReal, dispSym())}</b></span>
+      <span>Put premium <b class="${pnlCls(totals.putPrem)}">${fmtPnl(totals.putPrem, dispSym())}</b></span>
+      <span>Open CC <b>${fmtMoney(totals.openPrem, dispSym())}</b></span>
+      <span>Free to sell <b>${totals.canSell}</b></span>
+    </div>
+  </div>`;
+  box.innerHTML = html;
+  if (location.hash === '#cards') document.body.classList.add('force-cards');
+}
+
+function renderCoveredCalls(data) {""")
 
 with open(DST, 'w', encoding='utf-8', newline='') as f:
     f.write(s)

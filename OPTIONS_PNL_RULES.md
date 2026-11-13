@@ -84,7 +84,28 @@ Run the app with both statements loaded (2025 + 2026) and check:
 - Several loaded statements: SubTotal rows per file must be **summed**, not overwritten.
 - After changing the main HTML, regenerate the mobile preview (`python make_mobile_preview.py`), see CLAUDE.md.
 
+## 8. Stocks & CC tab (informational view, not P&L)
+
+The `Stocks & CC` tab (`buildCoveredCalls` / `renderCoveredCalls`) shows how option premium lowers the
+effective cost of shares still held. It **reads** existing figures and changes none: avg cost stays FIFO at
+the strike (§2, §5) and every premium stays realized option P&L.
+
+- Current position ("lot") = shares since the stock's running quantity last went from 0 to > 0. Only
+  premiums from then on count. Without the full history (`mismatch` / no trades) everything on the ticker counts.
+- CC premium realized = `optRealPL(sym)` of short calls on the ticker (first trade is a sell), closed /
+  expired / assigned on or after the lot start. Still-open calls count only their realized part, and only
+  when IBKR reports a SubTotal (never `proceeds + comm`, which would be the open premium). Bought calls are excluded.
+- Put premium = `premCollected` of short puts assigned into the lot (`assignedPositions`, date ≥ lot start).
+  Skipped when the avg cost comes from IBKR's basis (`mismatch` / `eurBase`), which already contains it.
+- Adjusted avg = avg cost − (CC premium realized + put premium) / shares.
+- Open CC: from `Open Positions` (short calls): premium, current value ("left to capture"), unrealized P/L ("captured so far").
+- Can still sell = `floor(shares / 100) − open short calls` (USD stocks only; negative = more calls than shares).
+- Invariant: loading or changing this tab does not move any figure in §6.
+
 ## Changelog
+
+- 2026-11-13 (v2.16): added the `Stocks & CC` tab (§8): premium-adjusted avg cost per held stock, open
+  covered calls, contracts still free to sell. Read-only view, no change to any P&L figure. Mobile preview m10.
 
 - 2026-10-31 (v2.9): introduced the assignment rule (premium = option P&L, shares at strike) as a single
   source of truth (`optRealPL`); fixed monthly chart ≠ quarter matrix; added option alias mapping
