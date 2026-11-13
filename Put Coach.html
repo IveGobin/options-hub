@@ -274,6 +274,15 @@ input[type="range"]::-moz-range-thumb {
 .wi-rows > span:nth-child(odd) { color:var(--muted); font-size:10px; letter-spacing:.06em; text-transform:uppercase; }
 .wi-rows > span:nth-child(even) { text-align:right; font-weight:700; }
 .wi-rows .from { color:var(--muted); font-weight:400; }
+
+/* Phones: use the full width (thin page gutter, lighter card padding) */
+@media (max-width: 560px) {
+    body { padding: 8px 6px 32px; }
+    .card { padding: 16px 12px 20px; border-radius: 14px; box-shadow: none; }
+    .ax-row { grid-template-columns: 1fr auto; padding: 8px 10px; }
+    .ax-opt { grid-column: 1 / -1; text-align: left; margin-top: 1px; }
+    .lev-card, .wi-card { padding-left: 12px; padding-right: 12px; }
+}
 </style>
 </head>
 <body data-theme="dark">
@@ -284,7 +293,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.6</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.7</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
