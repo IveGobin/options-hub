@@ -1,4 +1,4 @@
-# Put Coach — dokumentacija (v1.8)
+# Put Coach — dokumentacija (v1.9)
 
 Put Coach je alat za upravljanje rizikom kod prodaje short putova na IBKR računu s marginom.
 Odgovara na tri pitanja:
@@ -16,6 +16,8 @@ Svi izračuni rade se u pregledniku. Ništa se ne šalje na server.
 1. Otvori **Put Coach** iz huba.
 2. Klikni **Import IBKR** i učitaj Activity Statement CSV (može više datoteka; koristi se najnoviji).
    Import popuni NLV, vrijednost dionica, nominal putova i podatke o pozicijama.
+   Ako je izvod stariji od 3 dana, banner upozorava: putovi prodani nakon izvoda već su u excessu, ali
+   nisu u nominalu. Dodaj ih ručno na slider *Put notional sold*, inače su cushion i room precijenjeni.
 3. Iz **TWS / Client Portala** (prozor *Account*) prepiši **Excess Liquidity** u polje *Excess liquidity (TWS)*.
    Toga podatka nema u Activity Statementu, pa ga import nikad ne mijenja.
 4. Provjeri **VIX** (učitava se iz `vix_povijest.json`, može se ručno pomaknuti) i **EUR/USD** tečaj
@@ -28,6 +30,7 @@ Svi izračuni rade se u pregledniku. Ništa se ne šalje na server.
 
 Upiši NLV, excess, nominal putova (slider) i vrijednost dionica. Radar, status i what-if rade normalno.
 Koncentracija po tickeru/datumu i Put Quality trebaju import (bez njega su neutralni).
+Nominal iznad importiranog (ručno podignut slider) ulazi u izloženost, ali ne u koncentraciju ni u Put Quality.
 
 ---
 
@@ -91,8 +94,17 @@ cushion        = max(0, excess) / totalExp            pad tržišta koji pojede 
 današnji excess, što znači margin call. Excess iz TWS-a već ima odbijenu marginu, pa se ona ne oduzima ponovno.
 Ako bi ni potpuni gubitak ne potrošio excess, prikazuje se **100%+**.
 
-**Primjer:** excess 26 000 EUR, dionice 59 500 EUR, putovi 138 000 EUR, pa je totalExp = 197 500 EUR i
-cushion = 26 000 / 197 500 ≈ **13 %**. Knjiga preživi pad od 13 %; veći pad znači margin call.
+**Primjer** (Moderate, VIX 18, loan 20 %): NLV 60 000, excess 26 000, dionice 59 500, putovi 138 000 EUR.
+
+```
+target%      = 40 + (18 − 15) × 0.75 = 42.25 %   →  targetExcess = 25 350    (excess 26 000: zeleno)
+stopExcess   = 30 % × 60 000 = 18 000
+totalExp     = 59 500 + 138 000 = 197 500        →  leverage 3.29x
+maxTotal     = 72 000,  warnTotal = 87 000       (izloženost: crveno)
+cushion      = 26 000 / 197 500 ≈ 13 %           (žuto)
+```
+
+Status: 🔴 Overexposed, smanji izloženost za 197 500 − 87 000 = 110 500 EUR; *Also: thin margin cushion*.
 
 ---
 
@@ -109,21 +121,27 @@ ispod hard stopa.
 
 Put Quality i koncentracija prikazuju se na radaru, ali **ne mijenjaju ukupnu zonu ni status poruku**.
 
+**Margin cushion je osigurač za ručno podignut loan.** Uz zadani loan moda, čim su likvidnost i izloženost
+zelene, cushion je automatski ≥ VIXbase / (1 + loan %): 50 % (Conservative), 33 % (Moderate), 20 % (Aggressive).
+Tada cushion nikad nije binding, a poruke #3 i #6 se ne mogu pojaviti. Cushion postaje stvarna granica kad
+loan podigneš iznad zadanog (npr. 250 % uz leverage 3.3x), što je i slučaj za koji je uveden.
+
 ---
 
 ## 6. Status poruka
 
-Prikazuje se najteži problem, ovim redoslijedom:
+Skupe se svi aktivni problemi ovim redoslijedom. Prvi je naslov i savjet, a ostali se navode iza
+"Also: …".
 
 | # | Uvjet | Poruka | Savjet |
 |---|---|---|---|
-| 1 | excess < stopExcess | 🔴 Reduce positions | treba još `stopExcess − excess` EUR excessa |
+| 1 | excess < stopExcess | 🔴 Reduce positions | excessu fali `stopExcess − excess`; zatvori ~`(stopExcess − excess) / MARGIN` nominala ili dodaj gotovinu |
 | 2 | izloženost crvena | 🔴 Overexposed | smanji izloženost za `totalExp − warnTotal` |
 | 3 | cushion < 10 % | 🔴 Margin call risk | smanji izloženost za `cut(10 %)` |
-| 4 | likvidnost žuta | ⚠️ Hold — liquidity low | treba još `targetExcess − excess` |
+| 4 | likvidnost žuta | ⚠️ Hold — liquidity low | excessu fali `targetExcess − excess`; zatvori ~`(targetExcess − excess) / MARGIN` nominala ili dodaj gotovinu |
 | 5 | izloženost žuta | ⚠️ Caution — above loan target | smanji za `totalExp − maxTotal` |
 | 6 | cushion 10–20 % | ⚠️ Caution — thin margin cushion | smanji za `cut(20 %)` |
-| 7 | room > 100 EUR | ✅ Free to sell | može se dodati ~room EUR nominala |
+| 7 | nema problema, room > 100 EUR | ✅ Free to sell | može se dodati ~room EUR nominala |
 | 8 | inače | ✅ Green — at the limit | malo prostora |
 
 Koliko izloženosti treba zatvoriti da cushion dođe na c. Zatvaranje puta oslobađa i ~20 % njegove margine:
@@ -131,6 +149,10 @@ Koliko izloženosti treba zatvoriti da cushion dođe na c. Zatvaranje puta oslob
 ```
 cut(c) = max(0, (c × totalExp − excess) / (MARGIN + c))
 ```
+
+**Skori assignment.** Ako ima putova sa statusom Likely ITM ili Deep ITM koji istječu unutar 7 dana
+(računato od danas), status na kraju dodaje: `⏰ N ITM puts expire within 7 days (~$X assignment)`.
+To je kredit koji stvarno dolazi, a ne hipotetski "svi assignani".
 
 ---
 
@@ -162,7 +184,8 @@ wi    = wiUSD / fx                (EUR)
 ```
 
 What-if se dodaje u nominal i troši 20 % svog nominala iz excessa (§4). Sve kartice (leverage, radar,
-status, room) pokazuju stanje **nakon** te pozicije.
+status, room) pokazuju stanje **nakon** te pozicije. Iznimka je os Put Quality: what-if u nju ne ulazi,
+jer prodaja novih putova ne smije popraviti ocjenu postojeće knjige.
 
 | Upisano | Prikaz |
 |---|---|
@@ -193,52 +216,59 @@ Isprekidani zeleni poligon (cilj) je na 0.70 na svim osima. Vrijednosti i zone s
 ### 9.1 Liquidity
 
 ```
-excess ≥ targetExcess:  0.70 + (excess − targetExcess) / targetExcess × 0.30      (max 1.0)
+excess ≥ targetExcess:  0.70 + (excess − targetExcess) / (NLV − targetExcess) × 0.30
 excess ≥ stopExcess:    0.40 + (excess − stopExcess) / (targetExcess − stopExcess) × 0.30
 inače:                  excess / stopExcess × 0.40
 ```
 
+Score je 1.0 kad je excess jednak NLV-u (ništa nije na margini), u svakom modu i uz svaki VIX.
+
 ### 9.2 Put Quality
 
-Koliko su prodani putovi "u redu", tj. koliko ih je OTM, a koliko ITM. Izvod **nema cijene dionica**, pa se
-moneyness procjenjuje iz cijene opcije:
+Koliko prodani putovi trenutno gube. Izvod **nema cijene dionica**, pa se os gradi od dvije veličine koje
+se mogu točno izračunati iz *Open Positions*:
 
 ```
-r = trenutna cijena opcije / prikupljena premija      (Close Price / Cost Price iz Open Positions)
-d = max(0, (cijena opcije − premija) / strike)        gubitak po dionici kao % strikea
+r = cijena opcije / prikupljena premija          je li put jeftiniji ili skuplji nego kad je prodan
+L = max(0, (cijena opcije − premija) / strike)   nerealizirani gubitak kao udio nominala
 ```
 
-Kvaliteta svakog puta q:
+L nikad nije veći od `cijena opcije / strike`, a to je gornja granica dubine ITM-a (cijena puta je uvijek
+≥ intrinzične vrijednosti). Zato jeftin put kojem se cijena samo udvostručila ili utrostručila (skok
+volatilnosti) ostaje "near strike".
+
+Kvaliteta svakog puta q, bez skokova:
 
 | Stanje | Uvjet | q |
 |---|---|---|
 | Deep OTM | r ≤ 0.35 | 1 − 0.2·r → 0.93–1.00 |
 | OTM | 0.35 < r ≤ 1 | 1 − 0.2·r → 0.80 (svježe prodan put) |
-| Near strike | 1 < r ≤ 2 | 0.80 − 0.35·(r − 1) → 0.45 |
-| Likely ITM | r > 2, d < 10 % | 0.45 · (1 − d / 0.10) |
-| Deep ITM | r > 2, d ≥ 10 % | 0 |
+| Near strike | r > 1, L < 5 % | 0.80 · (1 − L / 0.10) → 0.80–0.40 |
+| Likely ITM | r > 1, 5 % ≤ L < 10 % | 0.80 · (1 − L / 0.10) → 0.40–0 |
+| Deep ITM | r > 1, L ≥ 10 % | 0 |
 | Nema podatka | r nepoznat | 0.70 |
 
-Score knjige je prosjek q ponderiran nominalom. **ITM i deep ITM putovi broje dvostruko**:
+Score knjige je prosjek q ponderiran nominalom. Putovi u gubitku teže više, do dvostruko:
 
 ```
-w_i   = notional_i × (r_i > 2 ? 2 : 1)
+w_i   = notional_i × (1 + min(1, L_i / 0.10))      (za r ≤ 1 ponder je 1)
 score = Σ w_i × q_i / Σ w_i
 ```
 
-What-if put ulazi kao svježe prodan (q = 0.80, ponder 1). Bez putova score je neutralnih 0.70.
+What-if put **ne ulazi** u score. Bez importiranih putova score je neutralnih 0.70.
 
 | Knjiga | Score |
 |---|---|
 | sve svježe prodano | 0.80 🟢 |
-| 50 % deep OTM + 50 % near strike (r = 1.5) | 0.81 🟢 |
-| 70 % deep OTM + 30 % ITM (d = 5 %) | 0.64 🟡 |
-| polovica deep ITM | < 0.40 🔴 |
+| 50 % deep OTM + 50 % s gubitkom L = 2 % | 0.80 🟢 |
+| 70 % deep OTM + 30 % s L = 5 % | 0.77 🟢 |
+| 50 % deep OTM + 50 % s L = 5 % | 0.64 🟡 |
+| polovica deep ITM | 0.33 🔴 |
 
 **Vrijednost u Axis breakdown:** `score % · udio ITM` (likely + deep ITM, po nominalu).
 
-**Ograničenje:** klasifikacija ide po r, a dubina ITM-a po d. Put s visokom početnom premijom može imati
-r < 2 ("near strike") iako je d već oko 10 %.
+**Ograničenje:** L je gubitak, a ne stvarna dubina ITM-a. Dugoročni put s velikom vremenskom vrijednošću
+može imati visok L, a još biti OTM. Nazivi "Likely ITM" i "Deep ITM" su zato procjena.
 
 ### 9.3 Exposure
 
@@ -287,9 +317,11 @@ raw = dc ≤ 35 %:  0.70 + (1 − dc / 0.35) × 0.30
       inače:      max(0, 0.40 − (dc − 0.70) / 0.30 × 0.40)
 
 putRoom = maxTotal − stocks
-weight  = min(1, notional / putRoom)
+weight  = min(1, notional / putRoom)        (notional = 0 → 0;  putRoom ≤ 0 → 1)
 score   = raw + (1 − raw) × (1 − weight)
 ```
+
+Datumi se broje pojedinačno: 18DEC26 i 24DEC26 su dva različita datuma.
 
 ---
 
@@ -308,7 +340,7 @@ score   = raw + (1 − raw) × (1 − weight)
 
 ## 11. Kartica Put book quality
 
-Prikazuje se nakon importa. Svaki short put dobije status po r (i d, vidi §9.2):
+Prikazuje se nakon importa. Svaki short put dobije status po r i L (vidi §9.2):
 **Deep OTM · OTM · Near strike · Likely ITM · Deep ITM · n/a**.
 
 - **Traka i legenda:** udio nominala po statusu.
@@ -325,6 +357,7 @@ Prikazuje se nakon importa. Svaki short put dobije status po r (i d, vidi §9.2)
   ```
 
   Loan cilj i margina **uvijek** koriste sirovi nominal; risk-weighted je samo informacija.
+  riskFactor je uvijek ≤ 1, pa ovaj broj može sliku samo uljepšati. Ne koristi ga kao granicu.
 - **Needs attention:** putovi near strike, likely ITM ili deep ITM, te OTM / n/a putovi s DTE ≤ 7.
   Sortirani po `w × notional`, prikazuje se do 8 redaka.
 - DTE se računa od datuma izvoda (cijene opcija su s tog dana).
@@ -342,6 +375,8 @@ Sklopiva kartica (klik na naslov).
   - Margin (`cushion % / ≥ 20 %`)
 - **Avoid these tickers:** tickeri s udjelom ≥ 25 % (dionice + putovi, uključujući what-if).
 - **Avoid these expiry dates:** datumi s ≥ 30 % put nominala.
+- Ovi pragovi (25 % / 30 %) su namjerno niži od zelene granice radara (40 % / 35 %): lista pokazuje što
+  je **blizu** granice, da ga nova pozicija ne gurne preko nje. Ticker može biti zelen na radaru i na listi.
 - **Prefer these expiry months:** prva 3 od sljedećih 6 mjeseci koji nemaju koncentrirani datum isteka
   (npr. koncentrirani 18DEC26 blokira samo prosinac 2026).
 - **Ideal next trade:** novi ticker, prvi predloženi mjesec, nominal ≤ min(room, 15 % NLV).
@@ -376,7 +411,13 @@ Sklopiva kartica (klik na naslov).
   OTM putovi gube sporije, ali korelacija u krahu je visoka.
 - **Moneyness** (Put Quality, Put book quality) je procjena iz cijene opcije, ne iz cijene dionice.
 - Excess i VIX su ručni ili dnevni podaci. Provjeri ih prije odluke.
-- Podaci izvoda su s datuma izvoda, ne od danas.
+- **Excess je od danas, a pozicije s datuma izvoda.** Putovi prodani nakon izvoda su u excessu, ali ne u
+  nominalu, pa su cushion i room precijenjeni. Koristi svjež izvod ili ručno podigni nominal (§1).
+- **Čitaju se samo short putovi.** Long putovi (put spreadovi) se ne odbijaju, pa je nominal spreadova
+  precijenjen. Short callovi se ne čitaju, pa goli callovi nisu u izloženosti.
+- **ETF iznimka je gruba:** svaki ETF se smatra raspršenim, i sektorski, jednodržavni ili leveraged.
+- **Dionice izvan EUR i USD** ulaze u izloženost (preko NLV izvoda), ali ne u koncentraciju po tickeru.
+- **Margin cushion** uz zadani loan moda nikad nije binding (§5).
 
 ---
 
@@ -388,10 +429,25 @@ Sklopiva kartica (klik na naslov).
 | `CUSHION_GREEN` / `CUSHION_WARN` | 0.20 / 0.10 | granice margin cushiona |
 | `LOAN_WARN_BAND` | 25 | p.p. iznad loan cilja do crvene zone |
 | `LOAN_DEFAULT` | 0 / 20 / 50 | zadani loan po modu |
-| `DEEP_ITM` | 0.10 | d iznad kojeg je put deep ITM |
+| `NEAR_LOSS` / `DEEP_ITM` | 0.05 / 0.10 | gubitak L do kojeg je put near strike / od kojeg je deep ITM |
+| r pragovi | 0.35 / 1 | deep OTM / OTM |
+| Ticker koncentracija | 40 % / 60 % | zeleno / crveno na radaru; lista "Avoid" od 25 % |
+| Date koncentracija | 35 % / 70 % | zeleno / crveno na radaru; lista "Avoid" od 30 % |
+| Min. room | 100 EUR | ispod toga "at the limit" / "No room" |
+| Ideal next trade | 15 % NLV | najveći predloženi nominal |
+| Starost izvoda | 3 dana | iznad toga upozorenje u banneru |
+| Skori assignment | 7 dana | ITM putovi koji istječu, u statusu |
 | `FX_DEFAULT` | 1.17 | EUR/USD ako tečajna lista nije dostupna |
 | Zone score | 0.70 / 0.40 | zeleno / crveno |
 
 ## Changelog
+
+- 2026-11-13 (v1.9): nakon pregleda formula.
+  - Liquidity score skalira se prema NLV-u (1.0 kad je excess = NLV).
+  - Put Quality bez skoka na r = 2: za r > 1 q i ponder ovise o gubitku L. Statusi near / likely ITM /
+    deep ITM idu po L (5 % / 10 %). What-if više ne ulazi u Put Quality.
+  - Status: navodi i ostale aktivne probleme ("Also"), savjet za likvidnost u nominalu, skori assignment.
+  - Upozorenje u banneru kad je izvod stariji od 3 dana.
+  - Dokumentirano: cushion kao osigurač za ručni loan, pragovi liste "Avoid", opseg importa.
 
 - 2026-11-13 (v1.8): prva verzija dokumentacije. Put Quality os umjesto VIX Buffer; Axis breakdown sklopiv.

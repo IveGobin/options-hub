@@ -293,7 +293,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.8</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.9</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -892,8 +892,8 @@ input[type="range"]::-moz-range-thumb {
         // Green: excess ≥ targetExcess, Warn: stopExcess–targetExcess, Danger: < stopExcess
         var liqScore;
         if (excess >= targetExcess) {
-            // Continue growing smoothly from 0.70 to 1.0 as excess grows above target
-            liqScore = Math.min(1.0, 0.70 + ((excess - targetExcess) / targetExcess) * 0.30);
+            // Grows from 0.70 at the target to 1.0 when the excess equals NLV (nothing on margin)
+            liqScore = Math.min(1.0, 0.70 + ((excess - targetExcess) / Math.max(1, nlv - targetExcess)) * 0.30);
         } else if (excess >= stopExcess) {
             liqScore = 0.40 + ((excess - stopExcess) / (targetExcess - stopExcess)) * 0.30;
         } else {
@@ -901,9 +901,10 @@ input[type="range"]::-moz-range-thumb {
         }
 
         // 2. PUT QUALITY — how the short puts are doing (moneyness proxy, see putQuality)
-        // Notional-weighted average of q; ITM / deep ITM puts count double. The what-if put
-        // counts as freshly sold (q 0.80). VIX still drives the liquidity target (getTarget).
-        var pq = bookQuality(wiUSD);
+        // Notional-weighted average of q; losing puts weigh up to double. The what-if put is NOT
+        // included: selling new puts must not improve the quality of the existing book.
+        // VIX still drives the liquidity target (getTarget).
+        var pq = bookQuality();
         var qualScore = pq.score;
 
         // 3. EXPOSURE SAFETY (stocks + puts, worst case all assigned)
@@ -1002,31 +1003,44 @@ input[type="range"]::-moz-range-thumb {
 
         status.className = 'you-status ' + zone;
 
-        if (excess < stopExcess) {
-            headline.textContent = '🔴 Reduce positions';
-            sub.textContent = 'Need ' + fmt(stopExcess - excess) + ' EUR more excess to reach the hard stop floor';
-        } else if (expZone === 'danger') {
-            headline.textContent = '🔴 Overexposed';
-            sub.textContent = 'Reduce exposure by ' + fmt(totalExp - warnTotal) + ' EUR (puts or stocks) to reach the caution zone';
-        } else if (mrgZone === 'danger') {
-            headline.textContent = '🔴 Margin call risk';
-            sub.textContent = 'A ' + pctDrop + ' drop wipes out your excess — reduce exposure by ~' + fmt(cutForCushion(CUSHION_WARN)) + ' EUR';
-        } else if (zone === 'warn' && liqZone === 'warn') {
-            headline.textContent = '⚠️ Hold — liquidity low';
-            sub.textContent = 'Need ' + fmt(targetExcess - excess) + ' EUR more excess to enter green';
-        } else if (expZone === 'warn') {
-            headline.textContent = '⚠️ Caution — above loan target';
-            sub.textContent = 'Reduce exposure by ' + fmt(totalExp - maxTotal) + ' EUR (puts or stocks) to get within ' + loanPct + '% loan';
-        } else if (mrgZone === 'warn') {
-            headline.textContent = '⚠️ Caution — thin margin cushion';
-            sub.textContent = 'Survives a ' + pctDrop + ' drop (target ≥ ' + Math.round(CUSHION_GREEN * 100) + '%) — reduce exposure by ~' + fmt(cutForCushion(CUSHION_GREEN)) + ' EUR';
+        // Active problems, most severe first: the first one is the headline, the rest follow as "Also"
+        var needStop = stopExcess - excess, needTgt = targetExcess - excess;
+        var issues = [];
+        if (excess < stopExcess) issues.push({ h: '🔴 Reduce positions', n: 'below hard stop',
+            s: 'Excess is ' + fmt(needStop) + ' EUR below the hard stop — close ~' + fmt(needStop / MARGIN) + ' EUR of put notional or add cash' });
+        if (expZone === 'danger') issues.push({ h: '🔴 Overexposed', n: 'overexposed',
+            s: 'Reduce exposure by ' + fmt(totalExp - warnTotal) + ' EUR (puts or stocks) to reach the caution zone' });
+        if (mrgZone === 'danger') issues.push({ h: '🔴 Margin call risk', n: 'margin call risk (' + pctDrop + ' drop)',
+            s: 'A ' + pctDrop + ' drop wipes out your excess — reduce exposure by ~' + fmt(cutForCushion(CUSHION_WARN)) + ' EUR' });
+        if (effectiveLiq === 'warn') issues.push({ h: '⚠️ Hold — liquidity low', n: 'liquidity low',
+            s: 'Excess is ' + fmt(needTgt) + ' EUR below target — close ~' + fmt(needTgt / MARGIN) + ' EUR of put notional or add cash to enter green' });
+        if (expZone === 'warn') issues.push({ h: '⚠️ Caution — above loan target', n: 'above loan target',
+            s: 'Reduce exposure by ' + fmt(totalExp - maxTotal) + ' EUR (puts or stocks) to get within ' + loanPct + '% loan' });
+        if (mrgZone === 'warn') issues.push({ h: '⚠️ Caution — thin margin cushion', n: 'thin margin cushion (' + pctDrop + ' drop)',
+            s: 'Survives a ' + pctDrop + ' drop (target ≥ ' + Math.round(CUSHION_GREEN * 100) + '%) — reduce exposure by ~' + fmt(cutForCushion(CUSHION_GREEN)) + ' EUR' });
+
+        var subText;
+        if (issues.length) {
+            headline.textContent = issues[0].h;
+            subText = issues[0].s;
+            if (issues.length > 1) subText += ' · Also: ' + issues.slice(1).map(function(i) { return i.n; }).join(', ');
         } else if (d.room.room > 100) {
             headline.textContent = '✅ Free to sell';
-            sub.textContent = 'Can add ~' + fmt(d.room.room) + ' EUR more put notional (binding: ' + bindingLabel(d.room, d) + ')';
+            subText = 'Can add ~' + fmt(d.room.room) + ' EUR more put notional (binding: ' + bindingLabel(d.room, d) + ')';
         } else {
             headline.textContent = '✅ Green — at the limit';
-            sub.textContent = 'Little room to add more at current levels';
+            subText = 'Little room to add more at current levels';
         }
+
+        // Imminent assignment: ITM puts expiring within 7 days (from today) are a loan that is coming
+        var t0 = new Date(); t0.setHours(0, 0, 0, 0);
+        var soonN = 0, soonUSD = 0;
+        gPositions.forEach(function(p) {
+            var days = Math.round((p.expiry - t0) / 86400000);
+            if ((p.status === 'itm' || p.status === 'ditm') && days >= 0 && days <= 7) { soonN++; soonUSD += p.notional; }
+        });
+        if (soonN) subText += ' · ⏰ ' + soonN + ' ITM put' + (soonN > 1 ? 's' : '') + ' expire within 7 days (~$' + fmt(soonUSD) + ' assignment)';
+        sub.textContent = subText;
     }
 
     // ── PUT BOOK RISK CARD ────────────────────────────────────────────────
@@ -1467,11 +1481,11 @@ input[type="range"]::-moz-range-thumb {
             '<div class="sell-card">' +
                 '<div class="sell-rule">' +
                     '<div class="sell-rule-icon" style="background:rgba(232,96,96,0.10)">🚫</div>' +
-                    '<div class="sell-rule-text">Avoid these tickers<span class="sell-rule-sub">≥ 25% of the book (stocks + puts), limit 40%</span><div style="margin-top:5px">'+blockedTickerHTML+'</div></div>' +
+                    '<div class="sell-rule-text">Avoid these tickers<span class="sell-rule-sub">Close to the limit: ≥ 25% of the book (stocks + puts), radar limit 40%</span><div style="margin-top:5px">'+blockedTickerHTML+'</div></div>' +
                 '</div>' +
                 '<div class="sell-rule">' +
                     '<div class="sell-rule-icon" style="background:rgba(232,96,96,0.10)">📅</div>' +
-                    '<div class="sell-rule-text">Avoid these expiry dates<span class="sell-rule-sub">Already concentrated — any new deal here worsens date score</span><div style="margin-top:5px">'+blockedDateHTML+'</div></div>' +
+                    '<div class="sell-rule-text">Avoid these expiry dates<span class="sell-rule-sub">Close to the limit: ≥ 30% of put notional, radar limit 35%</span><div style="margin-top:5px">'+blockedDateHTML+'</div></div>' +
                 '</div>' +
                 '<div class="sell-rule">' +
                     '<div class="sell-rule-icon" style="background:rgba(58,173,114,0.10)">✅</div>' +
@@ -1523,7 +1537,7 @@ input[type="range"]::-moz-range-thumb {
     // ── PUT RISK MODEL ────────────────────────────────────────────────────
     // The statement has no underlying price, so "how far OTM" is estimated from
     // r = current option price / premium collected:
-    //   r <= 0.35  deep OTM   |  r <= 1  OTM  |  r <= 2  near strike  |  r > 2  likely ITM
+    //   r <= 0.35  deep OTM   |  r <= 1  OTM  |  r > 1: graded by the loss L (see below)
     // Weight (0.1 .. 1.0) = how much of the raw notional counts as real risk:
     //   - grows with r (more pressure = more risk), reaches 1.0 at r >= 2.5
     //   - a deep OTM put close to expiry is discounted further (little time left to go wrong)
@@ -1535,40 +1549,46 @@ input[type="range"]::-moz-range-thumb {
         var t0 = 0.6 + 0.4 * Math.min(1, Math.max(0, p.dte) / 45);
         var k  = Math.max(0, Math.min(1, (r - 0.2) / 0.3));   // 0 = clearly deep OTM, 1 = no discount
         var t  = t0 + (1 - t0) * k;
-        var status = r <= 0.35 ? 'deep' : r <= 1 ? 'otm' : r <= 2 ? 'near'
-                   : itmDepth(p) >= DEEP_ITM ? 'ditm' : 'itm';
+        // Losing puts (r > 1) are graded by the loss L as a share of the strike, the same figure
+        // the Put Quality axis uses: < 5% near strike (q > 0.40), 5–10% likely ITM, ≥ 10% deep ITM (q = 0)
+        var L = lossShare(p);
+        var status = r <= 0.35 ? 'deep' : r <= 1 ? 'otm'
+                   : L < NEAR_LOSS ? 'near' : L < DEEP_ITM ? 'itm' : 'ditm';
         return { w: m * t, status: status };
     }
     var RISK_LABEL = { deep: 'Deep OTM', otm: 'OTM', near: 'Near strike', itm: 'Likely ITM', ditm: 'Deep ITM', unknown: 'n/a' };
     var RISK_COLOR = { deep: '#3aad72', otm: 'rgba(58,173,114,0.55)', near: '#e8a03a', itm: '#e86060', ditm: '#b83c3c', unknown: '#7a756d' };
 
     // ── PUT QUALITY (radar axis) ──────────────────────────────────────────
-    // ITM depth estimate d = (option price − premium) / strike: loss per share as a share of the
-    // strike. Unlike r it does not depend on how small the premium was. d ≥ 10% = deep ITM.
-    const DEEP_ITM = 0.10;
-    function itmDepth(p) {
+    // The statement has no underlying prices, so the axis is built from two honest figures:
+    //   r = option price / premium                    is the put cheaper or dearer than when sold
+    //   L = (option price − premium) / strike         unrealized loss as a share of the notional
+    // L never exceeds option price / strike, which bounds the ITM depth from above (intrinsic ≤ price),
+    // so a cheap put whose price merely doubled or tripled stays "near strike".
+    const NEAR_LOSS = 0.05;   // L < 5%: near strike
+    const DEEP_ITM  = 0.10;   // L ≥ 10% of the strike: deep ITM, q = 0
+    function lossShare(p) {
         return (p.close > 0 && p.strike > 0) ? Math.max(0, (p.close - p.cost) / p.strike) : 0;
     }
-    // q (0..1) per put:  r ≤ 1 (OTM, cheaper than sold): 1 − 0.2·r       → 1.00 … 0.80 (fresh)
-    //                    1 < r ≤ 2 (near strike):         0.80 − 0.35·(r−1) → 0.80 … 0.45
-    //                    r > 2 (ITM):                     0.45·(1 − d/10%)  → 0.45 … 0 (deep ITM)
-    // Weight in the book average = notional, ×2 for ITM / deep ITM (the source of real losses).
+    // q (0..1) per put, continuous:
+    //   r ≤ 1 (cheaper than sold):  1 − 0.2·r          → 1.00 … 0.80 (freshly sold)
+    //   r > 1 (losing):             0.80·(1 − L/10%)   → 0.80 … 0 (loss ≥ 10% of the strike)
+    // Weight in the book average = notional × (1 + L/10%), i.e. up to double for the worst puts.
     function putQuality(p) {
         var r = p.ratio;
         if (r === null) return { q: 0.70, k: 1 };
         if (r <= 1) return { q: 1 - 0.2 * r, k: 1 };
-        if (r <= 2) return { q: 0.80 - 0.35 * (r - 1), k: 1 };
-        return { q: Math.max(0, 0.45 * (1 - itmDepth(p) / DEEP_ITM)), k: 2 };
+        var x = Math.min(1, lossShare(p) / DEEP_ITM);
+        return { q: 0.80 * (1 - x), k: 1 + x };
     }
-    // Book score incl. a what-if put (USD notional, counts as freshly sold). No puts → neutral 0.70.
-    function bookQuality(wiUSD) {
+    // Book score of the imported puts (a what-if is not included). No puts → neutral 0.70.
+    function bookQuality() {
         var sw = 0, sq = 0, itm = 0, tot = 0;
         gPositions.forEach(function(p) {
             var pq = putQuality(p), w = p.notional * pq.k;
             sw += w; sq += w * pq.q; tot += p.notional;
             if (p.status === 'itm' || p.status === 'ditm') itm += p.notional;
         });
-        if (wiUSD > 0) { sw += wiUSD; sq += wiUSD * 0.80; tot += wiUSD; }
         return { score: sw > 0 ? sq / sw : 0.70, itmShare: tot > 0 ? itm / tot : 0, n: sw > 0 };
     }
 
@@ -1787,6 +1807,12 @@ input[type="range"]::-moz-range-thumb {
             var flagged = gPositions.filter(isFlagged).length;
             messages.push('Risk-weighted: ' + Math.round((0.6 + 0.4 * gRiskAvg) * 100) + '% of raw' +
                 (flagged ? ' \u00b7 ' + flagged + ' flagged' : ''));
+        }
+
+        // Excess is from today (TWS) but the positions are from the statement date
+        if (messages.length && gStmtDate) {
+            var ageDays = Math.floor((Date.now() - gStmtDate) / 86400000);
+            if (ageDays > 3) messages.push('⚠️ Statement is ' + ageDays + ' days old – puts sold since then are in your excess but not in the notional: add them to "Put notional sold"');
         }
 
         if (messages.length === 0) {
