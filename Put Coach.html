@@ -267,7 +267,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.3</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.4</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -470,7 +470,12 @@ input[type="range"]::-moz-range-thumb {
     // warn up to LOAN_WARN_BAND percentage points above that, danger beyond.
     const LOAN_DEFAULT = { conservative: 0, moderate: 20, aggressive: 50 };
     const LOAN_WARN_BAND = 25;
-    const MARGIN = 0.20;
+    const MARGIN = 0.20;          // approx. margin a NEW short put uses, per EUR notional
+    // Margin cushion = excess / (stocks + put notional): the uniform drop of every underlying
+    // (delta 1, worst case) that would use up today's excess liquidity → margin call.
+    // TWS excess already has the current margin deducted, so no margin is subtracted again.
+    const CUSHION_GREEN = 0.20;   // survives a ≥ 20% drop
+    const CUSHION_WARN  = 0.10;   // < 10% drop = danger
 
     let currentMode = 'moderate';
     // Currency selections: 'EUR' or 'USD' for each field
@@ -802,17 +807,17 @@ input[type="range"]::-moz-range-thumb {
             expScore = Math.max(0, 0.40 - ((totalExp - warnTotal) / warnTotal) * 0.40);
         }
 
-        // 4. MARGIN SAFETY
-        // Green: excess ≥ marginUsed + stopExcess, Danger: below that
-        var marginUsed = notional * MARGIN;
-        var marginTarget = marginUsed + stopExcess;
+        // 4. MARGIN SAFETY — stress test: market drop that wipes out today's excess
+        // Green: cushion ≥ 20%, Warn: 10–20%, Danger: < 10%
+        var marginUsed = notional * MARGIN;   // info (what-if text)
+        var cushion = totalExp > 0 ? Math.max(0, excess) / totalExp : Infinity;
         var marginScore;
-        if (marginUsed <= 0) {
-            marginScore = 1.0;
-        } else if (excess >= marginTarget) {
-            marginScore = Math.min(1.0, 0.70 + ((excess - marginTarget) / marginTarget) * 0.30);
+        if (cushion >= CUSHION_GREEN) {
+            marginScore = Math.min(1.0, 0.70 + ((cushion - CUSHION_GREEN) / CUSHION_GREEN) * 0.30);
+        } else if (cushion >= CUSHION_WARN) {
+            marginScore = 0.40 + ((cushion - CUSHION_WARN) / (CUSHION_GREEN - CUSHION_WARN)) * 0.30;
         } else {
-            marginScore = Math.max(0, (excess / marginTarget) * 0.70);
+            marginScore = (cushion / CUSHION_WARN) * 0.40;
         }
 
         // 5. TICKER CONCENTRATION
@@ -842,7 +847,7 @@ input[type="range"]::-moz-range-thumb {
             0.70,  // Liquidity: just at the green threshold (= targetExcess)
             vixScore < 0.70 ? vixScore : 0.70 + ((20 - Math.min(vix, 20)) / 15) * 0.30, // VIX: score at VIX=20
             0.70,  // Exposure: score at the loan-target boundary (maxTotal)
-            0.70,  // Margin: score at margin+stop boundary
+            0.70,  // Margin: score at a 20% drop cushion
             0.70,  // Ticker: score at 40% boundary
             0.70,  // Date: score at 35% boundary
         ];
@@ -866,7 +871,7 @@ input[type="range"]::-moz-range-thumb {
             stocks: stocks, wiEUR: wiEUR, totalExp: totalExp, loanPct: loanPct,
             stopExcess: stopExcess, targetExcess: targetExcess,
             maxTotal: maxTotal, warnTotal: warnTotal, expZone: expZone,
-            marginUsed: marginUsed, scores: scores, targetScores: targetScores
+            marginUsed: marginUsed, cushion: cushion, scores: scores, targetScores: targetScores
         };
         renderLeverage(d);
         renderAxisLegend(d);
@@ -1102,11 +1107,12 @@ input[type="range"]::-moz-range-thumb {
                 name: 'Margin Safety',
                 score: d.scores[3],
                 tgtScore: d.targetScores[3],
-                value: fmtE(d.excess),
-                optimal: '> ' + fmtE(d.marginUsed + d.stopExcess),
+                value: isFinite(d.cushion) ? 'survives ' + Math.round(d.cushion * 100) + '% drop' : 'no positions',
+                optimal: '≥ ' + Math.round(CUSHION_GREEN * 100) + '% drop',
                 zones: [
-                    { label: '🔴 Danger: Excess < Margin used + Hard stop', color: '#e86060' },
-                    { label: '🟢 Green: Excess covers margin + stop floor',  color: '#3aad72' },
+                    { label: '🔴 Danger: < ' + Math.round(CUSHION_WARN * 100) + '% drop', color: '#e86060' },
+                    { label: '🟡 Warn: ' + Math.round(CUSHION_WARN * 100) + '–' + Math.round(CUSHION_GREEN * 100) + '% drop', color: '#e8a03a' },
+                    { label: '🟢 Green: ≥ ' + Math.round(CUSHION_GREEN * 100) + '% drop', color: '#3aad72' },
                 ]
             },
             {
@@ -1209,8 +1215,9 @@ input[type="range"]::-moz-range-thumb {
         // Constraint 2: Liquidity — each 1 EUR notional uses MARGIN EUR of margin
         var excessAboveTarget = excess - targetExcess;
         var roomLiquidity = excessAboveTarget > 0 ? excessAboveTarget / MARGIN : 0;
-        // Constraint 3: Margin — excess must cover margin + stop
-        var roomMargin = Math.max(0, (excess - stopExcess) / MARGIN - notional);
+        // Constraint 3: Margin cushion — after adding Δ notional (uses MARGIN·Δ of excess),
+        // (excess − MARGIN·Δ) / (totalExp + Δ) must stay ≥ CUSHION_GREEN
+        var roomMargin = Math.max(0, (excess - CUSHION_GREEN * d.totalExp) / (MARGIN + CUSHION_GREEN));
 
         var roomEUR = Math.min(roomExposure, roomLiquidity, roomMargin);
         roomEUR = Math.max(0, roomEUR);
@@ -1219,7 +1226,7 @@ input[type="range"]::-moz-range-thumb {
             ? 'Loan target (' + d.loanPct + '% of NLV)'
             : roomLiquidity <= roomMargin
                 ? 'Liquidity — excess near target floor'
-                : 'Margin — excess covers margin + stop floor';
+                : 'Margin — must survive a ' + Math.round(CUSHION_GREEN * 100) + '% drop';
 
         // Blocked tickers — use original USD notional as denominator (not slider)
         var totalUSD = gNotionalUSD > 0 ? gNotionalUSD : 1;
