@@ -285,6 +285,14 @@ input[type="range"]::-moz-range-thumb {
 .wi-add:hover { color:var(--accent); border-color:var(--accent); }
 .wi-add:disabled { opacity:.4; cursor:default; }
 .wi-fitline { font-family:var(--mono); font-size:10.5px; margin:-4px 0 10px; line-height:1.6; }
+.cr-row { display:grid; grid-template-columns:22px 1fr auto; gap:4px 10px; align-items:start; padding:10px 0; border-top:0.5px solid var(--border); }
+.cr-n { font-family:var(--mono); font-size:11px; font-weight:700; color:var(--muted); padding-top:1px; }
+.cr-name { font-family:var(--mono); font-size:11.5px; font-weight:700; }
+.cr-meta { font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:3px; line-height:1.55; }
+.cr-imp { font-family:var(--mono); font-size:13px; font-weight:700; text-align:right; white-space:nowrap; }
+.cr-imp small { display:block; font-size:9px; font-weight:400; color:var(--muted); margin-top:2px; }
+.cr-try { grid-column:2 / -1; justify-self:start; margin-top:2px; padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:none; color:var(--muted); font-family:var(--mono); font-size:10px; cursor:pointer; }
+.cr-try:hover { color:var(--accent); border-color:var(--accent); }
 .wi-clinfo { font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:7px; line-height:1.5; }
 .wi-clinfo:empty { display:none; }
 .wi-clinfo b { color:var(--text); }
@@ -325,7 +333,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.13</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.14</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -480,6 +488,15 @@ input[type="range"]::-moz-range-thumb {
             <button class="wi-add" id="wi-add-close" onclick="addCloseRow(true)">+ Add another put to close</button>
             <div class="wi-res" id="wi-res"></div>
             </div>
+        </div>
+
+        <!-- Close first: imported puts ranked by how much closing each one lifts the radar -->
+        <div class="wi-card" id="cr-card">
+            <button class="wi-toggle" onclick="toggleCloseRank()">
+                <span class="slider-label">Close first <span class="wi-usd">USD</span> <span class="wi-badge" id="cr-badge" style="background:var(--border);color:var(--muted);"></span></span>
+                <span id="cr-arrow" style="font-size:14px;color:var(--muted);">▸</span>
+            </button>
+            <div id="cr-body" style="display:none;"></div>
         </div>
         <div class="div"></div>
 
@@ -1021,50 +1038,97 @@ input[type="range"]::-moz-range-thumb {
         el('radar-svg').innerHTML = svg;
     }
 
-    function onSliders() {
-        var nlvRaw = parseFloat(el('nlv').value);
-        if (isNaN(nlvRaw) || nlvRaw <= 0) return;
-
-        var excessRaw   = Math.max(0, parseFloat(el('exc-in').value) || 0);
-        var notionalRaw = parseFloat(el('not-slider').value);
-
-        var nlv      = toEUR(nlvRaw, curNLV);
-        var excessIn = toEUR(excessRaw, curExc);                // today, from TWS
-        // What-if: a new put (adds notional, uses MARGIN of it) and / or a closed put (removes its
-        // notional, frees MARGIN of it). wi = the net change; close + sell = a roll.
-        var sells    = readSells();
-        var closes   = readCloses();
-        var sellUSD  = sum(sells, 'usd');
-        var closeUSD = sum(closes, 'usd');
-        var wiUSD    = sellUSD - closeUSD;
-        var sellEUR  = sellUSD / getFX(), closeEUR = closeUSD / getFX();
-        var wiEUR    = wiUSD / getFX();
-        var nSell    = sells.filter(function(w) { return w.usd > 0; }).length;
-        var wiOn     = nSell > 0 || closes.length > 0;
-        var excess   = excessIn - wiEUR * MARGIN;               // after the what-if (net margin used / freed)
-        var notional = Math.max(0, toEUR(notionalRaw, curNot) + wiEUR);   // put notional incl. the what-if
-        el('wi-badge').textContent = !wiOn ? ''
-            : (nSell && closes.length ? 'roll' : (nSell ? nSell + ' sell' : closes.length + ' close')) + ' · in all cards';
-        var stkRaw   = parseFloat(el('stk-val').value);
-        var stocks   = isNaN(stkRaw) || stkRaw < 0 ? 0 : toEUR(stkRaw, curStk);
-        el('stk-converted').textContent = stocks > 0 && curStk === 'USD' ? '≈ ' + fmt(stocks) + ' EUR' : '';
-
-        // Display values with currency symbol
-        el('exc-val').textContent = fmt(excessRaw) + ' ' + curExc;
-        el('not-val').textContent = fmt(notionalRaw) + ' ' + curNot;
-
-        // Show conversion hint
-        // Excess liquidity can never exceed NLV in TWS: flag a likely typo
-        var excConv = el('exc-converted');
-        excConv.textContent = (curExc === 'USD' ? '≈ ' + fmt(excessIn) + ' EUR' : '') +
-            (excessIn > nlv ? (curExc === 'USD' ? ' · ' : '') + '⚠️ above NLV — check the value from TWS' : '');
-        excConv.style.color = excessIn > nlv ? '#e86060' : '';
-        var notConv = el('not-converted');
-        if (curNot === 'USD') {
-            notConv.textContent = '≈ ' + fmt(notional - wiEUR) + ' EUR';
-        } else {
-            notConv.textContent = '';
+    // ── CLOSE FIRST ───────────────────────────────────────────────────────
+    // Each imported put is closed in full, on its own, on the book WITHOUT the what-if:
+    //   impact = mean of the 6 radar scores after − before (in points, ×100)
+    // Ranked by impact, largest first. The buyback (statement price) and P&L are shown, not ranked on.
+    var crOpen = false;
+    function toggleCloseRank() {
+        crOpen = !crOpen;
+        el('cr-body').style.display = crOpen ? 'block' : 'none';
+        el('cr-arrow').textContent = crOpen ? '▾' : '▸';
+        el('cr-card').classList.toggle('open', crOpen);
+        onSliders();
+    }
+    function fullClose(p) {
+        var mult = p.notional / (p.qty * p.strike);
+        return { pos: p, qty: p.qty, usd: p.notional, cost: p.qty * mult * p.close, pnl: p.qty * mult * (p.cost - p.close) };
+    }
+    function closeRanking(nlv, excessIn, notionalBase, stocks) {
+        var mean = function(a) { return a.reduce(function(x, y) { return x + y; }, 0) / a.length; };
+        var base = radarModel(nlv, excessIn, notionalBase, stocks, [], []);
+        var b = mean(base.scores);
+        var list = gPositions.map(function(p, i) {
+            var c = fullClose(p);
+            var m = radarModel(nlv, excessIn, notionalBase, stocks, [], [c]);
+            var deltas = m.scores.map(function(v, k) { return { axis: AXES[k], d: v - base.scores[k] }; })
+                .filter(function(x) { return x.d > 0.005; })
+                .sort(function(x, y) { return y.d - x.d; });
+            return { i: i, pos: p, close: c, impact: mean(m.scores) - b, deltas: deltas, zone: m.zone };
+        });
+        list.sort(function(x, y) { return y.impact - x.impact || y.pos.notional - x.pos.notional; });
+        return { base: base, list: list };
+    }
+    function renderCloseRank(nlv, excessIn, notionalBase, stocks) {
+        el('cr-badge').textContent = gPositions.length ? gPositions.length + ' puts' : '';
+        if (!crOpen) return;
+        var body = el('cr-body');
+        if (!gPositions.length) {
+            body.innerHTML = '<div class="wi-hint">Import an IBKR statement: the imported short puts are ranked by how much closing each one improves the radar.</div>';
+            return;
         }
+        var r = closeRanking(nlv, excessIn, notionalBase, stocks);
+        var ZI = { safe: '🟢', warn: '🟡', danger: '🔴' };
+        var pts = function(v) { return (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1); };
+        var rows = r.list.map(function(x, n) {
+            var p = x.pos, c = x.close;
+            var axes = x.deltas.slice(0, 3).map(function(a) { return a.axis + ' ' + pts(a.d); }).join(' · ');
+            var perK = c.cost > 0 ? (x.impact * 100 / (c.cost / 1000)) : null;
+            var zoneTxt = x.zone !== r.base.zone ? ' · status ' + ZI[r.base.zone] + '→' + ZI[x.zone] : '';
+            var col = x.impact >= 0.03 ? '#3aad72' : x.impact > 0.005 ? '#e8a03a' : 'var(--muted)';
+            return '<div class="cr-row">' +
+                '<div class="cr-n">' + (n + 1) + '</div>' +
+                '<div style="min-width:0;">' +
+                    '<div class="cr-name">' + escHTML(closeLabel(p)) + ' · ' + p.qty + '× ' +
+                        (p.status ? '<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:20px;background:' + RISK_COLOR[p.status] + '26;color:' + RISK_COLOR[p.status] + ';">' + RISK_LABEL[p.status] + '</span>' : '') + '</div>' +
+                    '<div class="cr-meta">' + (axes || 'no axis improves noticeably') + zoneTxt + '<br>' +
+                        'notional $' + fmt(p.notional) + ' · buyback $' + fmt(c.cost) + ' · <span style="white-space:nowrap;">P&amp;L <span style="color:' + (c.pnl >= 0 ? '#3aad72' : '#e86060') + '">' + signUSD(c.pnl) + '</span></span></div>' +
+                '</div>' +
+                '<div class="cr-imp" style="color:' + col + '">' + pts(x.impact) + '<small>pts' + (perK !== null && perK > 0 ? ' · ' + perK.toFixed(1) + ' / $1k' : '') + '</small></div>' +
+                '<button class="cr-try" onclick="tryCloseInWhatIf(' + x.i + ')">Try in what-if →</button>' +
+            '</div>';
+        }).join('');
+        body.innerHTML =
+            '<div class="wi-hint" style="margin-bottom:6px;">Each put closed in full, one at a time, on the book <b>without</b> the what-if. ' +
+            'Impact = change of the average radar score (points of 100); the axes that move most are listed. ' +
+            'Buyback and P&amp;L at the statement price, for information.</div>' + rows;
+    }
+    // Put one ranked put into the what-if close list (opens the what-if, reuses an empty close row)
+    function tryCloseInWhatIf(i) {
+        if (!wiOpen) toggleWhatIf();
+        var sels = document.querySelectorAll('#wi-closes .wi-cl-pos');
+        var sel = null;
+        for (var k = 0; k < sels.length; k++) {
+            if (sels[k].value === String(i)) { el('wi-card').scrollIntoView({ behavior: 'smooth' }); return; }   // already there
+            if (!sel && sels[k].value === '') sel = sels[k];
+        }
+        if (!sel) { addCloseRow(false); sel = document.querySelectorAll('#wi-closes .wi-cl-pos'); sel = sel[sel.length - 1]; }
+        sel.value = String(i);
+        onClosePick(sel);
+        el('wi-card').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // ── RADAR MODEL ───────────────────────────────────────────────────────
+    // Every score, zone and limit for one state of the book: today's inputs plus a what-if
+    // (sells / closes, see readSells / readCloses). onSliders draws it; the Close-first ranking
+    // runs it once per imported put to measure what closing that put does to the radar.
+    //   nlv, excessIn, notionalBase, stocks: EUR (notionalBase = put notional without any what-if)
+    function radarModel(nlv, excessIn, notionalBase, stocks, sells, closes) {
+        var fx = getFX();
+        var sellEUR  = sum(sells, 'usd') / fx, closeEUR = sum(closes, 'usd') / fx;
+        var wiEUR    = sellEUR - closeEUR;
+        var excess   = excessIn - wiEUR * MARGIN;               // after the what-if (net margin used / freed)
+        var notional = Math.max(0, notionalBase + wiEUR);       // put notional incl. the what-if
 
         var cfg    = MODES[currentMode];
         var target = getTarget();
@@ -1078,7 +1142,6 @@ input[type="range"]::-moz-range-thumb {
         var totalExp  = stocks + notional;
         var maxTotal  = nlv * (1 + loanPct / 100);                     // green limit
         var warnTotal = nlv * (1 + (loanPct + LOAN_WARN_BAND) / 100);  // danger beyond this
-        el('loan-hint').textContent = '= max ' + (1 + loanPct / 100).toFixed(2) + 'x NLV';
 
         // Risk-weighted put notional (info only): the imported book counts with factor 0.66..1.0
         // depending on moneyness/DTE (see putRisk); notional above the imported book counts fully.
@@ -1174,6 +1237,74 @@ input[type="range"]::-moz-range-thumb {
         var effectiveLiq = totalExp > 0 ? liqZone : (excess < stopExcess ? 'danger' : 'safe');
         var zone = [effectiveLiq, expZone, mrgZone].reduce(function(a, z) { return zoneRank[z] > zoneRank[a] ? z : a; }, 'safe');
 
+        return {
+            nlv: nlv, excessIn: excessIn, excess: excess, notional: notional, stocks: stocks,
+            sellEUR: sellEUR, closeEUR: closeEUR, wiEUR: wiEUR,
+            cfg: cfg, target: target, vix: vix, loanPct: loanPct,
+            stopExcess: stopExcess, targetExcess: targetExcess,
+            totalExp: totalExp, maxTotal: maxTotal, warnTotal: warnTotal,
+            csvEUR: csvEUR, riskFactor: riskFactor, notionalEff: notionalEff,
+            pq: pq, marginUsed: marginUsed, cushion: cushion, conc: conc,
+            scores: scores, targetScores: targetScores,
+            liqZone: liqZone, expZone: expZone, mrgZone: mrgZone, effectiveLiq: effectiveLiq, zone: zone
+        };
+    }
+
+    function onSliders() {
+        var nlvRaw = parseFloat(el('nlv').value);
+        if (isNaN(nlvRaw) || nlvRaw <= 0) return;
+
+        var excessRaw   = Math.max(0, parseFloat(el('exc-in').value) || 0);
+        var notionalRaw = parseFloat(el('not-slider').value);
+
+        var nlv      = toEUR(nlvRaw, curNLV);
+        var excessIn = toEUR(excessRaw, curExc);                // today, from TWS
+        // What-if: a new put (adds notional, uses MARGIN of it) and / or a closed put (removes its
+        // notional, frees MARGIN of it). wi = the net change; close + sell = a roll.
+        var sells    = readSells();
+        var closes   = readCloses();
+        var sellUSD  = sum(sells, 'usd');
+        var closeUSD = sum(closes, 'usd');
+        var wiUSD    = sellUSD - closeUSD;
+        var sellEUR  = sellUSD / getFX(), closeEUR = closeUSD / getFX();
+        var wiEUR    = wiUSD / getFX();
+        var nSell    = sells.filter(function(w) { return w.usd > 0; }).length;
+        var wiOn     = nSell > 0 || closes.length > 0;
+        var stkRaw   = parseFloat(el('stk-val').value);
+        var stocks   = isNaN(stkRaw) || stkRaw < 0 ? 0 : toEUR(stkRaw, curStk);
+        var notionalBase = toEUR(notionalRaw, curNot);          // put notional without any what-if
+        el('wi-badge').textContent = !wiOn ? ''
+            : (nSell && closes.length ? 'roll' : (nSell ? nSell + ' sell' : closes.length + ' close')) + ' · in all cards';
+        el('stk-converted').textContent = stocks > 0 && curStk === 'USD' ? '≈ ' + fmt(stocks) + ' EUR' : '';
+
+        // Display values with currency symbol
+        el('exc-val').textContent = fmt(excessRaw) + ' ' + curExc;
+        el('not-val').textContent = fmt(notionalRaw) + ' ' + curNot;
+
+        // Show conversion hint
+        // Excess liquidity can never exceed NLV in TWS: flag a likely typo
+        var excConv = el('exc-converted');
+        excConv.textContent = (curExc === 'USD' ? '≈ ' + fmt(excessIn) + ' EUR' : '') +
+            (excessIn > nlv ? (curExc === 'USD' ? ' · ' : '') + '⚠️ above NLV — check the value from TWS' : '');
+        excConv.style.color = excessIn > nlv ? '#e86060' : '';
+        var notConv = el('not-converted');
+        if (curNot === 'USD') {
+            notConv.textContent = '≈ ' + fmt(notionalBase) + ' EUR';
+        } else {
+            notConv.textContent = '';
+        }
+
+        var M = radarModel(nlv, excessIn, notionalBase, stocks, sells, closes);
+        var excess = M.excess, notional = M.notional;
+        var cfg = M.cfg, target = M.target, vix = M.vix, loanPct = M.loanPct;
+        var stopExcess = M.stopExcess, targetExcess = M.targetExcess;
+        var totalExp = M.totalExp, maxTotal = M.maxTotal, warnTotal = M.warnTotal;
+        var csvEUR = M.csvEUR, riskFactor = M.riskFactor, notionalEff = M.notionalEff;
+        var pq = M.pq, marginUsed = M.marginUsed, cushion = M.cushion, conc = M.conc;
+        var scores = M.scores, targetScores = M.targetScores;
+        var liqZone = M.liqZone, expZone = M.expZone, mrgZone = M.mrgZone, effectiveLiq = M.effectiveLiq, zone = M.zone;
+        el('loan-hint').textContent = '= max ' + (1 + loanPct / 100).toFixed(2) + 'x NLV';
+
         // Colour input values
         el('exc-val').style.color = liqZone === 'danger' ? '#e86060' : liqZone === 'warn' ? '#e8a03a' : '#3aad72';
         el('not-val').style.color = expZone === 'danger' ? '#e86060' : expZone === 'warn' ? '#e8a03a' : '#3aad72';
@@ -1201,6 +1332,9 @@ input[type="range"]::-moz-range-thumb {
 
         // Put book quality card (moneyness proxy + DTE)
         renderBookRisk(csvEUR, riskFactor);
+
+        // Close-first ranking (measured on the book without the what-if)
+        renderCloseRank(nlv, excessIn, notionalBase, stocks);
 
         // Status message — the most severe problem first
         var status   = el('you-status');

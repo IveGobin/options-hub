@@ -1,4 +1,4 @@
-# Put Coach — dokumentacija (v1.13)
+# Put Coach — dokumentacija (v1.14)
 
 Put Coach je alat za upravljanje rizikom kod prodaje short putova na IBKR računu s marginom.
 Odgovara na tri pitanja:
@@ -27,6 +27,8 @@ Svi izračuni rade se u pregledniku. Ništa se ne šalje na server.
 7. Prije nove pozicije ili zatvaranja postojeće otvori karticu **What-if** (zadano je zatvorena) i upiši
    nove putove (broj ugovora, strike u $, po želji ticker i datum isteka) i/ili odaberi importirane putove za zatvaranje.
    Gumbima *+ Add another …* dodaješ još redova.
+8. Ako treba smanjiti rizik, otvori **Close first** (zadano zatvorena): putovi poredani po tome koliko bi
+   njihovo zatvaranje popravilo radar. *Try in what-if →* prebacuje put u what-if.
 
 ### Ručni unos (bez importa)
 
@@ -261,6 +263,33 @@ datum knjige) ako neki novi put nema ticker / datum. Bez tickera novi put se ra�
 datuma kao novi datum isteka. Ispod tablice: ukupni buyback i realizirani P&L u odnosu na primljenu premiju.
 
 **Clear** vraća obje liste na po jedan prazan red. Novi import isto vraća listu zatvaranja na jedan prazan red.
+
+---
+
+## 8a. Close first (koje putove prvo zatvoriti)
+
+Kartica ispod What-ifa, **zadano zatvorena** (računa se samo dok je otvorena; badge pokazuje broj putova).
+Rangira importirane short putove po tome koliko bi zatvaranje svakog od njih popravilo radar.
+
+Svaki put se zatvara **cijeli i sam**, na knjizi **bez what-ifa** (what-if ne mijenja poredak). Za svaki put se
+izračuna cijeli radar (isti `radarModel` kao glavni prikaz, uz zatvaranje kao u §8):
+
+```
+impact   = prosjek 6 radar scoreova poslije − prije        (u bodovima, × 100)
+po $1k   = impact / (buyback / 1000)                        (samo info)
+poredak  = impact, od najvećeg (kod jednakih: veći nominal prvo)
+```
+
+Po putu se prikazuje: ticker, strike, istek, broj ugovora i status (Deep OTM … Deep ITM, §11), impact, do
+tri osi koje najviše rastu, promjena ukupnog statusa (npr. 🔴→🟡) ako je ima, nominal, buyback i P&L po
+cijeni s izvoda (§8). Buyback i P&L ne ulaze u poredak.
+
+Zatvaranje svakog puta oslobađa marginu i smanjuje izloženost, pa veliki putovi uvijek dobiju nešto. Gore
+izbijaju putovi koji uz to popravljaju i Put Quality (putovi u gubitku) ili koncentraciju (najveći ticker /
+datum). *po $1k* pokazuje koliko je zatvaranje jeftino za učinak.
+
+**Try in what-if →** otvara What-if i stavlja taj put (svi ugovori) u prvi prazni red za zatvaranje (ili doda
+novi red); ako je put već u listi, samo skrola na What-if.
 
 ---
 
@@ -499,6 +528,10 @@ Sklopiva kartica (klik na naslov).
 | Zone score | 0.70 / 0.40 | zeleno / crveno |
 
 ## Changelog
+
+- 2026-11-18 (v1.14): Nova sklopiva kartica **Close first**: importirani putovi poredani po učinku
+  zatvaranja na radar (prosjek 6 osi), s osima koje najviše rastu, buybackom, P&L-om i gumbom
+  *Try in what-if →*. Izračun radara izdvojen u `radarModel` (isti za glavni prikaz i rangiranje).
 
 - 2026-11-18 (v1.13): Zatvaranje puta ima polje *Price $* za vlastitu cijenu otkupa (prazno = cijena s izvoda).
   Uz svaki red i ispod tablice prikazuju se buyback i realizirani P&L u odnosu na primljenu premiju.
