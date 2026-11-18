@@ -276,7 +276,18 @@ input[type="range"]::-moz-range-thumb {
 .wi-sub { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--text); font-weight:700; }
 .wi-sub i { font-style:normal; text-transform:none; letter-spacing:0; font-weight:400; color:var(--muted); margin-left:4px; }
 .wi-f select.num-in { font-size:13px; padding:9px 8px; }
-.wi-cost { font-family:var(--mono); font-size:13px; font-weight:700; padding:9px 2px; min-height:42px; box-sizing:border-box; display:flex; align-items:center; }
+.wi-row + .wi-row { margin-top:12px; padding-top:10px; border-top:1px dashed var(--border); }
+.wi-rowhead { display:none; align-items:center; justify-content:space-between; margin-bottom:6px; font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+.wi-list.multi .wi-rowhead { display:flex; }
+.wi-x { border:0; background:none; color:var(--muted); font-size:14px; line-height:1; cursor:pointer; padding:2px 4px; }
+.wi-x:hover { color:#e86060; }
+.wi-add { width:100%; margin-top:10px; padding:8px; border-radius:8px; border:1px dashed var(--border); background:none; color:var(--muted); font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; cursor:pointer; }
+.wi-add:hover { color:var(--accent); border-color:var(--accent); }
+.wi-add:disabled { opacity:.4; cursor:default; }
+.wi-fitline { font-family:var(--mono); font-size:10.5px; margin:-4px 0 10px; line-height:1.6; }
+.wi-clinfo { font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:7px; line-height:1.5; }
+.wi-clinfo:empty { display:none; }
+.wi-clinfo b { color:var(--text); }
 .wi-usd { font-size:9px; padding:1px 6px; border-radius:10px; background:rgba(232,117,58,.15); color:var(--accent); margin-left:4px; letter-spacing:.06em; }
 .wi-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 10px; }
 .wi-f { display:flex; flex-direction:column; gap:4px; min-width:0; }
@@ -314,7 +325,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.11</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.13</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -457,30 +468,16 @@ input[type="range"]::-moz-range-thumb {
             </button>
             <div id="wi-body" style="display:none;">
             <div class="wi-head">
-                <span class="wi-sub">Sell a new put</span>
+                <span class="wi-sub">Sell new puts</span>
                 <button class="btn-sm" onclick="clearWhatIf()">Clear</button>
             </div>
-            <div class="wi-grid">
-                <label class="wi-f"><span>Contracts</span>
-                    <input class="num-in" type="number" id="wi-qty" min="0" step="1" inputmode="numeric" placeholder="e.g. 2" oninput="onSliders()"></label>
-                <label class="wi-f"><span>Strike $</span>
-                    <input class="num-in" type="number" id="wi-strike" min="0" step="0.5" inputmode="decimal" placeholder="e.g. 20" oninput="onSliders()"></label>
-                <label class="wi-f"><span>Ticker <i>optional</i></span>
-                    <input class="num-in" type="text" id="wi-tkr" maxlength="8" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="new ticker" oninput="this.value=this.value.toUpperCase();onSliders()" style="text-transform:uppercase;"></label>
-                <label class="wi-f"><span>Expiry <i>optional</i></span>
-                    <input class="num-in" type="date" id="wi-exp" oninput="onSliders()"></label>
+            <div class="wi-list" id="wi-sells"></div>
+            <button class="wi-add" onclick="addSellRow(true)">+ Add another new put</button>
+            <div class="wi-head" style="margin-top:16px;">
+                <span class="wi-sub">Close existing puts <i>buy back</i></span>
             </div>
-            <div class="wi-head" style="margin-top:14px;">
-                <span class="wi-sub">Close an existing put <i>buy back</i></span>
-            </div>
-            <div class="wi-grid">
-                <label class="wi-f" style="grid-column:1 / -1;"><span>Put <i>from the import</i></span>
-                    <select class="num-in" id="wi-cl-pos" onchange="onClosePick()"></select></label>
-                <label class="wi-f"><span>Contracts</span>
-                    <input class="num-in" type="number" id="wi-cl-qty" min="0" step="1" inputmode="numeric" placeholder="all" oninput="onSliders()"></label>
-                <div class="wi-f"><span>Buyback <i>statement price</i></span>
-                    <div class="wi-cost" id="wi-cl-cost">—</div></div>
-            </div>
+            <div class="wi-list" id="wi-closes"></div>
+            <button class="wi-add" id="wi-add-close" onclick="addCloseRow(true)">+ Add another put to close</button>
             <div class="wi-res" id="wi-res"></div>
             </div>
         </div>
@@ -674,71 +671,155 @@ input[type="range"]::-moz-range-thumb {
         onSliders();
     }
 
-    // What-if trade: contracts × 100 × strike, in USD (0 when incomplete or the card is closed)
-    function whatIfUSD() {
-        if (!wiOpen) return 0;
-        var q = parseFloat(el('wi-qty').value), k = parseFloat(el('wi-strike').value);
-        return (q > 0 && k > 0) ? q * 100 * k : 0;
+    var MON3 = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    // Date input (yyyy-mm-dd) → IBKR key "18DEC26" (empty = none)
+    function dateKey(v) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '')) return '';
+        return v.slice(8, 10) + MON3[parseInt(v.slice(5, 7), 10) - 1] + v.slice(2, 4);
     }
 
-    // What-if close: an imported short put bought back (all or part of its contracts).
-    // Returns { pos, qty, usd (notional removed), cost (buyback at the statement price) } or null.
-    function closeSel() {
-        if (!wiOpen) return null;
-        var i = el('wi-cl-pos').value;
-        var p = i === '' ? null : gPositions[parseInt(i, 10)];
-        if (!p || !(p.qty > 0)) return null;
-        var raw = el('wi-cl-qty').value.trim();
-        var q = raw === '' ? p.qty : Math.min(p.qty, Math.max(0, Math.floor(parseFloat(raw) || 0)));
-        if (!(q > 0)) return null;
-        var mult = p.notional / (p.qty * p.strike);   // contract multiplier (100 for US options)
-        return { pos: p, qty: q, usd: p.notional * q / p.qty, cost: q * mult * p.close };
+    // What-if new puts: one entry per row with a strike (usd = contracts × 100 × strike, 0 without
+    // contracts). Empty while the card is closed.
+    function readSells() {
+        if (!wiOpen) return [];
+        var out = [];
+        document.querySelectorAll('#wi-sells .wi-row').forEach(function(r, i) {
+            var q = parseFloat(r.querySelector('.wi-qty').value), k = parseFloat(r.querySelector('.wi-strike').value);
+            if (!(k > 0)) return;
+            out.push({ n: i + 1, strike: k, qty: q > 0 ? q : 0, usd: q > 0 ? q * 100 * k : 0,
+                       tkr: r.querySelector('.wi-tkr').value.trim().toUpperCase(),
+                       dk: dateKey(r.querySelector('.wi-exp').value) });
+        });
+        return out;
+    }
+
+    // What-if closes: imported short puts bought back (all or part of their contracts). Rows that pick
+    // the same put are merged (never more than its open contracts). Buyback price per share: the
+    // row's own price, or the statement close price when empty. Each entry:
+    // { pos, qty, usd (notional removed), cost (buyback), pnl (premium received − buyback) }.
+    // Also fills each row's buyback / P&L line.
+    function readCloses() {
+        var byIdx = {}, order = [];
+        document.querySelectorAll('#wi-closes .wi-row').forEach(function(r) {
+            var info = r.querySelector('.wi-clinfo');
+            var i = r.querySelector('.wi-cl-pos').value;
+            var p = i === '' ? null : gPositions[parseInt(i, 10)];
+            if (!p || !(p.qty > 0)) { info.innerHTML = ''; return; }
+            var raw = r.querySelector('.wi-cl-qty').value.trim();
+            var q = raw === '' ? p.qty : Math.min(p.qty, Math.max(0, Math.floor(parseFloat(raw) || 0)));
+            var own = parseFloat(r.querySelector('.wi-cl-px').value);
+            var px = own >= 0 ? own : p.close;
+            var mult = p.notional / (p.qty * p.strike);   // contract multiplier (100 for US options)
+            info.innerHTML = q > 0 ? closeInfoHTML(q * mult * px, q * mult * (p.cost - px), p, own >= 0) : '';
+            if (!wiOpen || !(q > 0)) return;
+            if (!byIdx[i]) { byIdx[i] = { pos: p, qty: 0, cost: 0, pnl: 0 }; order.push(i); }
+            var c = byIdx[i], add = Math.min(q, p.qty - c.qty);   // merged rows: never past the open contracts
+            c.qty += add; c.cost += add * mult * px; c.pnl += add * mult * (p.cost - px);
+        });
+        return order.map(function(i) {
+            var c = byIdx[i], p = c.pos;
+            return { pos: p, qty: c.qty, usd: p.notional * c.qty / p.qty, cost: c.cost, pnl: c.pnl };
+        });
+    }
+    function signUSD(v) { return (v >= 0 ? '+' : '−') + '$' + fmt(Math.abs(v)); }
+    function closeInfoHTML(cost, pnl, p, own) {
+        return 'Buyback <b>$' + fmt(cost) + '</b> ' + (own ? 'at your price' : 'at the statement price') +
+            ' · P&amp;L <b style="color:' + (pnl >= 0 ? '#3aad72' : '#e86060') + '">' + signUSD(pnl) + '</b>' +
+            (p.cost > 0 ? ' <span style="opacity:.7">(sold at $' + p.cost.toFixed(2) + ')</span>' : '');
     }
     function closeLabel(p) { return p.ticker + ' ' + p.strike + 'P ' + p.expStr; }
+    function sum(list, k) { return list.reduce(function(a, x) { return a + x[k]; }, 0); }
 
-    // Fill the "close a put" list from the imported positions (ticker, then expiry)
-    function rebuildCloseOptions() {
-        var sel = el('wi-cl-pos');
-        if (!gPositions.length) {
-            sel.innerHTML = '<option value="">Import a statement first</option>';
-            sel.disabled = true;
-        } else {
-            var idx = gPositions.map(function(p, i) { return i; }).sort(function(a, b) {
-                var pa = gPositions[a], pb = gPositions[b];
-                return pa.ticker < pb.ticker ? -1 : pa.ticker > pb.ticker ? 1 : pa.expiry - pb.expiry || pa.strike - pb.strike;
-            });
-            sel.innerHTML = '<option value="">— none —</option>' + idx.map(function(i) {
-                var p = gPositions[i];
-                return '<option value="' + i + '">' + escHTML(closeLabel(p)) + ' · ' + p.qty + '× · $' + fmt(p.notional) + '</option>';
-            }).join('');
-            sel.disabled = false;
-        }
-        el('wi-cl-qty').value = '';
-        el('wi-cl-qty').placeholder = 'all';
+    // Row headers ("New put 2 ✕") only show when a list has more than one row
+    function renumberRows(listId, label) {
+        var rows = document.querySelectorAll('#' + listId + ' .wi-row');
+        el(listId).classList.toggle('multi', rows.length > 1);
+        rows.forEach(function(r, i) { r.querySelector('.wi-rowhead span').textContent = label + ' ' + (i + 1); });
     }
-    function onClosePick() {
-        var i = el('wi-cl-pos').value, p = i === '' ? null : gPositions[parseInt(i, 10)];
-        el('wi-cl-qty').value = '';
-        el('wi-cl-qty').placeholder = p ? 'all (' + p.qty + ')' : 'all';
-        if (p) el('wi-cl-qty').max = p.qty;
+    function removeRow(btn, listId, label) {
+        var row = btn.closest('.wi-row');
+        if (document.querySelectorAll('#' + listId + ' .wi-row').length > 1) row.remove();
+        renumberRows(listId, label);
         onSliders();
     }
+    function rowHead(listId, label) {
+        return '<div class="wi-rowhead"><span></span><button class="wi-x" title="Remove" ' +
+               'onclick="removeRow(this,\'' + listId + '\',\'' + label + '\')">✕</button></div>';
+    }
 
-    var MON3 = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-    // What-if expiry (yyyy-mm-dd) → IBKR key "18DEC26" (empty = none)
-    function whatIfDateKey() {
-        var v = el('wi-exp').value;
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return '';
-        return v.slice(8, 10) + MON3[parseInt(v.slice(5, 7), 10) - 1] + v.slice(2, 4);
+    function addSellRow(focus) {
+        var row = document.createElement('div');
+        row.className = 'wi-row';
+        row.innerHTML = rowHead('wi-sells', 'New put') +
+            '<div class="wi-grid">' +
+                '<label class="wi-f"><span>Contracts</span>' +
+                    '<input class="num-in wi-qty" type="number" min="0" step="1" inputmode="numeric" placeholder="e.g. 2" oninput="onSliders()"></label>' +
+                '<label class="wi-f"><span>Strike $</span>' +
+                    '<input class="num-in wi-strike" type="number" min="0" step="0.5" inputmode="decimal" placeholder="e.g. 20" oninput="onSliders()"></label>' +
+                '<label class="wi-f"><span>Ticker <i>optional</i></span>' +
+                    '<input class="num-in wi-tkr" type="text" maxlength="8" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="new ticker" oninput="this.value=this.value.toUpperCase();onSliders()" style="text-transform:uppercase;"></label>' +
+                '<label class="wi-f"><span>Expiry <i>optional</i></span>' +
+                    '<input class="num-in wi-exp" type="date" oninput="onSliders()"></label>' +
+            '</div>';
+        el('wi-sells').appendChild(row);
+        renumberRows('wi-sells', 'New put');
+        if (focus) { row.querySelector('.wi-qty').focus(); onSliders(); }
+    }
+
+    // <option>s for the close lists: imported puts by ticker, then expiry, then strike
+    function closeOptionsHTML() {
+        if (!gPositions.length) return '<option value="">Import a statement first</option>';
+        var idx = gPositions.map(function(p, i) { return i; }).sort(function(a, b) {
+            var pa = gPositions[a], pb = gPositions[b];
+            return pa.ticker < pb.ticker ? -1 : pa.ticker > pb.ticker ? 1 : pa.expiry - pb.expiry || pa.strike - pb.strike;
+        });
+        return '<option value="">— none —</option>' + idx.map(function(i) {
+            var p = gPositions[i];
+            return '<option value="' + i + '">' + escHTML(closeLabel(p)) + ' · ' + p.qty + '× · $' + fmt(p.notional) + '</option>';
+        }).join('');
+    }
+    function addCloseRow(focus) {
+        var row = document.createElement('div');
+        row.className = 'wi-row';
+        row.innerHTML = rowHead('wi-closes', 'Close') +
+            '<div class="wi-grid">' +
+                '<label class="wi-f" style="grid-column:1 / -1;"><span>Put <i>from the import</i></span>' +
+                    '<select class="num-in wi-cl-pos" onchange="onClosePick(this)"' + (gPositions.length ? '' : ' disabled') + '>' + closeOptionsHTML() + '</select></label>' +
+                '<label class="wi-f"><span>Contracts</span>' +
+                    '<input class="num-in wi-cl-qty" type="number" min="0" step="1" inputmode="numeric" placeholder="all" oninput="onSliders()"></label>' +
+                '<label class="wi-f"><span>Price $ <i>per share</i></span>' +
+                    '<input class="num-in wi-cl-px" type="number" min="0" step="0.01" inputmode="decimal" placeholder="statement" oninput="onSliders()"></label>' +
+            '</div>' +
+            '<div class="wi-clinfo"></div>';
+        el('wi-closes').appendChild(row);
+        renumberRows('wi-closes', 'Close');
+        if (focus) { row.querySelector('.wi-cl-pos').focus(); onSliders(); }
+    }
+    // Indices into gPositions change with every import: start the close list over
+    function rebuildCloseOptions() {
+        el('wi-closes').innerHTML = '';
+        addCloseRow(false);
+        el('wi-add-close').disabled = !gPositions.length;
+    }
+    function onClosePick(sel) {
+        var i = sel.value, p = i === '' ? null : gPositions[parseInt(i, 10)];
+        var qi = sel.closest('.wi-row').querySelector('.wi-cl-qty');
+        qi.value = '';
+        qi.placeholder = p ? 'all (' + p.qty + ')' : 'all';
+        if (p) qi.max = p.qty;
+        var pi = sel.closest('.wi-row').querySelector('.wi-cl-px');
+        pi.value = '';
+        pi.placeholder = p ? p.close.toFixed(2) : 'statement';   // the statement close price, used when empty
+        onSliders();
     }
 
     // Concentration of the book incl. stocks held and the what-if trade.
     //   ticker: (stock value + put notional on the ticker) / (all stocks + all put notional)
     //           ETFs count in the total but never as one ticker (already diversified)
     //   date:   put notional per expiry / all put notional
-    // A what-if without ticker / expiry counts as a new ticker / expiry.
-    // cl (optional, see closeSel): a closed put is taken out of its ticker / expiry.
-    function concNow(wiUSD, wiTicker, wiDate, cl) {
+    // sells (see readSells): a new put without ticker / expiry counts as a new ticker / expiry.
+    // closes (see readCloses): closed puts are taken out of their ticker / expiry.
+    function concNow(sells, closes) {
         var fx = getFX(), tmap = {}, dmap = {}, putTot = gNotionalUSD, stkTot = 0;
         Object.keys(gTickerMap).forEach(function(k) { tmap[k] = gTickerMap[k]; });
         Object.keys(gDateMap).forEach(function(k) { dmap[k] = gDateMap[k]; });
@@ -749,17 +830,18 @@ input[type="range"]::-moz-range-thumb {
             if (!s.etf) tmap[s.ticker] = (tmap[s.ticker] || 0) + v;
         });
         var hasBook = putTot > 0 || stkTot > 0;
-        if (hasBook && wiUSD > 0) {
-            putTot += wiUSD;
-            if (wiTicker) tmap[wiTicker] = (tmap[wiTicker] || 0) + wiUSD;
-            if (wiDate)   dmap[wiDate]   = (dmap[wiDate]   || 0) + wiUSD;
-        }
-        if (hasBook && cl) {
-            var minus = function(m, k) { m[k] = (m[k] || 0) - cl.usd; if (m[k] <= 0.01) delete m[k]; };
-            putTot = Math.max(0, putTot - cl.usd);
-            minus(tmap, cl.pos.ticker);
-            minus(dmap, cl.pos.expStr);
-        }
+        if (hasBook) (sells || []).forEach(function(w) {
+            if (!(w.usd > 0)) return;
+            putTot += w.usd;
+            if (w.tkr) tmap[w.tkr] = (tmap[w.tkr] || 0) + w.usd;
+            if (w.dk)  dmap[w.dk]  = (dmap[w.dk]  || 0) + w.usd;
+        });
+        if (hasBook) (closes || []).forEach(function(c) {
+            var minus = function(m, k) { m[k] = (m[k] || 0) - c.usd; if (m[k] <= 0.01) delete m[k]; };
+            putTot = Math.max(0, putTot - c.usd);
+            minus(tmap, c.pos.ticker);
+            minus(dmap, c.pos.expStr);
+        });
         var top = function(m) {
             return Object.keys(m).reduce(function(a, k) { return a === null || m[k] > m[a] ? k : a; }, null);
         };
@@ -950,17 +1032,19 @@ input[type="range"]::-moz-range-thumb {
         var excessIn = toEUR(excessRaw, curExc);                // today, from TWS
         // What-if: a new put (adds notional, uses MARGIN of it) and / or a closed put (removes its
         // notional, frees MARGIN of it). wi = the net change; close + sell = a roll.
-        var sellUSD  = whatIfUSD();
-        var cl       = closeSel();
-        var closeUSD = cl ? cl.usd : 0;
+        var sells    = readSells();
+        var closes   = readCloses();
+        var sellUSD  = sum(sells, 'usd');
+        var closeUSD = sum(closes, 'usd');
         var wiUSD    = sellUSD - closeUSD;
         var sellEUR  = sellUSD / getFX(), closeEUR = closeUSD / getFX();
         var wiEUR    = wiUSD / getFX();
-        var wiOn     = sellUSD > 0 || !!cl;
+        var nSell    = sells.filter(function(w) { return w.usd > 0; }).length;
+        var wiOn     = nSell > 0 || closes.length > 0;
         var excess   = excessIn - wiEUR * MARGIN;               // after the what-if (net margin used / freed)
         var notional = Math.max(0, toEUR(notionalRaw, curNot) + wiEUR);   // put notional incl. the what-if
-        el('wi-cl-cost').textContent = cl ? '$' + fmt(cl.cost) : '—';
-        el('wi-badge').textContent = wiOn ? (sellUSD > 0 && cl ? 'roll' : cl ? 'close' : 'sell') + ' · in all cards' : '';
+        el('wi-badge').textContent = !wiOn ? ''
+            : (nSell && closes.length ? 'roll' : (nSell ? nSell + ' sell' : closes.length + ' close')) + ' · in all cards';
         var stkRaw   = parseFloat(el('stk-val').value);
         var stocks   = isNaN(stkRaw) || stkRaw < 0 ? 0 : toEUR(stkRaw, curStk);
         el('stk-converted').textContent = stocks > 0 && curStk === 'USD' ? '≈ ' + fmt(stocks) + ' EUR' : '';
@@ -1025,7 +1109,7 @@ input[type="range"]::-moz-range-thumb {
         // included: selling new puts must not improve the quality of the existing book.
         // A what-if close takes its contracts out of the book (closing a losing put lifts the score).
         // VIX still drives the liquidity target (getTarget).
-        var pq = bookQuality(cl);
+        var pq = bookQuality(closes);
         var qualScore = pq.score;
 
         // 3. EXPOSURE SAFETY (stocks + puts, worst case all assigned)
@@ -1057,7 +1141,7 @@ input[type="range"]::-moz-range-thumb {
         // 5. TICKER CONCENTRATION (stocks held + put notional per ticker, incl. the what-if)
         // Green: <40%, Warn: 40-60%, Danger: >60%
         // Blended toward 1.0 when the book is small vs. the loan limit (little real risk)
-        var conc = concNow(sellUSD, el('wi-tkr').value.trim().toUpperCase(), whatIfDateKey(), cl);
+        var conc = concNow(sells, closes);
         var tc = conc.tickerConc, dc = conc.dateConc;
         var tickerWeight = totalExp <= 0 ? 0 : maxTotal > 0 ? Math.min(1, totalExp / maxTotal) : 1;
         var rawTickerScore = tc <= 0.40
@@ -1100,7 +1184,8 @@ input[type="range"]::-moz-range-thumb {
         var d = {
             nlv: nlv, excess: excess, excessIn: excessIn, notional: notional, notionalEff: notionalEff, vix: vix,
             stocks: stocks, wiEUR: wiEUR, wiUSD: wiUSD, totalExp: totalExp, loanPct: loanPct,
-            wiOn: wiOn, sellEUR: sellEUR, closeEUR: closeEUR, cl: cl, pqBase: cl ? bookQuality() : pq,
+            wiOn: wiOn, sellEUR: sellEUR, closeEUR: closeEUR, sells: sells, closes: closes,
+            pqBase: closes.length ? bookQuality() : pq,
             stopExcess: stopExcess, targetExcess: targetExcess,
             maxTotal: maxTotal, warnTotal: warnTotal, expZone: expZone,
             marginUsed: marginUsed, cushion: cushion, conc: conc, pq: pq, scores: scores, targetScores: targetScores
@@ -1307,17 +1392,19 @@ input[type="range"]::-moz-range-thumb {
     }
 
     function clearWhatIf() {
-        ['wi-qty', 'wi-strike', 'wi-tkr', 'wi-exp', 'wi-cl-pos', 'wi-cl-qty'].forEach(function(i) { el(i).value = ''; });
-        el('wi-cl-qty').placeholder = 'all';
+        el('wi-sells').innerHTML = '';
+        addSellRow(false);
+        rebuildCloseOptions();
         onSliders();
     }
 
     function whatIfHTML(d, base, lev, levColor) {
-        var fx = getFX(), nlv = d.nlv, cl = d.cl;
-        var strike = parseFloat(el('wi-strike').value);
-        if (!(strike > 0) && !cl) {
-            return '<div class="wi-hint">Sell: enter the strike (and contracts) of a put you are thinking of selling. ' +
-                   'Close: pick an imported put to buy back. Both together = a roll. ' +
+        var fx = getFX(), nlv = d.nlv, closes = d.closes;
+        var sold = d.sells.filter(function(w) { return w.usd > 0; });     // complete new puts
+        var open = d.sells.filter(function(w) { return !(w.usd > 0); });  // strike only: "how many fit?"
+        if (!d.sells.length && !closes.length) {
+            return '<div class="wi-hint">Sell: enter the strike (and contracts) of puts you are thinking of selling. ' +
+                   'Close: pick imported puts to buy back. Both together = a roll. Add as many of each as you need. ' +
                    'You see how many contracts fit and what it does to leverage, excess, margin cushion, put quality and concentration — before placing it.</div>';
         }
         var GREEN = '#3aad72', AMBER = '#e8a03a', RED = '#e86060';
@@ -1327,31 +1414,45 @@ input[type="range"]::-moz-range-thumb {
             return '<span class="from">' + a + ' → </span><span style="color:' + (col || 'var(--text)') + '">' + b + '</span>';
         };
         var plural = function(n) { return n + ' contract' + (n === 1 ? '' : 's'); };
-        var clTxt = cl ? (cl.qty < cl.pos.qty ? cl.qty + ' of ' : '') + escHTML(closeLabel(cl.pos)) : '';
-        var sellOn = d.sellEUR > 0;
-        var html;
+        var clTxt = closes.length === 1
+            ? (closes[0].qty < closes[0].pos.qty ? closes[0].qty + ' of ' : '') + escHTML(closeLabel(closes[0].pos))
+            : closes.length + ' puts';
+        var after = closes.length ? ' · after closing ' + clTxt : '';
+        var html = '';
 
-        if (strike > 0) {
-            // Same room as the status line / sell card, measured after the close but before the new put
-            var fit = Math.max(0, Math.floor(d.roomBefore.room * fx / (100 * strike)));
-            var after = cl ? ' · after closing ' + clTxt : '';
-            if (!sellOn) {
-                html = '<div class="wi-verdict ' + (fit > 0 ? 'ok' : 'bad') + '">' +
-                    (fit > 0 ? 'Up to ' + plural(fit) + ' fit at $' + strike : 'No contract fits at $' + strike) +
-                    '<small>all limits green · binding: ' + bindingLabel(d.roomBefore, d) + after + '</small></div>';
-                if (!cl) return html + '<div class="wi-hint">Enter contracts to see the impact of the trade.</div>';
-            } else {
-                var fits = (parseFloat(el('wi-qty').value) || 0) <= fit;
-                html = '<div class="wi-verdict ' + (fits ? 'ok' : 'bad') + '">' +
-                    (fits ? '✅ Fits — all limits stay green' : '⚠️ Too big') +
-                    '<small>' + (fits ? '' : 'breaks: ' + bindingLabel(d.roomBefore, d) + ' · ') + 'max ' + plural(fit) + ' at $' + strike + after + '</small></div>';
-            }
-        } else {
-            // Close only: how much room for new puts it frees
+        // Room for new puts after the closes (roomBefore); what the complete new puts leave of it
+        var roomUSD = d.roomBefore.room * fx;
+        var leftUSD = roomUSD - d.sellEUR * fx;
+        var fitAt = function(strike, usdRoom) { return Math.max(0, Math.floor(usdRoom / (100 * strike))); };
+
+        if (sold.length) {
+            var fits = d.sellEUR <= d.roomBefore.room + 1e-6;
+            var max = sold.length === 1 ? 'max ' + plural(fitAt(sold[0].strike, roomUSD)) + ' at $' + sold[0].strike
+                                        : 'max ' + usd(d.roomBefore.room) + ' of new notional';
+            html += '<div class="wi-verdict ' + (fits ? 'ok' : 'bad') + '">' +
+                (fits ? '✅ Fits — all limits stay green' : '⚠️ Too big') +
+                '<small>' + (fits ? '' : 'breaks: ' + bindingLabel(d.roomBefore, d) + ' · ') + max + after + '</small></div>';
+        } else if (closes.length) {
             var freed = Math.max(0, d.room.room - d.roomBase.room);
-            html = '<div class="wi-verdict ok">Closing ' + clTxt + ' frees ~' + usd(freed) + ' of room' +
+            html += '<div class="wi-verdict ok">Closing ' + clTxt + ' frees ~' + usd(freed) + ' of room' +
                 '<small>room for new puts ' + usd(d.roomBase.room) + ' → ' + usd(d.room.room) + ' · binding: ' + bindingLabel(d.room, d) + '</small></div>';
         }
+        // Rows with only a strike: how many contracts fit in what is left
+        if (open.length) {
+            var lines = open.map(function(w) {
+                var n = fitAt(w.strike, Math.max(0, leftUSD));
+                var tag = d.sells.length > 1 ? 'New put ' + w.n + ': ' : '';
+                return '<div style="color:' + (n > 0 ? GREEN : RED) + ';">' + tag +
+                    (n > 0 ? 'up to ' + (sold.length ? n + ' more contract' + (n === 1 ? '' : 's') : plural(n)) + ' fit at $' + w.strike : 'no contract fits at $' + w.strike) + '</div>';
+            }).join('');
+            if (!sold.length && !closes.length) {
+                return '<div class="wi-verdict ' + (fitAt(open[0].strike, leftUSD) > 0 ? 'ok' : 'bad') + '">' + lines +
+                    '<small>all limits green · binding: ' + bindingLabel(d.roomBefore, d) + '</small></div>' +
+                    '<div class="wi-hint">Enter contracts to see the impact of the trade.</div>';
+            }
+            html += '<div class="wi-fitline">' + lines + '</div>';
+        }
+        if (!sold.length && !closes.length) return html;
 
         // Before → after (base = exposure without any what-if)
         var levBefore = nlv > 0 ? base / nlv : 0;
@@ -1362,43 +1463,46 @@ input[type="range"]::-moz-range-thumb {
         var zCol = function(s) { return s >= 0.70 ? GREEN : s >= 0.40 ? AMBER : RED; };
 
         html += '<div class="wi-rows">' +
-            (sellOn ? '<span>New put</span><span>+' + usd(d.sellEUR) + '</span>' : '') +
-            (cl ? '<span>Closed put</span><span>−' + usd(d.closeEUR) + '</span>' : '') +
+            (sold.length ? '<span>New put' + (sold.length > 1 ? 's (' + sold.length + ')' : '') + '</span><span>+' + usd(d.sellEUR) + '</span>' : '') +
+            (closes.length ? '<span>Closed put' + (closes.length > 1 ? 's (' + closes.length + ')' : '') + '</span><span>−' + usd(d.closeEUR) + '</span>' : '') +
             '<span>Margin</span><span>' + (d.wiEUR >= 0 ? 'uses ~' : 'frees ~') + usd(d.wiEUR * MARGIN) + '</span>' +
             '<span>Leverage</span><span>' + arrow(levBefore.toFixed(2) + 'x', lev.toFixed(2) + 'x', levColor) + '</span>' +
             '<span>Excess</span><span>' + arrow(pc(exB), pc(exA) + ' NLV', exCol) + '</span>' +
             '<span>Survives drop</span><span>' + arrow(fmtCushion(cushB), fmtCushion(d.cushion), cushCol) + '</span>' +
-            (cl && d.pqBase.n ? '<span>Put quality</span><span>' + arrow(pc(d.pqBase.score), d.pq.n ? pc(d.pq.score) : '—', zCol(d.pq.score)) + '</span>' : '');
+            (closes.length && d.pqBase.n ? '<span>Put quality</span><span>' + arrow(pc(d.pqBase.score), d.pq.n ? pc(d.pq.score) : '—', zCol(d.pq.score)) + '</span>' : '');
 
-        // Concentration (needs an imported book)
+        // Concentration (needs an imported book): every ticker / expiry the what-if touches
         if (d.conc.hasBook) {
-            var c0 = concNow(0, '', '');
-            var tkr = sellOn ? el('wi-tkr').value.trim().toUpperCase() : '';
-            var dk = sellOn ? whatIfDateKey() : '';
+            var c0 = concNow();
             var tCol = function(v) { return v >= 0.40 ? RED : v >= 0.25 ? AMBER : GREEN; };
             var dCol = function(v) { return v >= 0.35 ? (v >= 0.70 ? RED : AMBER) : GREEN; };
-            var tRow = function(t) { var a = d.conc.share(t); return '<span>' + escHTML(t) + '</span><span>' + arrow(pc(c0.share(t)), pc(a) + ' of book', tCol(a)) + '</span>'; };
-            var dRow = function(k) { var a = d.conc.dshare(k); return '<span>' + k + '</span><span>' + arrow(pc(c0.dshare(k)), pc(a) + ' of puts', dCol(a)) + '</span>'; };
-            if (sellOn) {
-                if (tkr) html += tRow(tkr);
-                else if (c0.topTicker) {
-                    var tt = d.conc.share(c0.topTicker);
-                    html += '<span>New ticker</span><span>' + arrow('top ' + escHTML(c0.topTicker) + ' ' + pc(c0.tickerConc), pc(tt), tCol(tt)) + '</span>';
-                }
+            var uniq = function(a) { return a.filter(function(x, i) { return x && a.indexOf(x) === i; }); };
+            var tkrs = uniq(sold.map(function(w) { return w.tkr; }).concat(closes.map(function(c) { return c.pos.ticker; })));
+            var dks  = uniq(sold.map(function(w) { return w.dk; }).concat(closes.map(function(c) { return c.pos.expStr; })));
+            tkrs.forEach(function(t) {
+                var a = d.conc.share(t);
+                html += '<span>' + escHTML(t) + '</span><span>' + arrow(pc(c0.share(t)), pc(a) + ' of book', tCol(a)) + '</span>';
+            });
+            if (sold.some(function(w) { return !w.tkr; }) && c0.topTicker && tkrs.indexOf(c0.topTicker) < 0) {
+                var tt = d.conc.share(c0.topTicker);
+                html += '<span>New ticker</span><span>' + arrow('top ' + escHTML(c0.topTicker) + ' ' + pc(c0.tickerConc), pc(tt), tCol(tt)) + '</span>';
             }
-            if (cl && cl.pos.ticker !== tkr) html += tRow(cl.pos.ticker);
-            if (sellOn) {
-                if (dk) html += dRow(dk);
-                else if (c0.topDate) {
-                    var dd = d.conc.dshare(c0.topDate);
-                    html += '<span>New expiry</span><span>' + arrow('top ' + c0.topDate + ' ' + pc(c0.dateConc), pc(dd), dCol(dd)) + '</span>';
-                }
+            dks.forEach(function(k) {
+                var a = d.conc.dshare(k);
+                html += '<span>' + k + '</span><span>' + arrow(pc(c0.dshare(k)), pc(a) + ' of puts', dCol(a)) + '</span>';
+            });
+            if (sold.some(function(w) { return !w.dk; }) && c0.topDate && dks.indexOf(c0.topDate) < 0) {
+                var dd = d.conc.dshare(c0.topDate);
+                html += '<span>New expiry</span><span>' + arrow('top ' + c0.topDate + ' ' + pc(c0.dateConc), pc(dd), dCol(dd)) + '</span>';
             }
-            if (cl && cl.pos.expStr !== dk) html += dRow(cl.pos.expStr);
         }
         html += '</div>';
-        if (cl) html += '<div class="wi-hint" style="margin-top:8px;">Buyback ≈ $' + fmt(cl.cost) + ' at the statement price (' +
-            (cl.pos.close > 0 ? '$' + cl.pos.close.toFixed(2) : 'n/a') + ' per share). It is paid from cash but NLV does not change: the put is already marked at that price.</div>';
+        if (closes.length) {
+            var pnl = sum(closes, 'pnl');
+            html += '<div class="wi-hint" style="margin-top:8px;">Buyback ≈ <b>$' + fmt(sum(closes, 'cost')) + '</b> · realized P&amp;L ' +
+                '<b style="color:' + (pnl >= 0 ? GREEN : RED) + '">' + signUSD(pnl) + '</b> vs premium received. ' +
+                'Info only: the buyback is paid from cash, but NLV and excess do not change when you pay the market price (the put is already marked at it).</div>';
+        }
         return html;
     }
 
@@ -1730,11 +1834,12 @@ input[type="range"]::-moz-range-thumb {
         return { q: 0.80 * (1 - x), k: 1 + x };
     }
     // Book score of the imported puts (a new what-if put is not included). No puts → neutral 0.70.
-    // cl (optional, see closeSel): the closed contracts are left out.
-    function bookQuality(cl) {
+    // closes (optional, see readCloses): the closed contracts are left out.
+    function bookQuality(closes) {
         var sw = 0, sq = 0, itm = 0, tot = 0;
         gPositions.forEach(function(p) {
-            var n = cl && cl.pos === p ? p.notional * (1 - cl.qty / p.qty) : p.notional;
+            var c = (closes || []).filter(function(x) { return x.pos === p; })[0];
+            var n = c ? p.notional * (1 - c.qty / p.qty) : p.notional;
             if (!(n > 0)) return;
             var pq = putQuality(p), w = n * pq.k;
             sw += w; sq += w * pq.q; tot += n;
@@ -1952,7 +2057,7 @@ input[type="range"]::-moz-range-thumb {
             el('not-slider').max = Math.max(el('not-slider').max, Math.round(notionalUSD * 1.5));
             el('not-slider').value = Math.round(notionalUSD);
             setCur('not', 'USD', true);
-            var c0 = concNow(0, '', '');
+            var c0 = concNow();
             messages.push('Put notional: ' + fmt(notionalUSD) + ' USD');
             messages.push('Top ticker: ' + c0.topTicker + ' ' + Math.round(c0.tickerConc*100) + '% (stocks + puts)');
             messages.push('Top expiry: ' + c0.topDate + ' ' + Math.round(c0.dateConc*100) + '%');
@@ -2051,6 +2156,7 @@ input[type="range"]::-moz-range-thumb {
             });
     })();
 
+    addSellRow(false);
     rebuildCloseOptions();
     onVix();
 </script>

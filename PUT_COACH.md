@@ -1,11 +1,11 @@
-# Put Coach — dokumentacija (v1.11)
+# Put Coach — dokumentacija (v1.13)
 
 Put Coach je alat za upravljanje rizikom kod prodaje short putova na IBKR računu s marginom.
 Odgovara na tri pitanja:
 
 1. **Jesam li sada siguran?** (likvidnost, izloženost, margin cushion, kvaliteta i raspršenost knjige)
 2. **Koliko još putova smijem prodati?** (slobodni prostor, "room")
-3. **Što bi napravila jedna konkretna nova pozicija ili zatvaranje postojeće?** (what-if)
+3. **Što bi napravile konkretne nove pozicije i/ili zatvaranje postojećih?** (what-if)
 
 Svi izračuni rade se u pregledniku. Ništa se ne šalje na server.
 
@@ -25,7 +25,8 @@ Svi izračuni rade se u pregledniku. Ništa se ne šalje na server.
 5. Odaberi **mod** (Conservative / Moderate / Aggressive) i po potrebi odaberi drugi **Max assignment loan** (30 / 60 / 90 %).
 6. Pročitaj **status** (zelena / žuta / crvena poruka), **radar** i karticu **What can I sell today?**
 7. Prije nove pozicije ili zatvaranja postojeće otvori karticu **What-if** (zadano je zatvorena) i upiši
-   novi put (broj ugovora, strike u $, po želji ticker i datum isteka) i/ili odaberi importirani put za zatvaranje.
+   nove putove (broj ugovora, strike u $, po želji ticker i datum isteka) i/ili odaberi importirane putove za zatvaranje.
+   Gumbima *+ Add another …* dodaješ još redova.
 
 ### Ručni unos (bez importa)
 
@@ -81,7 +82,7 @@ Pad do margin calla je gruba procjena: `1 − loan / ((1 − maintenance) × (1 
 
 ## 4. Osnovne veličine
 
-Sve u EUR. `wi` = neto what-if nominal (novi put − zatvoreni put, vidi §8); bez what-ifa je 0.
+Sve u EUR. `wi` = neto what-if nominal (novi putovi − zatvoreni putovi, vidi §8); bez what-ifa je 0.
 
 ```
 NLV            = net liquidation value
@@ -196,28 +197,36 @@ Isti izračun koriste status poruka, kartica *What can I sell today?* i what-if 
 
 ---
 
-## 8. What-if (nova short put pozicija i/ili zatvaranje postojeće)
+## 8. What-if (nove short put pozicije i/ili zatvaranje postojećih)
 
 Kartica je **zadano zatvorena** (klik na naslov je otvara). What-if se računa **samo dok je otvorena**;
 zatvaranjem kartice sve se vraća na stvarno stanje (upisane vrijednosti ostaju). Dok je aktivan, uz naslov
 piše *sell / close / roll · in all cards*.
 
-Dva dijela, oba u **USD** (US opcije), mogu se koristiti zasebno ili zajedno (zajedno = **roll**):
+Dva dijela, oba u **USD** (US opcije), mogu se koristiti zasebno ili zajedno (zajedno = **roll**).
+Svaki dio je lista redova: *+ Add another new put* / *+ Add another put to close* dodaju red, ✕ ga briše
+(zaglavlje reda s ✕ vidi se tek kad postoje barem dva reda).
 
-- **Sell a new put:** *Contracts*, *Strike $*, opcionalno *Ticker* i *Expiry*.
-- **Close an existing put:** padajuća lista importiranih short putova (ticker, strike, istek, broj ugovora,
-  nominal) i *Contracts* (prazno = svi; više od otvorenih se svodi na otvorene). Bez importa lista je prazna.
+- **Sell new puts** (po redu): *Contracts*, *Strike $*, opcionalno *Ticker* i *Expiry*.
+- **Close existing puts** (po redu): padajuća lista importiranih short putova (ticker, strike, istek, broj
+  ugovora, nominal), *Contracts* (prazno = svi; više od otvorenih se svodi na otvorene) i *Price $* po dionici
+  (vlastita cijena otkupa; prazno = close price s izvoda, koji je upisan kao placeholder). Ispod reda:
+  buyback i realizirani P&L tog reda (uz cijenu po kojoj je put prodan).
+  Bez importa lista je prazna. Ako isti put odabereš u više redova, ugovori se zbrajaju, najviše do otvorenih.
 
 ```
-sellUSD  = contracts × 100 × strike                         (novi put)
-closeUSD = notional_puta × zatvoreni / otvoreni ugovori     (zatvoreni put)
-wi       = (sellUSD − closeUSD) / fx                        (EUR, neto)
-buyback  = zatvoreni × multiplier × close price s izvoda    (samo info)
+sellUSD  = Σ contracts × 100 × strike                          (novi putovi, samo potpuni redovi)
+closeUSD = Σ notional_puta × zatvoreni / otvoreni ugovori      (zatvoreni putovi)
+wi       = (sellUSD − closeUSD) / fx                           (EUR, neto)
+price    = vlastita cijena reda, ili close price s izvoda ako je polje prazno
+buyback  = Σ zatvoreni × multiplier × price                    (samo info)
+P&L      = Σ zatvoreni × multiplier × (cost price − price)     (samo info; cost price = prodajna cijena s izvoda)
 ```
 
 Neto what-if se dodaje u nominal i troši (ili, ako je negativan, oslobađa) 20 % svog nominala iz excessa (§4).
 Sve kartice (leverage, radar, status, room) pokazuju stanje **nakon** what-ifa.
-Buyback se plaća iz cash-a, ali NLV se ne mijenja jer je put već vrednovan po toj cijeni, pa ne ulazi u izračun.
+Buyback se plaća iz cash-a, ali NLV i excess se ne mijenjaju ako plaćaš tržišnu cijenu (put je već vrednovan po njoj),
+pa buyback i P&L ne ulaze u izračun. I uz vlastitu cijenu ostaju samo informacija.
 
 **Put Quality:** novi put ne ulazi u score (prodaja novih putova ne smije popraviti ocjenu postojeće knjige).
 Zatvoreni ugovori **izlaze** iz knjige, pa zatvaranje gubitničkog puta podiže score.
@@ -227,26 +236,31 @@ Zatvoreni ugovori **izlaze** iz knjige, pa zatvaranje gubitničkog puta podiže 
 | Upisano | Prikaz |
 |---|---|
 | ništa (ni strike ni zatvaranje) | uputa |
-| samo strike | "Up to N contracts fit at $K" |
-| strike + broj ugovora | ✅ Fits / ⚠️ Too big (+ koja granica puca, max broj ugovora) i tablica prije → poslije |
+| samo strike (bez ugovora) | "Up to N contracts fit at $K" |
+| novi putovi s ugovorima | ✅ Fits / ⚠️ Too big (+ koja granica puca) i tablica prije → poslije; max = broj ugovora uz jedan novi put, a uz više njih max novi nominal u $ |
 | samo zatvaranje | "Closing … frees ~$X of room" (room prije → poslije) i tablica prije → poslije |
-| zatvaranje + strike (+ ugovori) | kao gore, a max broj ugovora računa se **nakon** zatvaranja ("after closing …") |
+| zatvaranje + novi putovi | kao gore, a room se računa **nakon** zatvaranja ("after closing …") |
+
+Redovi koji imaju samo strike uz druge potpune redove pokazuju "up to N more contracts fit at $K", tj. koliko
+ih stane u room koji ostane nakon zatvaranja i potpunih novih putova.
 
 ```
 roomBefore = room nakon zatvaranja, a prije novog puta:
              roomCalc(excessIn + close × MARGIN, totalExp − sell)
 roomBase   = room bez what-ifa
-fit        = floor(roomBefore × fx / (100 × strike))
+fit        = floor(roomBefore × fx / (100 × strike))          (jedan novi put)
+fits       = sell ≤ roomBefore                                (svi novi putovi zajedno)
+more       = floor((roomBefore − sell) × fx / (100 × strike)) (red sa samo strikeom)
 frees      = room − roomBase
 ```
 
-**Tablica prije → poslije** (prije = bez what-ifa): novi put (+), zatvoreni put (−), margina (uses / frees
-~20 % neto), leverage, excess (% NLV), survives drop, Put Quality (samo uz zatvaranje), udio tickera novog
-puta (ili "New ticker"), udio tickera zatvorenog puta, udio datuma isteka novog puta (ili "New expiry"),
-udio datuma zatvorenog puta. Bez tickera novi put se računa kao novi ticker, a bez datuma kao novi datum isteka.
-Ispod tablice: procjena buybacka po cijeni s izvoda.
+**Tablica prije → poslije** (prije = bez what-ifa): novi putovi (+, zbroj), zatvoreni putovi (−, zbroj),
+margina (uses / frees ~20 % neto), leverage, excess (% NLV), survives drop, Put Quality (samo uz zatvaranje),
+udio svakog tickera i svakog datuma isteka koje what-if dira, te "New ticker" / "New expiry" (top ticker /
+datum knjige) ako neki novi put nema ticker / datum. Bez tickera novi put se računa kao novi ticker, a bez
+datuma kao novi datum isteka. Ispod tablice: ukupni buyback i realizirani P&L u odnosu na primljenu premiju.
 
-**Clear** briše sva polja (i odabir puta za zatvaranje).
+**Clear** vraća obje liste na po jedan prazan red. Novi import isto vraća listu zatvaranja na jedan prazan red.
 
 ---
 
@@ -485,6 +499,13 @@ Sklopiva kartica (klik na naslov).
 | Zone score | 0.70 / 0.40 | zeleno / crveno |
 
 ## Changelog
+
+- 2026-11-18 (v1.13): Zatvaranje puta ima polje *Price $* za vlastitu cijenu otkupa (prazno = cijena s izvoda).
+  Uz svaki red i ispod tablice prikazuju se buyback i realizirani P&L u odnosu na primljenu premiju.
+
+- 2026-11-18 (v1.12): What-if prima više redova: više novih putova i više putova za zatvaranje odjednom
+  (*+ Add another …*, ✕ briše red). Fits / Too big za zbroj novih putova; redovi sa samo strikeom pokazuju
+  koliko ugovora još stane; koncentracija za svaki ticker / datum koji what-if dira.
 
 - 2026-11-18 (v1.11): What-if je sklopiva kartica (zadano zatvorena, računa se samo dok je otvorena).
   Novi dio *Close an existing put*: odabir importiranog puta i broja ugovora za zatvaranje; uz novi put = roll.
