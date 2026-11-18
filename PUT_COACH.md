@@ -1,11 +1,11 @@
-# Put Coach — dokumentacija (v1.10)
+# Put Coach — dokumentacija (v1.11)
 
 Put Coach je alat za upravljanje rizikom kod prodaje short putova na IBKR računu s marginom.
 Odgovara na tri pitanja:
 
 1. **Jesam li sada siguran?** (likvidnost, izloženost, margin cushion, kvaliteta i raspršenost knjige)
 2. **Koliko još putova smijem prodati?** (slobodni prostor, "room")
-3. **Što bi napravila jedna konkretna nova pozicija?** (what-if)
+3. **Što bi napravila jedna konkretna nova pozicija ili zatvaranje postojeće?** (what-if)
 
 Svi izračuni rade se u pregledniku. Ništa se ne šalje na server.
 
@@ -24,7 +24,8 @@ Svi izračuni rade se u pregledniku. Ništa se ne šalje na server.
    (učitava se iz `tecajna_lista_usd.json`, zadano 1.17).
 5. Odaberi **mod** (Conservative / Moderate / Aggressive) i po potrebi odaberi drugi **Max assignment loan** (30 / 60 / 90 %).
 6. Pročitaj **status** (zelena / žuta / crvena poruka), **radar** i karticu **What can I sell today?**
-7. Prije nove pozicije upiši je u **What-if** (broj ugovora, strike u $, po želji ticker i datum isteka).
+7. Prije nove pozicije ili zatvaranja postojeće otvori karticu **What-if** (zadano je zatvorena) i upiši
+   novi put (broj ugovora, strike u $, po želji ticker i datum isteka) i/ili odaberi importirani put za zatvaranje.
 
 ### Ručni unos (bez importa)
 
@@ -80,7 +81,7 @@ Pad do margin calla je gruba procjena: `1 − loan / ((1 − maintenance) × (1 
 
 ## 4. Osnovne veličine
 
-Sve u EUR. `wi` = what-if nominal (vidi §8); bez what-ifa je 0.
+Sve u EUR. `wi` = neto what-if nominal (novi put − zatvoreni put, vidi §8); bez what-ifa je 0.
 
 ```
 NLV            = net liquidation value
@@ -191,40 +192,61 @@ room      = min(exposure, liquidity, margin)   (negativno = 0)
 binding   = granica koja daje minimum
 ```
 
-Isti izračun koriste status poruka, kartica *What can I sell today?* i what-if ("fits / too big").
+Isti izračun koriste status poruka, kartica *What can I sell today?* i what-if ("fits / too big", "frees").
 
 ---
 
-## 8. What-if (nova short put pozicija)
+## 8. What-if (nova short put pozicija i/ili zatvaranje postojeće)
 
-Polja su u **USD** (US opcije): *Contracts*, *Strike $*, opcionalno *Ticker* i *Expiry*.
+Kartica je **zadano zatvorena** (klik na naslov je otvara). What-if se računa **samo dok je otvorena**;
+zatvaranjem kartice sve se vraća na stvarno stanje (upisane vrijednosti ostaju). Dok je aktivan, uz naslov
+piše *sell / close / roll · in all cards*.
+
+Dva dijela, oba u **USD** (US opcije), mogu se koristiti zasebno ili zajedno (zajedno = **roll**):
+
+- **Sell a new put:** *Contracts*, *Strike $*, opcionalno *Ticker* i *Expiry*.
+- **Close an existing put:** padajuća lista importiranih short putova (ticker, strike, istek, broj ugovora,
+  nominal) i *Contracts* (prazno = svi; više od otvorenih se svodi na otvorene). Bez importa lista je prazna.
 
 ```
-wiUSD = contracts × 100 × strike
-wi    = wiUSD / fx                (EUR)
+sellUSD  = contracts × 100 × strike                         (novi put)
+closeUSD = notional_puta × zatvoreni / otvoreni ugovori     (zatvoreni put)
+wi       = (sellUSD − closeUSD) / fx                        (EUR, neto)
+buyback  = zatvoreni × multiplier × close price s izvoda    (samo info)
 ```
 
-What-if se dodaje u nominal i troši 20 % svog nominala iz excessa (§4). Sve kartice (leverage, radar,
-status, room) pokazuju stanje **nakon** te pozicije. Iznimka je os Put Quality: what-if u nju ne ulazi,
-jer prodaja novih putova ne smije popraviti ocjenu postojeće knjige.
+Neto what-if se dodaje u nominal i troši (ili, ako je negativan, oslobađa) 20 % svog nominala iz excessa (§4).
+Sve kartice (leverage, radar, status, room) pokazuju stanje **nakon** what-ifa.
+Buyback se plaća iz cash-a, ali NLV se ne mijenja jer je put već vrednovan po toj cijeni, pa ne ulazi u izračun.
+
+**Put Quality:** novi put ne ulazi u score (prodaja novih putova ne smije popraviti ocjenu postojeće knjige).
+Zatvoreni ugovori **izlaze** iz knjige, pa zatvaranje gubitničkog puta podiže score.
+
+**Koncentracija:** zatvoreni nominal se oduzima od svog tickera, datuma isteka i ukupnog nominala putova.
 
 | Upisano | Prikaz |
 |---|---|
-| ništa / bez strikea | uputa |
+| ništa (ni strike ni zatvaranje) | uputa |
 | samo strike | "Up to N contracts fit at $K" |
 | strike + broj ugovora | ✅ Fits / ⚠️ Too big (+ koja granica puca, max broj ugovora) i tablica prije → poslije |
-
-**Max broj ugovora** (računa se iz roomBefore, tj. prije what-ifa):
+| samo zatvaranje | "Closing … frees ~$X of room" (room prije → poslije) i tablica prije → poslije |
+| zatvaranje + strike (+ ugovori) | kao gore, a max broj ugovora računa se **nakon** zatvaranja ("after closing …") |
 
 ```
-fit = floor(roomBefore × fx / (100 × strike))
+roomBefore = room nakon zatvaranja, a prije novog puta:
+             roomCalc(excessIn + close × MARGIN, totalExp − sell)
+roomBase   = room bez what-ifa
+fit        = floor(roomBefore × fx / (100 × strike))
+frees      = room − roomBase
 ```
 
-**Tablica prije → poslije:** notional, margin used (~20 %), leverage, excess (% NLV), survives drop,
-udio tickera (ili "New ticker"), udio datuma isteka (ili "New expiry").
-Bez tickera what-if se računa kao novi ticker, a bez datuma kao novi datum isteka.
+**Tablica prije → poslije** (prije = bez what-ifa): novi put (+), zatvoreni put (−), margina (uses / frees
+~20 % neto), leverage, excess (% NLV), survives drop, Put Quality (samo uz zatvaranje), udio tickera novog
+puta (ili "New ticker"), udio tickera zatvorenog puta, udio datuma isteka novog puta (ili "New expiry"),
+udio datuma zatvorenog puta. Bez tickera novi put se računa kao novi ticker, a bez datuma kao novi datum isteka.
+Ispod tablice: procjena buybacka po cijeni s izvoda.
 
-**Clear** briše sva četiri polja.
+**Clear** briše sva polja (i odabir puta za zatvaranje).
 
 ---
 
@@ -276,7 +298,7 @@ w_i   = notional_i × (1 + min(1, L_i / 0.10))      (za r ≤ 1 ponder je 1)
 score = Σ w_i × q_i / Σ w_i
 ```
 
-What-if put **ne ulazi** u score. Bez importiranih putova score je neutralnih 0.70.
+Novi what-if put **ne ulazi** u score; ugovori zatvoreni u what-ifu izlaze iz knjige (§8). Bez importiranih putova score je neutralnih 0.70.
 
 | Knjiga | Score |
 |---|---|
@@ -351,7 +373,7 @@ Datumi se broje pojedinačno: 18DEC26 i 24DEC26 su dva različita datuma.
 - **Leverage if all puts assigned:** totalExp / NLV.
 - **Loan:** `max(0, totalExp − NLV)` u % NLV-a, uz cilj (loan %).
 - **Traka:** pozicija trenutne izloženosti uz oznake NLV, cilja (loan %) i crvene granice (loan % + 25).
-  What-if je prikazan kao nastavak trake.
+  Novi put (neto) je prikazan kao nastavak trake, a izloženost koju zatvaranje uklanja kao iscrtkani dio.
 - **Tablica:** dionice, short putovi (EUR i USD), ukupna izloženost, loan, max uz cilj, preostali prostor
   ili prekoračenje.
 - **Risk-weighted (info):** prikazuje se samo ako se razlikuje od sirovog leveragea (§11).
@@ -463,6 +485,11 @@ Sklopiva kartica (klik na naslov).
 | Zone score | 0.70 / 0.40 | zeleno / crveno |
 
 ## Changelog
+
+- 2026-11-18 (v1.11): What-if je sklopiva kartica (zadano zatvorena, računa se samo dok je otvorena).
+  Novi dio *Close an existing put*: odabir importiranog puta i broja ugovora za zatvaranje; uz novi put = roll.
+  Zatvaranje oslobađa 20 % margine, izlazi iz koncentracije i iz Put Quality; prikaz "frees ~$X of room",
+  max ugovora nakon zatvaranja, procjena buybacka.
 
 - 2026-11-13 (v1.10): Max assignment loan su tri gumba 30 / 60 / 90 % umjesto polja za unos; zadano 60 %.
   Zadani loan po modu 30 / 60 / 90 % (prije 0 / 20 / 50 %).
