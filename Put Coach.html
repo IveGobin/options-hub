@@ -333,7 +333,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.14</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.15</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -950,7 +950,9 @@ input[type="range"]::-moz-range-thumb {
         }).join(' ');
     }
 
-    function drawRadar(scores, targetScores, zone) {
+    // baseScores (optional): the scores without the what-if; drawn as a dashed "before" polygon and
+    // every axis whose rounded % changes gets its change (+3) under the score pill.
+    function drawRadar(scores, targetScores, zone, baseScores) {
         var isDark = document.body.getAttribute('data-theme') !== 'light';
         var axisColor  = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)';
         var labelColor = isDark ? '#c8c0b4' : '#5a5650';
@@ -1000,6 +1002,16 @@ input[type="range"]::-moz-range-thumb {
         // ── Target polygon ───────────────────────────────────────────────
         svg += '<polygon points="'+polyPoints(targetScores)+'" fill="rgba(58,173,114,0.08)" stroke="rgba(58,173,114,0.45)" stroke-width="1.5" stroke-dasharray="5,3"/>';
 
+        // ── Before the what-if (dashed, muted) ───────────────────────────
+        if (baseScores) {
+            var baseCol = isDark ? 'rgba(200,192,180,0.55)' : 'rgba(90,86,80,0.55)';
+            svg += '<polygon points="'+polyPoints(baseScores)+'" fill="none" stroke="'+baseCol+'" stroke-width="1.5" stroke-dasharray="3,3" stroke-linejoin="round"/>';
+            baseScores.forEach(function(v, i) {
+                var p = axisPoint(i, v*R);
+                svg += '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="2.5" fill="'+baseCol+'"/>';
+            });
+        }
+
         // ── Your position polygon ────────────────────────────────────────
         var fillRgb = zone==='safe' ? '58,173,114' : zone==='warn' ? '232,160,58' : '232,96,96';
         svg += '<polygon points="'+polyPoints(scores)+'" fill="rgba('+fillRgb+','+zoneAlpha+')" stroke="'+zoneColor+'" stroke-width="2.5" stroke-linejoin="round"/>';
@@ -1033,6 +1045,12 @@ input[type="range"]::-moz-range-thumb {
             var sc = v>=0.7 ? '58,173,114' : v>=0.4 ? '232,160,58' : '232,96,96';
             svg += '<rect x="'+(p.x-13).toFixed(1)+'" y="'+(p.y-7).toFixed(1)+'" width="26" height="14" rx="4" fill="rgba('+sc+',0.22)"/>';
             svg += '<text x="'+p.x.toFixed(1)+'" y="'+(p.y+4.5).toFixed(1)+'" text-anchor="middle" font-family="Space Mono,monospace" font-size="9.5" fill="rgb('+sc+')" font-weight="700">'+pct+'</text>';
+            // What-if change of this axis, in points, under the pill
+            var dlt = baseScores ? Math.round(v * 100) - Math.round(baseScores[i] * 100) : 0;   // matches the pills
+            if (dlt) {
+                var dc = dlt > 0 ? '#3aad72' : '#e86060';
+                svg += '<text x="'+p.x.toFixed(1)+'" y="'+(p.y+18).toFixed(1)+'" text-anchor="middle" font-family="Space Mono,monospace" font-size="8.5" fill="'+dc+'" font-weight="700">'+(dlt > 0 ? '+' : '−')+Math.abs(dlt)+'</text>';
+            }
         });
 
         el('radar-svg').innerHTML = svg;
@@ -1310,7 +1328,9 @@ input[type="range"]::-moz-range-thumb {
         el('not-val').style.color = expZone === 'danger' ? '#e86060' : expZone === 'warn' ? '#e8a03a' : '#3aad72';
 
         // Draw radar
-        drawRadar(scores, targetScores, zone);
+        // With a what-if, the radar also shows the book without it (dashed) and the change per axis
+        var baseScores = wiOn ? radarModel(nlv, excessIn, notionalBase, stocks, [], []).scores : null;
+        drawRadar(scores, targetScores, zone, baseScores);
 
         var d = {
             nlv: nlv, excess: excess, excessIn: excessIn, notional: notional, notionalEff: notionalEff, vix: vix,
@@ -1331,7 +1351,7 @@ input[type="range"]::-moz-range-thumb {
         renderSell(d);
 
         // Put book quality card (moneyness proxy + DTE)
-        renderBookRisk(csvEUR, riskFactor);
+        renderBookRisk(closes, d.pqBase, pq);
 
         // Close-first ranking (measured on the book without the what-if)
         renderCloseRank(nlv, excessIn, notionalBase, stocks);
@@ -1393,19 +1413,46 @@ input[type="range"]::-moz-range-thumb {
                (p.dte <= 7 && (p.status === 'otm' || p.status === 'unknown'));
     }
 
-    function renderBookRisk(csvEUR, riskFactor) {
+    // closes (see readCloses): the what-if closes; the card shows the book after them (closed contracts
+    // leave the bar, the risk-weighted figure and the list). pqBase / pqNow: Put Quality before / after.
+    function renderBookRisk(closes, pqBase, pqNow) {
         var box = el('book-risk');
         if (!gPositions.length || gNotionalUSD <= 0) { box.style.display = 'none'; box.innerHTML = ''; return; }
         box.style.display = 'block';
 
         var LBL = 'font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);';
         var stmt = gStmtDate ? new Date(gStmtDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'today';
-        var total = gNotionalUSD;
+        closes = closes || [];
+        var closedQty = function(p) { var c = closes.filter(function(x) { return x.pos === p; })[0]; return c ? c.qty : 0; };
+        // Each put with the notional left after the what-if closes
+        var book = gPositions.map(function(p) {
+            var cq = closedQty(p);
+            return { p: p, cq: cq, n: p.notional * (1 - cq / p.qty) };
+        }).filter(function(b) { return b.n > 0.01; });
+        var total = book.reduce(function(a, b) { return a + b.n; }, 0);
+        var closedUSD = gNotionalUSD - total;
+        var wiNote = closes.length
+            ? '<div style="font-family:var(--mono);font-size:10px;color:#3aad72;margin-bottom:8px;">What-if: ' + closes.length + ' put' + (closes.length > 1 ? 's' : '') +
+              ' closed · $' + fmt(closedUSD) + ' notional out of the book</div>' : '';
+        var pqLine = pqNow && pqNow.n !== false
+            ? '<div style="font-family:var(--mono);font-size:11px;margin-top:10px;">Put Quality <b style="color:' +
+              (pqNow.score >= 0.70 ? '#3aad72' : pqNow.score >= 0.40 ? '#e8a03a' : '#e86060') + '">' +
+              (closes.length && pqBase && pqBase.n ? Math.round(pqBase.score * 100) + '% → ' : '') + Math.round(pqNow.score * 100) + '%</b>' +
+              ' <span style="color:var(--muted);">(radar axis)</span></div>' : '';
+        if (!(total > 0)) {
+            box.innerHTML = '<div style="' + LBL + 'margin-bottom:8px;">Put book quality · as of ' + stmt + '</div>' +
+                '<div style="padding:12px 14px;border-radius:10px;border:0.5px solid var(--border);background:var(--surface2);">' + wiNote +
+                '<div style="font-family:var(--mono);font-size:11px;color:#3aad72;">✅ Every imported put is closed in the what-if.</div></div>';
+            return;
+        }
+        // Risk-weighted notional of the book left (info only, see putRisk)
+        var csvEUR = total / getFX();
+        var riskFactor = 0.6 + 0.4 * book.reduce(function(a, b) { return a + b.p.w * b.n; }, 0) / total;
 
         // notional share per status
         var order = ['deep', 'otm', 'near', 'itm', 'ditm', 'unknown'];
         var share = { deep: 0, otm: 0, near: 0, itm: 0, ditm: 0, unknown: 0 };
-        gPositions.forEach(function(p) { share[p.status] += p.notional; });
+        book.forEach(function(b) { share[b.p.status] += b.n; });
 
         var bar = '', legend = '';
         order.forEach(function(k) {
@@ -1417,13 +1464,15 @@ input[type="range"]::-moz-range-thumb {
                 RISK_LABEL[k] + ' ' + Math.round(pct) + '%</span>';
         });
 
-        var flagged = gPositions.filter(isFlagged).sort(function(a, b) {
-            return (b.w * b.notional) - (a.w * a.notional);
+        var flagged = book.filter(function(b) { return isFlagged(b.p); }).sort(function(a, b) {
+            return (b.p.w * b.n) - (a.p.w * a.n);
         });
         var MAXROWS = 8;
-        var rowsHTML = flagged.slice(0, MAXROWS).map(function(p) {
+        var rowsHTML = flagged.slice(0, MAXROWS).map(function(b) {
+            var p = b.p;
             var exp = p.expiry.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
             var px  = p.ratio !== null ? '\u00d7' + p.ratio.toFixed(1) + ' of premium' : 'no premium data';
+            if (b.cq) px += ' \u00b7 ' + b.cq + ' of ' + p.qty + ' closed in what-if';
             return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-top:0.5px solid var(--border);">' +
                 '<div style="min-width:0;">' +
                     '<div style="font-family:var(--mono);font-size:11px;font-weight:700;">' + escHTML(p.ticker) + ' ' + p.strike + ' P</div>' +
@@ -1431,12 +1480,12 @@ input[type="range"]::-moz-range-thumb {
                 '</div>' +
                 '<div style="text-align:right;flex-shrink:0;">' +
                     '<span style="font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;background:' + RISK_COLOR[p.status] + '26;color:' + RISK_COLOR[p.status] + ';">' + RISK_LABEL[p.status] + '</span>' +
-                    '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:3px;">' + fmt(p.notional) + ' USD</div>' +
+                    '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:3px;">' + fmt(b.n) + ' USD</div>' +
                 '</div></div>';
         }).join('');
         var more = flagged.length > MAXROWS
             ? '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);padding-top:6px;">+' + (flagged.length - MAXROWS) + ' more</div>' : '';
-        var flaggedNotional = flagged.reduce(function(a, p) { return a + p.notional; }, 0);
+        var flaggedNotional = flagged.reduce(function(a, b) { return a + b.n; }, 0);
 
         var listHTML = flagged.length
             ? '<div style="' + LBL + 'margin:12px 0 2px;">Needs attention \u00b7 ' + flagged.length + ' put' + (flagged.length > 1 ? 's' : '') +
@@ -1445,13 +1494,13 @@ input[type="range"]::-moz-range-thumb {
 
         box.innerHTML =
             '<div style="' + LBL + 'margin-bottom:8px;">Put book quality \u00b7 as of ' + stmt + '</div>' +
-            '<div style="padding:12px 14px;border-radius:10px;border:0.5px solid var(--border);background:var(--surface2);">' +
+            '<div style="padding:12px 14px;border-radius:10px;border:0.5px solid var(--border);background:var(--surface2);">' + wiNote +
                 '<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--border);">' + bar + '</div>' +
                 '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;line-height:1.7;">' + legend + '</div>' +
                 '<div style="font-family:var(--mono);font-size:11px;margin-top:10px;">' +
                     'Raw <b>' + fmt(csvEUR) + '</b> EUR \u2192 risk-weighted <b>' + fmt(csvEUR * riskFactor) + '</b> EUR' +
                     ' <span style="color:var(--muted);">(counts ' + Math.round(riskFactor * 100) + '%)</span></div>' +
-                listHTML +
+                pqLine + listHTML +
                 '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5;">' +
                     'Estimated from option price vs premium collected \u2014 the statement has no underlying prices. ' +
                     'Info only: the loan target and margin use the raw notional.</div>' +

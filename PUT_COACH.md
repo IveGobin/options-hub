@@ -1,4 +1,4 @@
-# Put Coach — dokumentacija (v1.14)
+# Put Coach — dokumentacija (v1.15)
 
 Put Coach je alat za upravljanje rizikom kod prodaje short putova na IBKR računu s marginom.
 Odgovara na tri pitanja:
@@ -232,6 +232,11 @@ pa buyback i P&L ne ulaze u izračun. I uz vlastitu cijenu ostaju samo informaci
 
 **Put Quality:** novi put ne ulazi u score (prodaja novih putova ne smije popraviti ocjenu postojeće knjige).
 Zatvoreni ugovori **izlaze** iz knjige, pa zatvaranje gubitničkog puta podiže score.
+Score je ponderirani prosjek knjige: ako je većina knjige u gubitku, zatvaranje jednog lošeg puta pomakne ga
+samo malo (npr. 23 % → 27 %), a zatvaranje dobrog puta ga spusti.
+
+**Radar uz what-if:** isprekidani sivi poligon pokazuje stanje **bez** what-ifa, a ispod postotka svake osi
+koja se promijenila piše promjena u bodovima (`+4`, zeleno / `−5`, crveno; razlika zaokruženih postotaka).
 
 **Koncentracija:** zatvoreni nominal se oduzima od svog tickera, datuma isteka i ukupnog nominala putova.
 
@@ -429,6 +434,10 @@ Datumi se broje pojedinačno: 18DEC26 i 24DEC26 su dva različita datuma.
 Prikazuje se nakon importa. Svaki short put dobije status po r i L (vidi §9.2):
 **Deep OTM · OTM · Near strike · Likely ITM · Deep ITM · n/a**.
 
+- **What-if zatvaranje:** kartica prikazuje knjigu **nakon** zatvaranja (zatvoreni ugovori izlaze iz trake,
+  risk-weighted iznosa i liste; djelomično zatvoren put ostaje s preostalim nominalom i oznakom
+  *N of M closed in what-if*). Iznad trake piše koliko je nominala izašlo, ispod iznosa *Put Quality
+  prije → poslije* (ista vrijednost kao os radara). Ako se zatvore svi putovi, kartica to samo javi.
 - **Traka i legenda:** udio nominala po statusu.
 - **Risk-weighted nominal (samo informativno):** svaki put dobije ponder w (0.1–1.0):
 
@@ -528,6 +537,11 @@ Sklopiva kartica (klik na naslov).
 | Zone score | 0.70 / 0.40 | zeleno / crveno |
 
 ## Changelog
+
+- 2026-11-20 (v1.15): Uz what-if radar crta isprekidani poligon stanja bez what-ifa i promjenu po osi
+  (+/− bodovi), jer je pomak Put Quality kod zatvaranja često mali i nije se primjećivao. Kartica
+  **Put book quality** sad uzima u obzir what-if zatvaranja (traka, risk-weighted, Needs attention) i
+  prikazuje Put Quality prije → poslije.
 
 - 2026-11-18 (v1.14): Nova sklopiva kartica **Close first**: importirani putovi poredani po učinku
   zatvaranja na radar (prosjek 6 osi), s osima koje najviše rastu, buybackom, P&L-om i gumbom
