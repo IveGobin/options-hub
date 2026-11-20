@@ -1,4 +1,4 @@
-# Put Coach — dokumentacija (v1.15)
+# Put Coach — dokumentacija (v1.17)
 
 Put Coach je alat za upravljanje rizikom kod prodaje short putova na IBKR računu s marginom.
 Odgovara na tri pitanja:
@@ -27,8 +27,10 @@ Svi izračuni rade se u pregledniku. Ništa se ne šalje na server.
 7. Prije nove pozicije ili zatvaranja postojeće otvori karticu **What-if** (zadano je zatvorena) i upiši
    nove putove (broj ugovora, strike u $, po želji ticker i datum isteka) i/ili odaberi importirane putove za zatvaranje.
    Gumbima *+ Add another …* dodaješ još redova.
-8. Ako treba smanjiti rizik, otvori **Close first** (zadano zatvorena): putovi poredani po tome koliko bi
+8. Ako treba smanjiti rizik, otvori **Close first · Puts** (zadano zatvorena): putovi poredani po tome koliko bi
    njihovo zatvaranje popravilo radar. *Try in what-if →* prebacuje put u what-if.
+9. Isto za dionice: **What-if · Stocks** (prodaja importiranih i kupnja novih dionica, §8b) i
+   **Close first · Stocks** (dionice poredane po učinku prodaje, §8c).
 
 ### Ručni unos (bez importa)
 
@@ -85,13 +87,14 @@ Pad do margin calla je gruba procjena: `1 − loan / ((1 − maintenance) × (1 
 ## 4. Osnovne veličine
 
 Sve u EUR. `wi` = neto what-if nominal (novi putovi − zatvoreni putovi, vidi §8); bez what-ifa je 0.
+`ws` = neto what-if dionica (kupljene − prodane, vidi §8b); bez what-ifa je 0.
 
 ```
 NLV            = net liquidation value
 excessIn       = excess iz TWS-a (danas)
-excess         = excessIn − wi × MARGIN               MARGIN = 0.20
+excess         = excessIn − wi × MARGIN − ws × SM      MARGIN = 0.20, SM = stock margin (zadano 0.25)
 notional       = put notional + wi
-stocks         = vrijednost dionica
+stocks         = vrijednost dionica + ws
 totalExp       = stocks + notional                    (izloženost ako se SVI putovi assignaju)
 leverage       = totalExp / NLV
 loan           = max(0, totalExp − NLV)
@@ -199,7 +202,7 @@ Isti izračun koriste status poruka, kartica *What can I sell today?* i what-if 
 
 ---
 
-## 8. What-if (nove short put pozicije i/ili zatvaranje postojećih)
+## 8. What-if · Puts (nove short put pozicije i/ili zatvaranje postojećih)
 
 Kartica je **zadano zatvorena** (klik na naslov je otvara). What-if se računa **samo dok je otvorena**;
 zatvaranjem kartice sve se vraća na stvarno stanje (upisane vrijednosti ostaju). Dok je aktivan, uz naslov
@@ -271,7 +274,7 @@ datuma kao novi datum isteka. Ispod tablice: ukupni buyback i realizirani P&L u 
 
 ---
 
-## 8a. Close first (koje putove prvo zatvoriti)
+## 8a. Close first · Puts (koje putove prvo zatvoriti)
 
 Kartica ispod What-ifa, **zadano zatvorena** (računa se samo dok je otvorena; badge pokazuje broj putova).
 Rangira importirane short putove po tome koliko bi zatvaranje svakog od njih popravilo radar.
@@ -295,6 +298,56 @@ datum). *po $1k* pokazuje koliko je zatvaranje jeftino za učinak.
 
 **Try in what-if →** otvara What-if i stavlja taj put (svi ugovori) u prvi prazni red za zatvaranje (ili doda
 novi red); ako je put već u listi, samo skrola na What-if.
+Put koji je već zatvoren u What-ifu ima zeleni gumb **✓ Closed in what-if** (uz djelomično zatvaranje
+*(N of M)*); klik i dalje skrola na What-if.
+
+---
+
+## 8b. What-if · Stocks (prodaja i kupnja dionica)
+
+Kartica ispod Close first · Puts, **zadano zatvorena**; računa se samo dok je otvorena (badge
+*N sell · M buy · in all cards*). Radi zajedno s What-if · Puts: sve kartice pokazuju stanje nakon oba.
+
+- **Stock margin (kliznik, 10–100 %, zadano 25 %):** koliko vrijednosti dionice prodaja oslobađa, a kupnja
+  troši iz excessa. IBKR traži ~25 % za većinu US dionica, više za volatilne; podesi po potrebi.
+  Isti postotak koristi i Close first · Stocks.
+- **Sell stocks:** importirana dionica (samo pozicije u USD ili EUR), broj dionica (prazno = sve) i cijena
+  (prazno = *Close Price* s izvoda). Redovi na istoj dionici se spajaju (nikad više od držanih dionica).
+- **Buy stocks:** ticker (opcionalno), valuta (USD / EUR), broj dionica i cijena. Ticker koji već držiš
+  preuzima valutu i cijenu s izvoda (prazna cijena = cijena s izvoda); ETF ostaje ETF.
+
+```
+prodaja:  vrijednost = Value s izvoda × prodane / držane       (izlazi iz stocks i iz koncentracije)
+kupnja:   vrijednost = dionice × cijena                         (ulazi u stocks i u koncentraciju)
+ws       = Σ kupnje − Σ prodaje                                 (EUR; USD / tečaj)
+excess   = … − ws × SM                                          (prodaja oslobađa, kupnja troši)
+proceeds = prodane × cijena;  P&L = proceeds − Cost Basis × prodane / držane      (samo info)
+```
+
+Koncentracija: prodana dionica izlazi iz svog tickera i ukupnog iznosa; kupljena se dodaje (ETF samo u ukupni
+iznos, kupnja bez tickera je jedan novi ticker). Put Quality i date koncentracija se ne mijenjaju.
+
+**Rezultat:** oslobođeni / potrošeni excess i zona nakon what-ifa (*all limits green / caution / danger*),
+room za nove putove bez → sa stock what-ifom, zatim prodano / kupljeno, margina, stocks, leverage, excess,
+survives drop (prije = bez ikakvog what-ifa) i udio svakog dotaknutog tickera (te top tickera ako se promijeni).
+Ispod: proceeds i realizirani P&L u odnosu na cost basis (samo info).
+
+---
+
+## 8c. Close first · Stocks (koje dionice prve prodati)
+
+Kao §8a, ali za importirane dionice (USD / EUR; ostale valute se preskaču i to piše u napomeni). Svaka dionica
+se prodaje **cijela i sama** po cijeni s izvoda, na knjizi **bez ikakvog what-ifa**, uz trenutni stock margin:
+
+```
+impact   = prosjek 6 radar scoreova poslije − prije        (u bodovima, × 100)
+po €1k   = impact / (vrijednost / 1000)                     (samo info)
+poredak  = impact, od najvećeg (kod jednakih: veća vrijednost prvo)
+```
+
+Po dionici: ticker, broj dionica, ETF oznaka, do tri osi koje najviše rastu, promjena statusa, vrijednost (EUR,
+uz USD), koliko excessa oslobađa i nerealizirani P&L prema cost basisu. **Try in what-if →** stavlja dionicu
+(sve dionice) u prvi prazni red za prodaju; već prodana u What-ifu ima zeleni **✓ Sold in what-if** (*(N of M)*).
 
 ---
 
@@ -486,7 +539,7 @@ Sklopiva kartica (klik na naslov).
 | `Statement → Period` | datum izvoda (kraj perioda) |
 | `Net Asset Value` | *Total* → NLV, *Stock* → vrijednost dionica (bazna valuta, EUR) |
 | `Open Positions` (opcije) | short putovi (qty < 0, simbol `TICKER DDMMMYY STRIKE P`): nominal = \|qty\| × multiplier × strike; *Cost Price* (premija), *Close Price* (cijena) |
-| `Open Positions` (dionice, Summary) | ticker, valuta, tržišna vrijednost (za koncentraciju) |
+| `Open Positions` (dionice, Summary) | ticker, valuta, tržišna vrijednost (koncentracija), količina, *Close Price*, *Cost Basis* (What-if · Stocks) |
 | `Financial Instrument Information` | dionice tipa ETF (simbol može biti "COPA, COPAl") |
 
 - Stupci se traže po nazivu u headeru, pa import radi i kad IBKR doda ili premjesti stupce.
@@ -521,6 +574,7 @@ Sklopiva kartica (klik na naslov).
 | Konstanta | Vrijednost | Značenje |
 |---|---|---|
 | `MARGIN` | 0.20 | margina novog puta po EUR nominala |
+| `STK_MARGIN_DEFAULT` | 25 % | zadani stock margin (kliznik 10–100 %, korak 5) |
 | `CUSHION_GREEN` / `CUSHION_WARN` | 0.20 / 0.10 | granice margin cushiona |
 | `LOAN_WARN_BAND` | 25 | p.p. iznad loan cilja do crvene zone |
 | `LOAN_OPTIONS` | 30 / 60 / 90 | ponuđeni loan (gumbi) |
@@ -537,6 +591,14 @@ Sklopiva kartica (klik na naslov).
 | Zone score | 0.70 / 0.40 | zeleno / crveno |
 
 ## Changelog
+
+- 2026-11-20 (v1.17): Nove sklopive kartice **What-if · Stocks** (prodaja importiranih i kupnja dionica, kliznik
+  stock margin, zadano 25 %) i **Close first · Stocks** (dionice poredane po učinku prodaje na radar).
+  Postojeće kartice preimenovane u *What-if · Puts* i *Close first · Puts*. Import čita i količinu,
+  *Close Price* i *Cost Basis* dionica. Leverage kartica i radar uključuju oba what-ifa.
+
+- 2026-11-20 (v1.16): Close first: putovi već zatvoreni u What-ifu imaju zeleni gumb *✓ Closed in what-if*
+  (uz djelomično zatvaranje *(N of M)*) umjesto *Try in what-if →*.
 
 - 2026-11-20 (v1.15): Uz what-if radar crta isprekidani poligon stanja bez what-ifa i promjenu po osi
   (+/− bodovi), jer je pomak Put Quality kod zatvaranja često mali i nije se primjećivao. Kartica

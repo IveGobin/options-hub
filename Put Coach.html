@@ -293,6 +293,9 @@ input[type="range"]::-moz-range-thumb {
 .cr-imp small { display:block; font-size:9px; font-weight:400; color:var(--muted); margin-top:2px; }
 .cr-try { grid-column:2 / -1; justify-self:start; margin-top:2px; padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:none; color:var(--muted); font-family:var(--mono); font-size:10px; cursor:pointer; }
 .cr-try:hover { color:var(--accent); border-color:var(--accent); }
+.cr-try.done { color:#3aad72; border-color:#3aad72; background:rgba(58,173,114,0.12); font-weight:700; }
+.cr-try.done:hover { color:#3aad72; border-color:#3aad72; }
+.sw-mrg-val { font-family:var(--mono); font-size:13px; font-weight:700; color:var(--accent); }
 .wi-clinfo { font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:7px; line-height:1.5; }
 .wi-clinfo:empty { display:none; }
 .wi-clinfo b { color:var(--text); }
@@ -333,7 +336,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.15</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.17</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -471,7 +474,7 @@ input[type="range"]::-moz-range-thumb {
              default; it only counts while open. -->
         <div class="wi-card" id="wi-card">
             <button class="wi-toggle" onclick="toggleWhatIf()">
-                <span class="slider-label">What-if <span class="wi-usd">USD</span> <span class="wi-badge" id="wi-badge"></span></span>
+                <span class="slider-label">What-if · Puts <span class="wi-usd">USD</span> <span class="wi-badge" id="wi-badge"></span></span>
                 <span id="wi-arrow" style="font-size:14px;color:var(--muted);">▸</span>
             </button>
             <div id="wi-body" style="display:none;">
@@ -493,10 +496,49 @@ input[type="range"]::-moz-range-thumb {
         <!-- Close first: imported puts ranked by how much closing each one lifts the radar -->
         <div class="wi-card" id="cr-card">
             <button class="wi-toggle" onclick="toggleCloseRank()">
-                <span class="slider-label">Close first <span class="wi-usd">USD</span> <span class="wi-badge" id="cr-badge" style="background:var(--border);color:var(--muted);"></span></span>
+                <span class="slider-label">Close first · Puts <span class="wi-usd">USD</span> <span class="wi-badge" id="cr-badge" style="background:var(--border);color:var(--muted);"></span></span>
                 <span id="cr-arrow" style="font-size:14px;color:var(--muted);">▸</span>
             </button>
             <div id="cr-body" style="display:none;"></div>
+        </div>
+
+        <!-- What-if · Stocks: sell imported stocks and / or buy new ones. Selling frees, buying uses the
+             stock margin % (slider) of the value. Collapsed by default; it only counts while open. -->
+        <div class="wi-card" id="sw-card">
+            <button class="wi-toggle" onclick="toggleStkWhatIf()">
+                <span class="slider-label">What-if · Stocks <span class="wi-badge" id="sw-badge"></span></span>
+                <span id="sw-arrow" style="font-size:14px;color:var(--muted);">▸</span>
+            </button>
+            <div id="sw-body" style="display:none;">
+            <div class="sw-mrg">
+                <div class="wi-head" style="margin-bottom:4px;">
+                    <span class="wi-sub">Stock margin <i>freed on a sale, used on a buy</i></span>
+                    <span class="sw-mrg-val" id="sw-margin-val">25%</span>
+                </div>
+                <input type="range" id="sw-margin" min="10" max="100" step="5" value="25" oninput="onStkMargin()" style="width:100%;">
+            </div>
+            <div class="wi-head" style="margin-top:14px;">
+                <span class="wi-sub">Sell stocks <i>from the import</i></span>
+                <button class="btn-sm" onclick="clearStkWhatIf()">Clear</button>
+            </div>
+            <div class="wi-list" id="sw-sells"></div>
+            <button class="wi-add" id="sw-add-sell" onclick="addStkSellRow(true)">+ Add another stock to sell</button>
+            <div class="wi-head" style="margin-top:16px;">
+                <span class="wi-sub">Buy stocks</span>
+            </div>
+            <div class="wi-list" id="sw-buys"></div>
+            <button class="wi-add" onclick="addStkBuyRow(true)">+ Add another stock to buy</button>
+            <div class="wi-res" id="sw-res"></div>
+            </div>
+        </div>
+
+        <!-- Close first · Stocks: imported stocks ranked by how much selling each one lifts the radar -->
+        <div class="wi-card" id="sr-card">
+            <button class="wi-toggle" onclick="toggleStkRank()">
+                <span class="slider-label">Close first · Stocks <span class="wi-badge" id="sr-badge" style="background:var(--border);color:var(--muted);"></span></span>
+                <span id="sr-arrow" style="font-size:14px;color:var(--muted);">▸</span>
+            </button>
+            <div id="sr-body" style="display:none;"></div>
         </div>
         <div class="div"></div>
 
@@ -560,6 +602,7 @@ input[type="range"]::-moz-range-thumb {
     const LOAN_DEFAULT = { conservative: 30, moderate: 60, aggressive: 90 };
     const LOAN_WARN_BAND = 25;
     const MARGIN = 0.20;          // approx. margin a NEW short put uses, per EUR notional
+    const STK_MARGIN_DEFAULT = 25; // % of a stock's value a sale frees / a buy uses (slider in What-if · Stocks)
     // Margin cushion = excess / (stocks + put notional): the uniform drop of every underlying
     // (delta 1, worst case) that would use up today's excess liquidity → margin call.
     // TWS excess already has the current margin deducted, so no margin is subtracted again.
@@ -830,13 +873,316 @@ input[type="range"]::-moz-range-thumb {
         onSliders();
     }
 
+
+    // ── WHAT-IF · STOCKS ──────────────────────────────────────────────────
+    // Sell imported stocks (all or part of the shares) and / or buy new ones. A sale takes the stock's
+    // statement value out of exposure and concentration and frees getStkMargin() of it in excess;
+    // a buy adds its value and uses the same %. Proceeds / P&L at the sale price are info only.
+    var swOpen = false;
+    function toggleStkWhatIf() {
+        swOpen = !swOpen;
+        el('sw-body').style.display = swOpen ? 'block' : 'none';
+        el('sw-arrow').textContent = swOpen ? '▾' : '▸';
+        el('sw-card').classList.toggle('open', swOpen);
+        onSliders();
+    }
+    function getStkMargin() {
+        var v = parseFloat(el('sw-margin').value);
+        return (isNaN(v) ? STK_MARGIN_DEFAULT : v) / 100;
+    }
+    function onStkMargin() {
+        el('sw-margin-val').textContent = el('sw-margin').value + '%';
+        onSliders();
+    }
+    // Local amount → EUR (only USD and EUR positions can be converted; others → NaN)
+    function stkEUR(v, ccy) { return ccy === 'USD' ? v / getFX() : ccy === 'EUR' ? v : NaN; }
+    function stkSym(ccy) { return ccy === 'EUR' ? '€' : '$'; }
+    function stkOk(st) { return !!st && st.qty > 0 && (st.ccy === 'USD' || st.ccy === 'EUR'); }
+    // One sale of q shares of gStocks[i] at px (local ccy per share). eur / usd: the statement value removed.
+    function stkSale(i, q, px) {
+        var st = gStocks[i], f = q / st.qty, eur = stkEUR(st.value * f, st.ccy);
+        var proceeds = q * px, pnl = st.cb !== null && st.cb !== undefined ? proceeds - st.cb * f : null;
+        return { i: i, st: st, qty: q, eur: eur, usd: eur * getFX(),
+                 proceedsEUR: stkEUR(proceeds, st.ccy), pnlEUR: pnl === null ? null : stkEUR(pnl, st.ccy) };
+    }
+    function stkFind(t) {
+        for (var i = 0; i < gStocks.length; i++) if (gStocks[i].ticker.toUpperCase() === t) return i;
+        return -1;
+    }
+    // { sells: [stkSale…], buys: [{ tkr, qty, eur, usd, etf }], sellEUR, buyEUR, netEUR }.
+    // Rows on the same stock are merged (never more than the shares held). Empty while the card is closed,
+    // but every row's info line is filled.
+    function readStkTrades() {
+        var byIdx = {}, order = [], buys = [];
+        document.querySelectorAll('#sw-sells .wi-row').forEach(function(r) {
+            var info = r.querySelector('.wi-clinfo');
+            var i = r.querySelector('.sw-pos').value;
+            var st = i === '' ? null : gStocks[parseInt(i, 10)];
+            if (!stkOk(st)) { info.innerHTML = ''; return; }
+            var raw = r.querySelector('.sw-qty').value.trim();
+            var q = raw === '' ? st.qty : Math.min(st.qty, Math.max(0, parseFloat(raw) || 0));
+            var own = parseFloat(r.querySelector('.sw-px').value);
+            var px = own >= 0 ? own : st.px;
+            if (!(q > 0)) { info.innerHTML = ''; return; }
+            var one = stkSale(parseInt(i, 10), q, px);
+            info.innerHTML = 'Value <b>€' + fmt(one.eur) + '</b> out of the book · proceeds ' + stkSym(st.ccy) + fmt(q * px) +
+                (own >= 0 ? ' at your price' : ' at the statement price') +
+                (one.pnlEUR !== null ? ' · P&amp;L <b style="color:' + (one.pnlEUR >= 0 ? '#3aad72' : '#e86060') + '">' +
+                    (one.pnlEUR >= 0 ? '+' : '−') + '€' + fmt(Math.abs(one.pnlEUR)) + '</b>' : '');
+            if (!swOpen) return;
+            if (!byIdx[i]) { byIdx[i] = { q: 0, pxq: 0 }; order.push(i); }
+            var c = byIdx[i], add = Math.min(q, st.qty - c.q);
+            c.q += add; c.pxq += add * px;
+        });
+        var sells = order.map(function(i) {
+            var c = byIdx[i];
+            return stkSale(parseInt(i, 10), c.q, c.q > 0 ? c.pxq / c.q : 0);
+        }).filter(function(x) { return x.qty > 0; });
+        document.querySelectorAll('#sw-buys .wi-row').forEach(function(r) {
+            var info = r.querySelector('.wi-clinfo');
+            var tkr = r.querySelector('.sb-tkr').value.trim().toUpperCase();
+            var q = parseFloat(r.querySelector('.sb-qty').value);
+            var own = parseFloat(r.querySelector('.sb-px').value);
+            var k = tkr ? stkFind(tkr) : -1, known = k >= 0 && stkOk(gStocks[k]) ? gStocks[k] : null;
+            var ccy = r.querySelector('.sb-ccy').value;
+            var px = own > 0 ? own : known && known.ccy === ccy ? known.px : NaN;
+            if (!(q > 0) || !(px > 0)) { info.innerHTML = ''; return; }
+            var eur = stkEUR(q * px, ccy);
+            info.innerHTML = 'Buys <b>' + stkSym(ccy) + fmt(q * px) + '</b>' + (ccy === 'USD' ? ' ≈ €' + fmt(eur) : '') +
+                (known ? ' · adds to ' + escHTML(known.ticker) + (known.etf ? ' (ETF)' : '') : tkr ? ' · new ticker' : ' · new ticker (no name)');
+            if (!swOpen) return;
+            buys.push({ tkr: tkr, qty: q, eur: eur, usd: eur * getFX(), etf: !!(known && known.etf) });
+        });
+        var sellEUR = sum(sells, 'eur'), buyEUR = sum(buys, 'eur');
+        return { sells: sells, buys: buys, sellEUR: sellEUR, buyEUR: buyEUR, netEUR: buyEUR - sellEUR };
+    }
+    function stkLabel(st) { return st.ticker + ' · ' + fmt(st.qty) + ' sh' + (st.etf ? ' · ETF' : ''); }
+    function stkOptionsHTML() {
+        var ok = gStocks.map(function(st, i) { return i; }).filter(function(i) { return stkOk(gStocks[i]); });
+        if (!ok.length) return '<option value="">Import a statement with stocks first</option>';
+        ok.sort(function(a, b) { return gStocks[a].ticker < gStocks[b].ticker ? -1 : 1; });
+        return '<option value="">— none —</option>' + ok.map(function(i) {
+            var st = gStocks[i];
+            return '<option value="' + i + '">' + escHTML(stkLabel(st)) + ' · ' + stkSym(st.ccy) + fmt(st.value) + '</option>';
+        }).join('');
+    }
+    function addStkSellRow(focus) {
+        var any = gStocks.some(stkOk);
+        var row = document.createElement('div');
+        row.className = 'wi-row';
+        row.innerHTML = rowHead('sw-sells', 'Sell') +
+            '<div class="wi-grid">' +
+                '<label class="wi-f" style="grid-column:1 / -1;"><span>Stock <i>from the import</i></span>' +
+                    '<select class="num-in sw-pos" onchange="onStkPick(this)"' + (any ? '' : ' disabled') + '>' + stkOptionsHTML() + '</select></label>' +
+                '<label class="wi-f"><span>Shares</span>' +
+                    '<input class="num-in sw-qty" type="number" min="0" step="1" inputmode="decimal" placeholder="all" oninput="onSliders()"></label>' +
+                '<label class="wi-f"><span>Price <i>per share</i></span>' +
+                    '<input class="num-in sw-px" type="number" min="0" step="0.01" inputmode="decimal" placeholder="statement" oninput="onSliders()"></label>' +
+            '</div>' +
+            '<div class="wi-clinfo"></div>';
+        el('sw-sells').appendChild(row);
+        renumberRows('sw-sells', 'Sell');
+        if (focus) { row.querySelector('.sw-pos').focus(); onSliders(); }
+    }
+    function addStkBuyRow(focus) {
+        var row = document.createElement('div');
+        row.className = 'wi-row';
+        row.innerHTML = rowHead('sw-buys', 'Buy') +
+            '<div class="wi-grid">' +
+                '<label class="wi-f"><span>Ticker <i>optional</i></span>' +
+                    '<input class="num-in sb-tkr" type="text" maxlength="8" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="e.g. TSLA" oninput="this.value=this.value.toUpperCase();onBuyTkr(this)" style="text-transform:uppercase;"></label>' +
+                '<label class="wi-f"><span>Currency</span>' +
+                    '<select class="num-in sb-ccy" onchange="onSliders()"><option>USD</option><option>EUR</option></select></label>' +
+                '<label class="wi-f"><span>Shares</span>' +
+                    '<input class="num-in sb-qty" type="number" min="0" step="1" inputmode="decimal" placeholder="e.g. 50" oninput="onSliders()"></label>' +
+                '<label class="wi-f"><span>Price <i>per share</i></span>' +
+                    '<input class="num-in sb-px" type="number" min="0" step="0.01" inputmode="decimal" placeholder="e.g. 120" oninput="onSliders()"></label>' +
+            '</div>' +
+            '<div class="wi-clinfo"></div>';
+        el('sw-buys').appendChild(row);
+        renumberRows('sw-buys', 'Buy');
+        if (focus) { row.querySelector('.sb-tkr').focus(); onSliders(); }
+    }
+    // A ticker you already hold: currency and price default to the imported position
+    function onBuyTkr(inp) {
+        var row = inp.closest('.wi-row'), k = stkFind(inp.value.trim().toUpperCase());
+        var st = k >= 0 && stkOk(gStocks[k]) ? gStocks[k] : null;
+        if (st) row.querySelector('.sb-ccy').value = st.ccy;
+        row.querySelector('.sb-px').placeholder = st ? st.px.toFixed(2) : 'e.g. 120';
+        onSliders();
+    }
+    function onStkPick(sel) {
+        var i = sel.value, st = i === '' ? null : gStocks[parseInt(i, 10)];
+        var row = sel.closest('.wi-row');
+        var qi = row.querySelector('.sw-qty'), pi = row.querySelector('.sw-px');
+        qi.value = ''; qi.placeholder = st ? 'all (' + fmt(st.qty) + ')' : 'all';
+        if (st) qi.max = st.qty;
+        pi.value = ''; pi.placeholder = st ? st.px.toFixed(2) : 'statement';
+        onSliders();
+    }
+    // Indices into gStocks change with every import: start the sell list over
+    function rebuildStkOptions() {
+        el('sw-sells').innerHTML = '';
+        addStkSellRow(false);
+        el('sw-add-sell').disabled = !gStocks.some(stkOk);
+    }
+    function clearStkWhatIf() {
+        el('sw-buys').innerHTML = '';
+        addStkBuyRow(false);
+        rebuildStkOptions();
+        onSliders();
+    }
+
+    // ── CLOSE FIRST · STOCKS ──────────────────────────────────────────────
+    // Each imported stock (USD / EUR) sold in full at the statement price, on its own, on the book
+    // WITHOUT any what-if; ranked by the change of the average radar score (same as Close first · Puts).
+    var srOpen = false;
+    function toggleStkRank() {
+        srOpen = !srOpen;
+        el('sr-body').style.display = srOpen ? 'block' : 'none';
+        el('sr-arrow').textContent = srOpen ? '▾' : '▸';
+        el('sr-card').classList.toggle('open', srOpen);
+        onSliders();
+    }
+    function stkRanking(nlv, excessIn, notionalBase, stocks) {
+        var mean = function(a) { return a.reduce(function(x, y) { return x + y; }, 0) / a.length; };
+        var base = radarModel(nlv, excessIn, notionalBase, stocks, [], []);
+        var b = mean(base.scores);
+        var list = [];
+        gStocks.forEach(function(st, i) {
+            if (!stkOk(st)) return;
+            var sale = stkSale(i, st.qty, st.px);
+            var m = radarModel(nlv, excessIn, notionalBase, stocks, [], [],
+                               { sells: [sale], buys: [], sellEUR: sale.eur, buyEUR: 0, netEUR: -sale.eur });
+            var deltas = m.scores.map(function(v, k) { return { axis: AXES[k], d: v - base.scores[k] }; })
+                .filter(function(x) { return x.d > 0.005; })
+                .sort(function(x, y) { return y.d - x.d; });
+            list.push({ i: i, st: st, sale: sale, impact: mean(m.scores) - b, deltas: deltas, zone: m.zone });
+        });
+        list.sort(function(x, y) { return y.impact - x.impact || y.sale.eur - x.sale.eur; });
+        return { base: base, list: list };
+    }
+    function renderStkRank(nlv, excessIn, notionalBase, stocks, stk) {
+        var nOk = gStocks.filter(stkOk).length;
+        el('sr-badge').textContent = nOk ? nOk + ' stocks' : '';
+        if (!srOpen) return;
+        var body = el('sr-body');
+        if (!nOk) {
+            body.innerHTML = '<div class="wi-hint">Import an IBKR statement with stocks (USD / EUR): they are ranked by how much selling each one improves the radar.</div>';
+            return;
+        }
+        var r = stkRanking(nlv, excessIn, notionalBase, stocks);
+        var ZI = { safe: '🟢', warn: '🟡', danger: '🔴' };
+        var pts = function(v) { return (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1); };
+        var rows = r.list.map(function(x, n) {
+            var st = x.st, s = x.sale;
+            var axes = x.deltas.slice(0, 3).map(function(a) { return a.axis + ' ' + pts(a.d); }).join(' · ');
+            var perK = s.eur > 0 ? (x.impact * 100 / (s.eur / 1000)) : null;
+            var zoneTxt = x.zone !== r.base.zone ? ' · status ' + ZI[r.base.zone] + '→' + ZI[x.zone] : '';
+            var col = x.impact >= 0.03 ? '#3aad72' : x.impact > 0.005 ? '#e8a03a' : 'var(--muted)';
+            var ws = stk ? stk.sells.filter(function(w) { return w.i === x.i; })[0] : null;
+            var btn = ws
+                ? '<button class="cr-try done" onclick="trySellInStkWhatIf(' + x.i + ')">✓ Sold in what-if' +
+                  (ws.qty < st.qty ? ' (' + fmt(ws.qty) + ' of ' + fmt(st.qty) + ')' : '') + '</button>'
+                : '<button class="cr-try" onclick="trySellInStkWhatIf(' + x.i + ')">Try in what-if →</button>';
+            return '<div class="cr-row">' +
+                '<div class="cr-n">' + (n + 1) + '</div>' +
+                '<div style="min-width:0;">' +
+                    '<div class="cr-name">' + escHTML(stkLabel(st)) + '</div>' +
+                    '<div class="cr-meta">' + (axes || 'no axis improves noticeably') + zoneTxt + '<br>' +
+                        'value €' + fmt(s.eur) + (st.ccy === 'USD' ? ' ($' + fmt(st.value) + ')' : '') +
+                        ' · frees ~€' + fmt(s.eur * getStkMargin()) + ' excess' +
+                        (s.pnlEUR !== null ? ' · <span style="white-space:nowrap;">P&amp;L <span style="color:' + (s.pnlEUR >= 0 ? '#3aad72' : '#e86060') + '">' +
+                            (s.pnlEUR >= 0 ? '+' : '−') + '€' + fmt(Math.abs(s.pnlEUR)) + '</span></span>' : '') + '</div>' +
+                '</div>' +
+                '<div class="cr-imp" style="color:' + col + '">' + pts(x.impact) + '<small>pts' + (perK !== null && perK > 0 ? ' · ' + perK.toFixed(1) + ' / €1k' : '') + '</small></div>' +
+                btn +
+            '</div>';
+        }).join('');
+        var skipped = gStocks.length - nOk;
+        body.innerHTML =
+            '<div class="wi-hint" style="margin-bottom:6px;">Each stock sold in full, one at a time, at the statement price, on the book <b>without</b> any what-if. ' +
+            'Impact = change of the average radar score (points of 100). A sale frees ' + Math.round(getStkMargin() * 100) + '% of its value in excess (slider in What-if · Stocks). ' +
+            'P&amp;L vs cost basis, for information.' + (skipped ? ' ' + skipped + ' position(s) in other currencies are left out.' : '') + '</div>' + rows;
+    }
+    function trySellInStkWhatIf(i) {
+        if (!swOpen) toggleStkWhatIf();
+        var sels = document.querySelectorAll('#sw-sells .sw-pos');
+        var sel = null;
+        for (var k = 0; k < sels.length; k++) {
+            if (sels[k].value === String(i)) { el('sw-card').scrollIntoView({ behavior: 'smooth' }); return; }
+            if (!sel && sels[k].value === '') sel = sels[k];
+        }
+        if (!sel) { addStkSellRow(false); sel = document.querySelectorAll('#sw-sells .sw-pos'); sel = sel[sel.length - 1]; }
+        sel.value = String(i);
+        onStkPick(sel);
+        el('sw-card').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // What-if · Stocks result: verdict + before → after (before = no what-if at all)
+    function stkWhatIfHTML(d) {
+        var t = d.stk;
+        if (!t.sells.length && !t.buys.length) {
+            return '<div class="wi-hint">Sell: pick imported stocks (shares and price optional). Buy: ticker, shares and price. ' +
+                   'A sale frees, a buy uses ' + Math.round(getStkMargin() * 100) + '% of the value in excess (slider above). ' +
+                   'You see what it does to leverage, excess, margin cushion, concentration and the room for new puts.</div>';
+        }
+        var GREEN = '#3aad72', AMBER = '#e8a03a', RED = '#e86060';
+        var eur = function(v) { return '€' + fmt(Math.abs(v)); };
+        var pc  = function(v) { return Math.round(v * 100) + '%'; };
+        var arrow = function(a, b, col) { return '<span class="from">' + a + ' → </span><span style="color:' + (col || 'var(--text)') + '">' + b + '</span>'; };
+        var nlv = d.nlv, net = t.netEUR, mrg = net * getStkMargin();
+        var ZT = { safe: 'all limits green', warn: 'caution zone', danger: 'danger zone' };
+        var html = '<div class="wi-verdict ' + (d.zone === 'safe' ? 'ok' : 'bad') + '">' +
+            (net <= 0 ? 'Frees ~' + eur(mrg) + ' of excess' : 'Uses ~' + eur(mrg) + ' of excess') + ' · ' + ZT[d.zone] +
+            '<small>room for new puts ' + eur(d.roomNoStk.room) + ' → ' + eur(d.room.room) + ' · binding: ' + bindingLabel(d.room, d) + '</small></div>';
+        var baseExp = d.totalExp - d.wiEUR - net;
+        var levB = nlv > 0 ? baseExp / nlv : 0, levA = nlv > 0 ? d.totalExp / nlv : 0;
+        var levCol = d.expZone === 'danger' ? RED : d.expZone === 'warn' ? AMBER : GREEN;
+        var exCol = d.excess < d.stopExcess ? RED : d.excess < d.targetExcess ? AMBER : GREEN;
+        var cushB = baseExp > 0 ? d.excessIn / baseExp : Infinity;
+        var cushCol = d.cushion >= CUSHION_GREEN ? GREEN : d.cushion >= CUSHION_WARN ? AMBER : RED;
+        html += '<div class="wi-rows">' +
+            (t.sells.length ? '<span>Sold stock' + (t.sells.length > 1 ? 's (' + t.sells.length + ')' : '') + '</span><span>−' + eur(t.sellEUR) + '</span>' : '') +
+            (t.buys.length ? '<span>Bought stock' + (t.buys.length > 1 ? 's (' + t.buys.length + ')' : '') + '</span><span>+' + eur(t.buyEUR) + '</span>' : '') +
+            '<span>Margin ' + Math.round(getStkMargin() * 100) + '%</span><span>' + (net <= 0 ? 'frees ~' : 'uses ~') + eur(mrg) + '</span>' +
+            '<span>Stocks</span><span>' + arrow(eur(d.stocksIn), eur(d.stocks)) + '</span>' +
+            '<span>Leverage</span><span>' + arrow(levB.toFixed(2) + 'x', levA.toFixed(2) + 'x', levCol) + '</span>' +
+            '<span>Excess</span><span>' + arrow(pc(d.excessIn / nlv), pc(d.excess / nlv) + ' NLV', exCol) + '</span>' +
+            '<span>Survives drop</span><span>' + arrow(fmtCushion(cushB), fmtCushion(d.cushion), cushCol) + '</span>';
+        if (d.conc.hasBook) {
+            var c0 = concNow();
+            var tCol = function(v) { return v >= 0.40 ? RED : v >= 0.25 ? AMBER : GREEN; };
+            var tk = [];
+            t.sells.forEach(function(x) { if (!x.st.etf && tk.indexOf(x.st.ticker) < 0) tk.push(x.st.ticker); });
+            t.buys.forEach(function(b) { var k = b.tkr || 'new stock'; if (!b.etf && tk.indexOf(k) < 0) tk.push(k); });
+            tk.forEach(function(k) {
+                var a = d.conc.share(k);
+                html += '<span>' + escHTML(k) + '</span><span>' + arrow(pc(c0.share(k)), pc(a) + ' of book', tCol(a)) + '</span>';
+            });
+            if (c0.topTicker && tk.indexOf(d.conc.topTicker) < 0 && d.conc.topTicker)
+                html += '<span>Top ticker</span><span>' + arrow(escHTML(c0.topTicker) + ' ' + pc(c0.tickerConc), escHTML(d.conc.topTicker) + ' ' + pc(d.conc.tickerConc), tCol(d.conc.tickerConc)) + '</span>';
+        }
+        html += '</div>';
+        if (t.sells.length) {
+            var proc = sum(t.sells, 'proceedsEUR');
+            var pnl = t.sells.reduce(function(a, x) { return a + (x.pnlEUR || 0); }, 0);
+            html += '<div class="wi-hint" style="margin-top:8px;">Proceeds ≈ <b>' + eur(proc) + '</b> · realized P&amp;L ' +
+                '<b style="color:' + (pnl >= 0 ? GREEN : RED) + '">' + (pnl >= 0 ? '+' : '−') + eur(pnl) + '</b> vs cost basis. ' +
+                'Info only: exposure and concentration use the statement value.</div>';
+        }
+        return html;
+    }
+
     // Concentration of the book incl. stocks held and the what-if trade.
     //   ticker: (stock value + put notional on the ticker) / (all stocks + all put notional)
     //           ETFs count in the total but never as one ticker (already diversified)
     //   date:   put notional per expiry / all put notional
     // sells (see readSells): a new put without ticker / expiry counts as a new ticker / expiry.
     // closes (see readCloses): closed puts are taken out of their ticker / expiry.
-    function concNow(sells, closes) {
+    // stk (see readStkTrades): sold stocks leave their ticker and the total, bought ones are added
+    // (ETFs only to the total; a buy without ticker counts as one new ticker).
+    function concNow(sells, closes, stk) {
         var fx = getFX(), tmap = {}, dmap = {}, putTot = gNotionalUSD, stkTot = 0;
         Object.keys(gTickerMap).forEach(function(k) { tmap[k] = gTickerMap[k]; });
         Object.keys(gDateMap).forEach(function(k) { dmap[k] = gDateMap[k]; });
@@ -847,6 +1193,16 @@ input[type="range"]::-moz-range-thumb {
             if (!s.etf) tmap[s.ticker] = (tmap[s.ticker] || 0) + v;
         });
         var hasBook = putTot > 0 || stkTot > 0;
+        if (hasBook && stk) {
+            stk.sells.forEach(function(x) {
+                stkTot = Math.max(0, stkTot - x.usd);
+                if (!x.st.etf) { tmap[x.st.ticker] = (tmap[x.st.ticker] || 0) - x.usd; if (tmap[x.st.ticker] <= 0.01) delete tmap[x.st.ticker]; }
+            });
+            stk.buys.forEach(function(b) {
+                stkTot += b.usd;
+                if (!b.etf) { var k = b.tkr || 'new stock'; tmap[k] = (tmap[k] || 0) + b.usd; }
+            });
+        }
         if (hasBook) (sells || []).forEach(function(w) {
             if (!(w.usd > 0)) return;
             putTot += w.usd;
@@ -1087,7 +1443,8 @@ input[type="range"]::-moz-range-thumb {
         list.sort(function(x, y) { return y.impact - x.impact || y.pos.notional - x.pos.notional; });
         return { base: base, list: list };
     }
-    function renderCloseRank(nlv, excessIn, notionalBase, stocks) {
+    // closes (see readCloses): puts already closed in the what-if get a green "✓ Closed in what-if" button
+    function renderCloseRank(nlv, excessIn, notionalBase, stocks, closes) {
         el('cr-badge').textContent = gPositions.length ? gPositions.length + ' puts' : '';
         if (!crOpen) return;
         var body = el('cr-body');
@@ -1104,6 +1461,11 @@ input[type="range"]::-moz-range-thumb {
             var perK = c.cost > 0 ? (x.impact * 100 / (c.cost / 1000)) : null;
             var zoneTxt = x.zone !== r.base.zone ? ' · status ' + ZI[r.base.zone] + '→' + ZI[x.zone] : '';
             var col = x.impact >= 0.03 ? '#3aad72' : x.impact > 0.005 ? '#e8a03a' : 'var(--muted)';
+            var wc = (closes || []).filter(function(c) { return c.pos === p; })[0];
+            var btn = wc
+                ? '<button class="cr-try done" onclick="tryCloseInWhatIf(' + x.i + ')">✓ Closed in what-if' +
+                  (wc.qty < p.qty ? ' (' + wc.qty + ' of ' + p.qty + ')' : '') + '</button>'
+                : '<button class="cr-try" onclick="tryCloseInWhatIf(' + x.i + ')">Try in what-if →</button>';
             return '<div class="cr-row">' +
                 '<div class="cr-n">' + (n + 1) + '</div>' +
                 '<div style="min-width:0;">' +
@@ -1113,7 +1475,7 @@ input[type="range"]::-moz-range-thumb {
                         'notional $' + fmt(p.notional) + ' · buyback $' + fmt(c.cost) + ' · <span style="white-space:nowrap;">P&amp;L <span style="color:' + (c.pnl >= 0 ? '#3aad72' : '#e86060') + '">' + signUSD(c.pnl) + '</span></span></div>' +
                 '</div>' +
                 '<div class="cr-imp" style="color:' + col + '">' + pts(x.impact) + '<small>pts' + (perK !== null && perK > 0 ? ' · ' + perK.toFixed(1) + ' / $1k' : '') + '</small></div>' +
-                '<button class="cr-try" onclick="tryCloseInWhatIf(' + x.i + ')">Try in what-if →</button>' +
+                btn +
             '</div>';
         }).join('');
         body.innerHTML =
@@ -1141,11 +1503,15 @@ input[type="range"]::-moz-range-thumb {
     // (sells / closes, see readSells / readCloses). onSliders draws it; the Close-first ranking
     // runs it once per imported put to measure what closing that put does to the radar.
     //   nlv, excessIn, notionalBase, stocks: EUR (notionalBase = put notional without any what-if)
-    function radarModel(nlv, excessIn, notionalBase, stocks, sells, closes) {
+    //   stk (optional, see readStkTrades): stock sells / buys; the net value changes stocks and uses
+    //   (or frees) getStkMargin() of it in excess
+    function radarModel(nlv, excessIn, notionalBase, stocks, sells, closes, stk) {
         var fx = getFX();
         var sellEUR  = sum(sells, 'usd') / fx, closeEUR = sum(closes, 'usd') / fx;
         var wiEUR    = sellEUR - closeEUR;
-        var excess   = excessIn - wiEUR * MARGIN;               // after the what-if (net margin used / freed)
+        var stkNetEUR = stk ? stk.netEUR : 0;
+        stocks       = Math.max(0, stocks + stkNetEUR);         // stocks after the stock what-if
+        var excess   = excessIn - wiEUR * MARGIN - stkNetEUR * getStkMargin();   // after both what-ifs
         var notional = Math.max(0, notionalBase + wiEUR);       // put notional incl. the what-if
 
         var cfg    = MODES[currentMode];
@@ -1222,7 +1588,7 @@ input[type="range"]::-moz-range-thumb {
         // 5. TICKER CONCENTRATION (stocks held + put notional per ticker, incl. the what-if)
         // Green: <40%, Warn: 40-60%, Danger: >60%
         // Blended toward 1.0 when the book is small vs. the loan limit (little real risk)
-        var conc = concNow(sells, closes);
+        var conc = concNow(sells, closes, stk);
         var tc = conc.tickerConc, dc = conc.dateConc;
         var tickerWeight = totalExp <= 0 ? 0 : maxTotal > 0 ? Math.min(1, totalExp / maxTotal) : 1;
         var rawTickerScore = tc <= 0.40
@@ -1257,7 +1623,7 @@ input[type="range"]::-moz-range-thumb {
 
         return {
             nlv: nlv, excessIn: excessIn, excess: excess, notional: notional, stocks: stocks,
-            sellEUR: sellEUR, closeEUR: closeEUR, wiEUR: wiEUR,
+            sellEUR: sellEUR, closeEUR: closeEUR, wiEUR: wiEUR, stkNetEUR: stkNetEUR,
             cfg: cfg, target: target, vix: vix, loanPct: loanPct,
             stopExcess: stopExcess, targetExcess: targetExcess,
             totalExp: totalExp, maxTotal: maxTotal, warnTotal: warnTotal,
@@ -1288,6 +1654,11 @@ input[type="range"]::-moz-range-thumb {
         var wiEUR    = wiUSD / getFX();
         var nSell    = sells.filter(function(w) { return w.usd > 0; }).length;
         var wiOn     = nSell > 0 || closes.length > 0;
+        var stk      = readStkTrades();                         // What-if · Stocks (empty while closed)
+        var stkOn    = stk.sells.length > 0 || stk.buys.length > 0;
+        el('sw-badge').textContent = !stkOn ? ''
+            : [stk.sells.length ? stk.sells.length + ' sell' : '', stk.buys.length ? stk.buys.length + ' buy' : '']
+                .filter(Boolean).join(' · ') + ' · in all cards';
         var stkRaw   = parseFloat(el('stk-val').value);
         var stocks   = isNaN(stkRaw) || stkRaw < 0 ? 0 : toEUR(stkRaw, curStk);
         var notionalBase = toEUR(notionalRaw, curNot);          // put notional without any what-if
@@ -1312,7 +1683,7 @@ input[type="range"]::-moz-range-thumb {
             notConv.textContent = '';
         }
 
-        var M = radarModel(nlv, excessIn, notionalBase, stocks, sells, closes);
+        var M = radarModel(nlv, excessIn, notionalBase, stocks, sells, closes, stk);
         var excess = M.excess, notional = M.notional;
         var cfg = M.cfg, target = M.target, vix = M.vix, loanPct = M.loanPct;
         var stopExcess = M.stopExcess, targetExcess = M.targetExcess;
@@ -1329,23 +1700,26 @@ input[type="range"]::-moz-range-thumb {
 
         // Draw radar
         // With a what-if, the radar also shows the book without it (dashed) and the change per axis
-        var baseScores = wiOn ? radarModel(nlv, excessIn, notionalBase, stocks, [], []).scores : null;
+        var baseScores = wiOn || stkOn ? radarModel(nlv, excessIn, notionalBase, stocks, [], []).scores : null;
         drawRadar(scores, targetScores, zone, baseScores);
 
         var d = {
             nlv: nlv, excess: excess, excessIn: excessIn, notional: notional, notionalEff: notionalEff, vix: vix,
-            stocks: stocks, wiEUR: wiEUR, wiUSD: wiUSD, totalExp: totalExp, loanPct: loanPct,
+            stocks: M.stocks, stocksIn: stocks, wiEUR: wiEUR, wiUSD: wiUSD, totalExp: totalExp, loanPct: loanPct,
             wiOn: wiOn, sellEUR: sellEUR, closeEUR: closeEUR, sells: sells, closes: closes,
+            stk: stk, stkOn: stkOn, stkNetEUR: M.stkNetEUR, zone: zone,
             pqBase: closes.length ? bookQuality() : pq,
             stopExcess: stopExcess, targetExcess: targetExcess,
             maxTotal: maxTotal, warnTotal: warnTotal, expZone: expZone,
             marginUsed: marginUsed, cushion: cushion, conc: conc, pq: pq, scores: scores, targetScores: targetScores
         };
-        // Room for new puts: after the what-if (status + sell card), after the close but before the
-        // new put (what-if "fits"), and without any what-if (what-if close "frees")
+        // Room for new puts: after both what-ifs (status + sell card), before the new puts (put what-if
+        // "fits"), without the put what-if (put close "frees") and without the stock what-if (stock card)
+        var stkMrg   = M.stkNetEUR * getStkMargin();
         d.room       = roomCalc(excess, totalExp, maxTotal, targetExcess);
-        d.roomBefore = roomCalc(excessIn + closeEUR * MARGIN, totalExp - sellEUR, maxTotal, targetExcess);
-        d.roomBase   = roomCalc(excessIn, totalExp - wiEUR, maxTotal, targetExcess);
+        d.roomBefore = roomCalc(excess + sellEUR * MARGIN, totalExp - sellEUR, maxTotal, targetExcess);
+        d.roomBase   = roomCalc(excess + wiEUR * MARGIN, totalExp - wiEUR, maxTotal, targetExcess);
+        d.roomNoStk  = roomCalc(excess + stkMrg, totalExp - M.stkNetEUR, maxTotal, targetExcess);
         renderLeverage(d);
         renderAxisLegend(d);
         renderSell(d);
@@ -1354,7 +1728,9 @@ input[type="range"]::-moz-range-thumb {
         renderBookRisk(closes, d.pqBase, pq);
 
         // Close-first ranking (measured on the book without the what-if)
-        renderCloseRank(nlv, excessIn, notionalBase, stocks);
+        renderCloseRank(nlv, excessIn, notionalBase, stocks, closes);
+        el('sw-res').innerHTML = stkWhatIfHTML(d);
+        renderStkRank(nlv, excessIn, notionalBase, stocks, stk);
 
         // Status message — the most severe problem first
         var status   = el('you-status');
@@ -1524,13 +1900,14 @@ input[type="range"]::-moz-range-thumb {
         // Bar scale: 0 .. a bit past the larger of total exposure and the danger line
         var scale = Math.max(tot, d.warnTotal) * 1.08;
         var pos = function(v) { return Math.max(0, Math.min(100, v / scale * 100)).toFixed(2) + '%'; };
-        var base = tot - d.wiEUR;   // exposure before the what-if (larger than tot when it closes more than it sells)
+        var wiAll = d.wiEUR + d.stkNetEUR;   // net exposure change of both what-ifs
+        var base = tot - wiAll;   // exposure before the what-ifs (larger than tot when they remove more than they add)
         var lo = Math.min(base, tot), hi = Math.max(base, tot);
         var seg = (Math.min(100, hi / scale * 100) - Math.min(100, lo / scale * 100)).toFixed(2) + '%';
         var bar =
             '<div class="lev-fill" style="width:' + pos(lo) + ';background:' + color + ';"></div>' +
-            (d.wiEUR > 0 ? '<div class="lev-wi" style="left:' + pos(lo) + ';width:' + seg + ';background:' + color + ';"></div>' : '') +
-            (d.wiEUR < 0 ? '<div class="lev-wi lev-wi-out" style="left:' + pos(lo) + ';width:' + seg + ';border-color:' + color + ';"></div>' : '') +
+            (wiAll > 0 ? '<div class="lev-wi" style="left:' + pos(lo) + ';width:' + seg + ';background:' + color + ';"></div>' : '') +
+            (wiAll < 0 ? '<div class="lev-wi lev-wi-out" style="left:' + pos(lo) + ';width:' + seg + ';border-color:' + color + ';"></div>' : '') +
             '<div class="lev-mark" style="left:' + pos(nlv) + '"><span>NLV</span></div>' +
             (d.loanPct > 0 ? '<div class="lev-mark" style="left:' + pos(d.maxTotal) + '"><span style="top:-15px;">' + d.loanPct + '%</span></div>' : '') +
             '<div class="lev-mark" style="left:' + pos(d.warnTotal) + ';background:#e86060;"><span style="color:#e86060">' + (d.loanPct + LOAN_WARN_BAND) + '%</span></div>';
@@ -1546,7 +1923,7 @@ input[type="range"]::-moz-range-thumb {
             '</div>' +
             '<div class="lev-bar">' + bar + '</div>' +
             '<div class="lev-grid">' +
-                '<span>Stocks</span><span>' + eur(d.stocks) + '</span>' +
+                '<span>Stocks' + (d.stkOn ? ' (incl. what-if)' : '') + '</span><span>' + eur(d.stocks) + '</span>' +
                 '<span>Short puts' + (d.wiOn ? ' (incl. what-if)' : '') + '</span><span>' + eur(d.notional) + ' · ' + usd(d.notional) + '</span>' +
                 '<span>Total exposure</span><span><b>' + eur(tot) + '</b></span>' +
                 '<span>Loan if all assigned</span><span>' + eur(loan) + ' · ' + usd(loan) + '</span>' +
@@ -1562,7 +1939,7 @@ input[type="range"]::-moz-range-thumb {
                 var stopPct = nlv > 0 ? d.stopExcess / nlv * 100 : 0;
                 var c = d.excess < d.stopExcess ? '#e86060' : d.excess < d.targetExcess ? '#e8a03a' : '#3aad72';
                 return '<div class="lev-grid" style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);">' +
-                    (d.wiOn
+                    (d.wiOn || d.stkOn
                         ? '<span>Excess liquidity today</span><span>' + eur(d.excessIn) + '</span>' +
                           '<span>after the what-if</span><span style="color:' + c + ';font-weight:700;">' + eur(d.excess) + ' · ' + exPct.toFixed(0) + '% of NLV</span>'
                         : '<span>Excess liquidity today</span><span style="color:' + c + ';font-weight:700;">' + eur(d.excess) + ' · ' + exPct.toFixed(0) + '% of NLV</span>') +
@@ -2130,6 +2507,7 @@ input[type="range"]::-moz-range-thumb {
                 var iClos = ibkrCol(m, ['close price'], 10);
                 var iCcy  = ibkrCol(m, ['currency'], 4);
                 var iVal  = ibkrCol(m, ['value'], 11);
+                var iCB   = ibkrCol(m, ['cost basis'], 9);
 
                 // Skip "Lot" detail rows when the statement has a discriminator column
                 if ((noHeader || m['datadiscriminator'] !== undefined) && (cols[iDisc] || '') !== 'Summary') return;
@@ -2137,7 +2515,9 @@ input[type="range"]::-moz-range-thumb {
                 // Stocks held: market value per ticker (in the position's currency) for ticker concentration
                 if (/^stocks$/i.test(cols[iCat] || '')) {
                     var sv = numIBKR(cols[iVal]);
-                    if (!isNaN(sv) && sv > 0) out.stocks.push({ ticker: (cols[iSym] || '').trim(), ccy: (cols[iCcy] || '').trim(), value: sv });
+                    var sq = Math.abs(numIBKR(cols[iQty])), sp = numIBKR(cols[iClos]), scb = numIBKR(cols[iCB]);
+                    if (!isNaN(sv) && sv > 0) out.stocks.push({ ticker: (cols[iSym] || '').trim(), ccy: (cols[iCcy] || '').trim(), value: sv,
+                        qty: sq > 0 ? sq : 0, px: sp > 0 ? sp : (sq > 0 ? sv / sq : 0), cb: isNaN(scb) ? null : scb });
                     return;
                 }
                 if (!/option/i.test(cols[iCat] || '')) return;
@@ -2218,6 +2598,7 @@ input[type="range"]::-moz-range-thumb {
             gTickerMap = {}; gDateMap = {}; gNotionalUSD = 0;
         }
         gStocks = newest.stocks.slice();   // snapshot of the newest statement, like the puts
+        rebuildStkOptions();               // indices into gStocks change with every import
 
         var messages = [];
 
@@ -2341,6 +2722,8 @@ input[type="range"]::-moz-range-thumb {
 
     addSellRow(false);
     rebuildCloseOptions();
+    addStkBuyRow(false);
+    rebuildStkOptions();
     onVix();
 </script>
 <script>
