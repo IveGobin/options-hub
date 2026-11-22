@@ -1,4 +1,4 @@
-# Put Coach — dokumentacija (v1.19)
+# Put Coach — dokumentacija (v1.20)
 
 Put Coach je alat za upravljanje rizikom kod prodaje short putova na IBKR računu s marginom.
 Odgovara na tri pitanja:
@@ -315,8 +315,9 @@ poredak  = 1. ukupna zona poslije (🟢 pa 🟡 pa 🔴): putovi koji mijenjaju 
 Bez prvog kriterija na vrh bi mogao doći mali put s gubitkom (Put Quality i koncentracija teže u prosjeku
 jednako kao likvidnost), a ne put koji stvarno skida crvenu ili žutu zonu.
 
-Po putu se prikazuje: ticker, strike, istek, broj ugovora i status (Deep OTM … Deep ITM, §11), impact, do
-tri osi koje najviše rastu, promjena ukupnog statusa (npr. 🔴→🟡) ako je ima, nominal, buyback i P&L po
+Po putu se prikazuje: ticker, strike, istek, broj ugovora i status (Deep OTM … Deep ITM, §11), impact,
+**Put Quality prije → poslije** zatvaranja s promjenom u bodovima (zeleno raste / crveno pada: zatvaranje
+dobrog puta spušta score, §8), do tri ostale osi koje najviše rastu, promjena ukupnog statusa (npr. 🔴→🟡) ako je ima, nominal, buyback i P&L po
 cijeni s izvoda (§8). Buyback i P&L ne ulaze u poredak.
 
 Zatvaranje svakog puta oslobađa marginu i smanjuje izloženost, pa veliki putovi uvijek dobiju nešto. Gore
@@ -640,6 +641,9 @@ Sklopiva kartica (klik na naslov).
 | Zone score | 0.70 / 0.40 | zeleno / crveno |
 
 ## Changelog
+
+- 2026-11-22 (v1.20): Close first · Puts u svakom redu pokazuje Put Quality prije → poslije zatvaranja i
+  promjenu u bodovima (i kad pada). Put Quality više nije u listi "tri osi koje najviše rastu".
 
 - 2026-11-22 (v1.19): Ispravci nakon revizije dokumenta. ⏰ skori assignment uključuje i *Near strike* putove
   (r > 1) i ne broji ugovore zatvorene u What-ifu. Import izostavlja putove istekle nakon datuma izvoda i navodi

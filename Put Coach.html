@@ -336,7 +336,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.19</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.20</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -1439,10 +1439,11 @@ input[type="range"]::-moz-range-thumb {
         var list = gPositions.map(function(p, i) {
             var c = fullClose(p);
             var m = radarModel(nlv, excessIn, notionalBase, stocks, [], [c]);
-            var deltas = m.scores.map(function(v, k) { return { axis: AXES[k], d: v - base.scores[k] }; })
-                .filter(function(x) { return x.d > 0.005; })
+            // Put Quality has its own line in the row (it can also fall), so it is left out of the axis list
+            var deltas = m.scores.map(function(v, k) { return { k: k, axis: AXES[k], d: v - base.scores[k] }; })
+                .filter(function(x) { return x.k !== 1 && x.d > 0.005; })
                 .sort(function(x, y) { return y.d - x.d; });
-            return { i: i, pos: p, close: c, impact: mean(m.scores) - b, deltas: deltas, zone: m.zone };
+            return { i: i, pos: p, close: c, impact: mean(m.scores) - b, deltas: deltas, zone: m.zone, pq: m.scores[1] };
         });
         // A close that lifts the overall status (🔴→🟡, 🟡→🟢) comes first, then by impact
         list.sort(function(x, y) { return ZONE_RANK[x.zone] - ZONE_RANK[y.zone] || y.impact - x.impact || y.pos.notional - x.pos.notional; });
@@ -1466,6 +1467,11 @@ input[type="range"]::-moz-range-thumb {
             // A buyback of a few dollars (put worth ~0) would give a meaningless huge number
             var perK = c.cost >= PER_K_MIN ? (x.impact * 100 / (c.cost / 1000)) : null;
             var zoneTxt = x.zone !== r.base.zone ? ' · status ' + ZI[r.base.zone] + '→' + ZI[x.zone] : '';
+            // Put Quality before → after closing this put, change in points (green up, red down)
+            var pqB = r.base.scores[1], pqD = x.pq - pqB;
+            var pqCol = pqD > 0.0005 ? '#3aad72' : pqD < -0.0005 ? '#e86060' : 'var(--muted)';
+            var pqTxt = '<span style="white-space:nowrap;">Put Quality ' + Math.round(pqB * 100) + '% → ' + Math.round(x.pq * 100) + '% ' +
+                '<b style="color:' + pqCol + '">' + pts(pqD) + '</b></span>';
             var col = x.impact >= 0.03 ? '#3aad72' : x.impact > 0.005 ? '#e8a03a' : 'var(--muted)';
             var wc = (closes || []).filter(function(c) { return c.pos === p; })[0];
             var btn = wc
@@ -1477,7 +1483,7 @@ input[type="range"]::-moz-range-thumb {
                 '<div style="min-width:0;">' +
                     '<div class="cr-name">' + escHTML(closeLabel(p)) + ' · ' + p.qty + '× ' +
                         (p.status ? '<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:20px;background:' + RISK_COLOR[p.status] + '26;color:' + RISK_COLOR[p.status] + ';">' + RISK_LABEL[p.status] + '</span>' : '') + '</div>' +
-                    '<div class="cr-meta">' + (axes || 'no axis improves noticeably') + zoneTxt + '<br>' +
+                    '<div class="cr-meta">' + pqTxt + '<br>' + (axes || 'no other axis improves noticeably') + zoneTxt + '<br>' +
                         'notional $' + fmt(p.notional) + ' · buyback $' + fmt(c.cost) + ' · <span style="white-space:nowrap;">P&amp;L <span style="color:' + (c.pnl >= 0 ? '#3aad72' : '#e86060') + '">' + signUSD(c.pnl) + '</span></span></div>' +
                 '</div>' +
                 '<div class="cr-imp" style="color:' + col + '">' + pts(x.impact) + '<small>pts' + (perK !== null && perK > 0 ? ' · ' + perK.toFixed(1) + ' / $1k' : '') + '</small></div>' +
