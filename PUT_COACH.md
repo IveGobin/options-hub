@@ -1,4 +1,4 @@
-# Put Coach — dokumentacija (v1.17)
+# Put Coach — dokumentacija (v1.18)
 
 Put Coach je alat za upravljanje rizikom kod prodaje short putova na IBKR računu s marginom.
 Odgovara na tri pitanja:
@@ -93,7 +93,8 @@ Sve u EUR. `wi` = neto what-if nominal (novi putovi − zatvoreni putovi, vidi �
 NLV            = net liquidation value
 excessIn       = excess iz TWS-a (danas)
 excess         = excessIn − wi × MARGIN − ws × SM      MARGIN = 0.20, SM = stock margin (zadano 0.25)
-notional       = put notional + wi
+notional       = put notional + wi                    (svi importirani putovi zatvoreni u what-ifu, a kliznik
+                                                       na importiranom nominalu ±250 USD: samo novi putovi)
 stocks         = vrijednost dionica + ws
 totalExp       = stocks + notional                    (izloženost ako se SVI putovi assignaju)
 leverage       = totalExp / NLV
@@ -297,9 +298,10 @@ izbijaju putovi koji uz to popravljaju i Put Quality (putovi u gubitku) ili konc
 datum). *po $1k* pokazuje koliko je zatvaranje jeftino za učinak.
 
 **Try in what-if →** otvara What-if i stavlja taj put (svi ugovori) u prvi prazni red za zatvaranje (ili doda
-novi red); ako je put već u listi, samo skrola na What-if.
+novi red); ako je put već u listi, ne radi ništa. Stranica se ne pomiče: kliknuti gumb ostaje na istom
+mjestu na ekranu (`keepButtonInPlace` skrola za onoliko koliko je What-if iznad narastao).
 Put koji je već zatvoren u What-ifu ima zeleni gumb **✓ Closed in what-if** (uz djelomično zatvaranje
-*(N of M)*); klik i dalje skrola na What-if.
+*(N of M)*).
 
 ---
 
@@ -347,7 +349,7 @@ poredak  = impact, od najvećeg (kod jednakih: veća vrijednost prvo)
 
 Po dionici: ticker, broj dionica, ETF oznaka, do tri osi koje najviše rastu, promjena statusa, vrijednost (EUR,
 uz USD), koliko excessa oslobađa i nerealizirani P&L prema cost basisu. **Try in what-if →** stavlja dionicu
-(sve dionice) u prvi prazni red za prodaju; već prodana u What-ifu ima zeleni **✓ Sold in what-if** (*(N of M)*).
+(sve dionice) u prvi prazni red za prodaju, bez pomicanja stranice (kao kod putova); već prodana u What-ifu ima zeleni **✓ Sold in what-if** (*(N of M)*).
 
 ---
 
@@ -399,7 +401,8 @@ w_i   = notional_i × (1 + min(1, L_i / 0.10))      (za r ≤ 1 ponder je 1)
 score = Σ w_i × q_i / Σ w_i
 ```
 
-Novi what-if put **ne ulazi** u score; ugovori zatvoreni u what-ifu izlaze iz knjige (§8). Bez importiranih putova score je neutralnih 0.70.
+Novi what-if put **ne ulazi** u score; ugovori zatvoreni u what-ifu izlaze iz knjige (§8). Bez importiranih putova score je neutralnih 0.70; kad ne ostane nikakav put nominal (`notional < 1`, npr. svi
+putovi zatvoreni u What-ifu) score je 1.0.
 
 | Knjiga | Score |
 |---|---|
@@ -592,6 +595,9 @@ Sklopiva kartica (klik na naslov).
 
 ## Changelog
 
+- 2026-11-22 (v1.18): *Try in what-if →* u obje Close first kartice više ne skrola na What-if — gumb ostaje
+  na istom mjestu na ekranu. Kad su svi putovi zatvoreni u What-ifu: Put Quality = 1.0 (nema putova), a
+  ostatak zaokruživanja kliznika nominala (korak 500 USD) se ne broji kao put nominal.
 - 2026-11-20 (v1.17): Nove sklopive kartice **What-if · Stocks** (prodaja importiranih i kupnja dionica, kliznik
   stock margin, zadano 25 %) i **Close first · Stocks** (dionice poredane po učinku prodaje na radar).
   Postojeće kartice preimenovane u *What-if · Puts* i *Close first · Puts*. Import čita i količinu,

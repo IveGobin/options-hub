@@ -336,7 +336,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.17</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.18</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -1082,9 +1082,9 @@ input[type="range"]::-moz-range-thumb {
             var col = x.impact >= 0.03 ? '#3aad72' : x.impact > 0.005 ? '#e8a03a' : 'var(--muted)';
             var ws = stk ? stk.sells.filter(function(w) { return w.i === x.i; })[0] : null;
             var btn = ws
-                ? '<button class="cr-try done" onclick="trySellInStkWhatIf(' + x.i + ')">✓ Sold in what-if' +
+                ? '<button class="cr-try done" onclick="trySellInStkWhatIf(' + x.i + ', this)">✓ Sold in what-if' +
                   (ws.qty < st.qty ? ' (' + fmt(ws.qty) + ' of ' + fmt(st.qty) + ')' : '') + '</button>'
-                : '<button class="cr-try" onclick="trySellInStkWhatIf(' + x.i + ')">Try in what-if →</button>';
+                : '<button class="cr-try" onclick="trySellInStkWhatIf(' + x.i + ', this)">Try in what-if →</button>';
             return '<div class="cr-row">' +
                 '<div class="cr-n">' + (n + 1) + '</div>' +
                 '<div style="min-width:0;">' +
@@ -1105,18 +1105,19 @@ input[type="range"]::-moz-range-thumb {
             'Impact = change of the average radar score (points of 100). A sale frees ' + Math.round(getStkMargin() * 100) + '% of its value in excess (slider in What-if · Stocks). ' +
             'P&amp;L vs cost basis, for information.' + (skipped ? ' ' + skipped + ' position(s) in other currencies are left out.' : '') + '</div>' + rows;
     }
-    function trySellInStkWhatIf(i) {
-        if (!swOpen) toggleStkWhatIf();
-        var sels = document.querySelectorAll('#sw-sells .sw-pos');
-        var sel = null;
-        for (var k = 0; k < sels.length; k++) {
-            if (sels[k].value === String(i)) { el('sw-card').scrollIntoView({ behavior: 'smooth' }); return; }
-            if (!sel && sels[k].value === '') sel = sels[k];
-        }
-        if (!sel) { addStkSellRow(false); sel = document.querySelectorAll('#sw-sells .sw-pos'); sel = sel[sel.length - 1]; }
-        sel.value = String(i);
-        onStkPick(sel);
-        el('sw-card').scrollIntoView({ behavior: 'smooth' });
+    function trySellInStkWhatIf(i, btn) {
+        keepButtonInPlace(btn, function() {
+            if (!swOpen) toggleStkWhatIf();
+            var sels = document.querySelectorAll('#sw-sells .sw-pos');
+            var sel = null;
+            for (var k = 0; k < sels.length; k++) {
+                if (sels[k].value === String(i)) return;   // already there
+                if (!sel && sels[k].value === '') sel = sels[k];
+            }
+            if (!sel) { addStkSellRow(false); sel = document.querySelectorAll('#sw-sells .sw-pos'); sel = sel[sel.length - 1]; }
+            sel.value = String(i);
+            onStkPick(sel);
+        });
     }
 
     // What-if · Stocks result: verdict + before → after (before = no what-if at all)
@@ -1463,9 +1464,9 @@ input[type="range"]::-moz-range-thumb {
             var col = x.impact >= 0.03 ? '#3aad72' : x.impact > 0.005 ? '#e8a03a' : 'var(--muted)';
             var wc = (closes || []).filter(function(c) { return c.pos === p; })[0];
             var btn = wc
-                ? '<button class="cr-try done" onclick="tryCloseInWhatIf(' + x.i + ')">✓ Closed in what-if' +
+                ? '<button class="cr-try done" onclick="tryCloseInWhatIf(' + x.i + ', this)">✓ Closed in what-if' +
                   (wc.qty < p.qty ? ' (' + wc.qty + ' of ' + p.qty + ')' : '') + '</button>'
-                : '<button class="cr-try" onclick="tryCloseInWhatIf(' + x.i + ')">Try in what-if →</button>';
+                : '<button class="cr-try" onclick="tryCloseInWhatIf(' + x.i + ', this)">Try in what-if →</button>';
             return '<div class="cr-row">' +
                 '<div class="cr-n">' + (n + 1) + '</div>' +
                 '<div style="min-width:0;">' +
@@ -1483,19 +1484,30 @@ input[type="range"]::-moz-range-thumb {
             'Impact = change of the average radar score (points of 100); the axes that move most are listed. ' +
             'Buyback and P&amp;L at the statement price, for information.</div>' + rows;
     }
+    // Run fn (which re-renders the page) and keep the clicked ranking button where it was on screen:
+    // cards above it (the what-if) grow, so the page is scrolled by the same amount. No jump to the what-if.
+    function keepButtonInPlace(btn, fn) {
+        var key = btn && btn.getAttribute('onclick');
+        var top = btn ? btn.getBoundingClientRect().top : null;
+        fn();
+        if (top === null) return;
+        var nb = document.querySelector('.cr-try[onclick="' + key + '"]');   // the re-rendered button
+        if (nb) window.scrollBy(0, nb.getBoundingClientRect().top - top);
+    }
     // Put one ranked put into the what-if close list (opens the what-if, reuses an empty close row)
-    function tryCloseInWhatIf(i) {
-        if (!wiOpen) toggleWhatIf();
-        var sels = document.querySelectorAll('#wi-closes .wi-cl-pos');
-        var sel = null;
-        for (var k = 0; k < sels.length; k++) {
-            if (sels[k].value === String(i)) { el('wi-card').scrollIntoView({ behavior: 'smooth' }); return; }   // already there
-            if (!sel && sels[k].value === '') sel = sels[k];
-        }
-        if (!sel) { addCloseRow(false); sel = document.querySelectorAll('#wi-closes .wi-cl-pos'); sel = sel[sel.length - 1]; }
-        sel.value = String(i);
-        onClosePick(sel);
-        el('wi-card').scrollIntoView({ behavior: 'smooth' });
+    function tryCloseInWhatIf(i, btn) {
+        keepButtonInPlace(btn, function() {
+            if (!wiOpen) toggleWhatIf();
+            var sels = document.querySelectorAll('#wi-closes .wi-cl-pos');
+            var sel = null;
+            for (var k = 0; k < sels.length; k++) {
+                if (sels[k].value === String(i)) return;   // already there
+                if (!sel && sels[k].value === '') sel = sels[k];
+            }
+            if (!sel) { addCloseRow(false); sel = document.querySelectorAll('#wi-closes .wi-cl-pos'); sel = sel[sel.length - 1]; }
+            sel.value = String(i);
+            onClosePick(sel);
+        });
     }
 
     // ── RADAR MODEL ───────────────────────────────────────────────────────
@@ -1513,6 +1525,11 @@ input[type="range"]::-moz-range-thumb {
         stocks       = Math.max(0, stocks + stkNetEUR);         // stocks after the stock what-if
         var excess   = excessIn - wiEUR * MARGIN - stkNetEUR * getStkMargin();   // after both what-ifs
         var notional = Math.max(0, notionalBase + wiEUR);       // put notional incl. the what-if
+        // Every imported put closed in full and the slider still at the imported notional (it moves in
+        // 500 USD steps): no old put notional is left, only the slider rounding → drop it
+        var closeUSD = sum(closes, 'usd');
+        if (gNotionalUSD > 0 && closeUSD >= gNotionalUSD - 1 && Math.abs(notionalBase * fx - gNotionalUSD) <= 250)
+            notional = sellEUR;
 
         var cfg    = MODES[currentMode];
         var target = getTarget();
@@ -1556,8 +1573,9 @@ input[type="range"]::-moz-range-thumb {
         // included: selling new puts must not improve the quality of the existing book.
         // A what-if close takes its contracts out of the book (closing a losing put lifts the score).
         // VIX still drives the liquidity target (getTarget).
+        // No put notional left (e.g. every put closed in the what-if): nothing to judge → 1.0
         var pq = bookQuality(closes);
-        var qualScore = pq.score;
+        var qualScore = notional < 1 ? 1.0 : pq.score;
 
         // 3. EXPOSURE SAFETY (stocks + puts, worst case all assigned)
         // Green: ≤ maxTotal, Warn: maxTotal–warnTotal, Danger: > warnTotal
