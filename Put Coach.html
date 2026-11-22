@@ -64,24 +64,6 @@ body {
 }
 .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
 
-/* Mode pills */
-.mode-row { display: flex; gap: 6px; margin-bottom: 20px; }
-.mode-pill {
-    flex: 1; padding: 9px 4px;
-    border-radius: 9px; border: 1.5px solid var(--border);
-    background: var(--surface2); color: var(--muted);
-    font-family: var(--mono); font-size: 10px; font-weight: 700;
-    letter-spacing: .05em; text-transform: uppercase;
-    cursor: pointer; transition: all .2s; text-align: center;
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
-}
-.mode-pill small { font-size: 9px; font-family: var(--sans); font-weight: 400; letter-spacing: 0; opacity: .7; }
-.mode-pill.sel-c { border-color: var(--accent); color: var(--accent); background: rgba(232,117,58,.08); }
-.mode-pill.sel-c small { opacity: 1; }
-.mode-pill.sel-m { border-color: var(--safe); color: var(--safe); background: rgba(58,173,114,.08); }
-.mode-pill.sel-m small { opacity: 1; }
-.mode-pill.sel-a { border-color: var(--warn); color: var(--warn); background: rgba(232,160,58,.08); }
-.mode-pill.sel-a small { opacity: 1; }
 
 /* Net liq input — big and prominent */
 .nlv-wrap { margin-bottom: 20px; }
@@ -336,7 +318,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.21</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.22</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -350,13 +332,6 @@ input[type="range"]::-moz-range-thumb {
         <span style="font-size:16px;">✅</span>
         <div style="flex:1;font-family:var(--mono);font-size:11px;color:var(--muted);" id="import-msg">—</div>
         <button onclick="clearImport()" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 4px;">✕</button>
-    </div>
-
-    <!-- Mode -->
-    <div class="mode-row">
-        <button class="mode-pill" id="mp-conservative" onclick="setMode('conservative')">🛡️ Conservative<br><small>Stop 40% · loan 30%</small></button>
-        <button class="mode-pill sel-m" id="mp-moderate"     onclick="setMode('moderate')">⚖️ Moderate<br><small>Stop 30% · loan 60%</small></button>
-        <button class="mode-pill" id="mp-aggressive"   onclick="setMode('aggressive')">🔥 Aggressive<br><small>Stop 20% · loan 90%</small></button>
     </div>
 
     <!-- VIX slider -->
@@ -590,16 +565,12 @@ input[type="range"]::-moz-range-thumb {
 </div>
 
 <script>
-    const MODES = {
-        conservative: { hardStop: 40, vixBase: 50, vixSlope: 0.50, vixCap: 70 },
-        moderate:     { hardStop: 30, vixBase: 40, vixSlope: 0.75, vixCap: 60 },
-        aggressive:   { hardStop: 20, vixBase: 30, vixSlope: 0.50, vixCap: 45 },
-    };
+    // Fixed risk settings: hard stop (excess as % of NLV) and VIX-based excess target
+    const MODE = { hardStop: 30, vixBase: 40, vixSlope: 0.75, vixCap: 60 };
     // Exposure limit = max margin loan you accept if EVERY short put is assigned (worst case), as % of NLV.
     // Total exposure = stock holdings + raw put notional. Green ≤ NLV × (1 + loan%),
     // warn up to LOAN_WARN_BAND percentage points above that, danger beyond.
     const LOAN_OPTIONS = [30, 60, 90];
-    const LOAN_DEFAULT = { conservative: 30, moderate: 60, aggressive: 90 };
     const LOAN_WARN_BAND = 25;
     const MARGIN = 0.20;          // approx. margin a NEW short put uses, per EUR notional
     const STK_MARGIN_DEFAULT = 25; // % of a stock's value a sale frees / a buy uses (slider in What-if · Stocks)
@@ -613,7 +584,6 @@ input[type="range"]::-moz-range-thumb {
     // "13%", or "100%+" when even a total loss would not use up the excess
     function fmtCushion(c) { return !isFinite(c) ? '—' : c >= 1 ? '100%+' : Math.round(c * 100) + '%'; }
 
-    let currentMode = 'moderate';
     // Currency selections: 'EUR' or 'USD' for each field
     var curNLV = 'EUR';
     var curExc = 'EUR';
@@ -688,15 +658,6 @@ input[type="range"]::-moz-range-thumb {
         var t = document.body.getAttribute('data-theme');
         document.body.setAttribute('data-theme', t === 'dark' ? 'light' : 'dark');
         render();   // the radar SVG takes its colours from the theme
-    }
-
-    function setMode(m) {
-        currentMode = m;
-        ['conservative','moderate','aggressive'].forEach(function(x) {
-            var cls = 'mode-pill' + (x === m ? (' sel-' + x[0]) : '');
-            el('mp-' + x).className = cls;
-        });
-        setLoan(LOAN_DEFAULT[m]);   // each mode brings its own loan target (can be changed after)
     }
 
     // Max assignment loan: one of LOAN_OPTIONS, picked with the three buttons
@@ -1256,7 +1217,7 @@ input[type="range"]::-moz-range-thumb {
 
     function getTarget() {
         var vix = parseFloat(el('vix-slider').value);
-        var cfg = MODES[currentMode];
+        var cfg = MODE;
         var t = cfg.vixBase + Math.max(0, vix - 15) * cfg.vixSlope;
         return Math.min(cfg.vixCap, t);
     }
@@ -1586,7 +1547,7 @@ input[type="range"]::-moz-range-thumb {
         if (gNotionalUSD > 0 && closeUSD >= gNotionalUSD - 1 && Math.abs(notionalBase * fx - gNotionalUSD) <= 250)
             notional = sellEUR;
 
-        var cfg    = MODES[currentMode];
+        var cfg    = MODE;
         var target = getTarget();
         var vix    = parseFloat(el('vix-slider').value);
         var loanPct = getLoanPct();
