@@ -336,7 +336,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.18</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.19</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -603,6 +603,8 @@ input[type="range"]::-moz-range-thumb {
     const LOAN_WARN_BAND = 25;
     const MARGIN = 0.20;          // approx. margin a NEW short put uses, per EUR notional
     const STK_MARGIN_DEFAULT = 25; // % of a stock's value a sale frees / a buy uses (slider in What-if · Stocks)
+    const ZONE_RANK = { safe: 0, warn: 1, danger: 2 };
+    const PER_K_MIN = 10;         // Close first: "per $1k / €1k" only for a buyback / sale of at least this much
     // Margin cushion = excess / (stocks + put notional): the uniform drop of every underlying
     // (delta 1, worst case) that would use up today's excess liquidity → margin call.
     // TWS excess already has the current margin deducted, so no margin is subtracted again.
@@ -1059,7 +1061,8 @@ input[type="range"]::-moz-range-thumb {
                 .sort(function(x, y) { return y.d - x.d; });
             list.push({ i: i, st: st, sale: sale, impact: mean(m.scores) - b, deltas: deltas, zone: m.zone });
         });
-        list.sort(function(x, y) { return y.impact - x.impact || y.sale.eur - x.sale.eur; });
+        // A sale that lifts the overall status (🔴→🟡, 🟡→🟢) comes first, then by impact
+        list.sort(function(x, y) { return ZONE_RANK[x.zone] - ZONE_RANK[y.zone] || y.impact - x.impact || y.sale.eur - x.sale.eur; });
         return { base: base, list: list };
     }
     function renderStkRank(nlv, excessIn, notionalBase, stocks, stk) {
@@ -1077,7 +1080,7 @@ input[type="range"]::-moz-range-thumb {
         var rows = r.list.map(function(x, n) {
             var st = x.st, s = x.sale;
             var axes = x.deltas.slice(0, 3).map(function(a) { return a.axis + ' ' + pts(a.d); }).join(' · ');
-            var perK = s.eur > 0 ? (x.impact * 100 / (s.eur / 1000)) : null;
+            var perK = s.eur >= PER_K_MIN ? (x.impact * 100 / (s.eur / 1000)) : null;
             var zoneTxt = x.zone !== r.base.zone ? ' · status ' + ZI[r.base.zone] + '→' + ZI[x.zone] : '';
             var col = x.impact >= 0.03 ? '#3aad72' : x.impact > 0.005 ? '#e8a03a' : 'var(--muted)';
             var ws = stk ? stk.sells.filter(function(w) { return w.i === x.i; })[0] : null;
@@ -1441,7 +1444,8 @@ input[type="range"]::-moz-range-thumb {
                 .sort(function(x, y) { return y.d - x.d; });
             return { i: i, pos: p, close: c, impact: mean(m.scores) - b, deltas: deltas, zone: m.zone };
         });
-        list.sort(function(x, y) { return y.impact - x.impact || y.pos.notional - x.pos.notional; });
+        // A close that lifts the overall status (🔴→🟡, 🟡→🟢) comes first, then by impact
+        list.sort(function(x, y) { return ZONE_RANK[x.zone] - ZONE_RANK[y.zone] || y.impact - x.impact || y.pos.notional - x.pos.notional; });
         return { base: base, list: list };
     }
     // closes (see readCloses): puts already closed in the what-if get a green "✓ Closed in what-if" button
@@ -1459,7 +1463,8 @@ input[type="range"]::-moz-range-thumb {
         var rows = r.list.map(function(x, n) {
             var p = x.pos, c = x.close;
             var axes = x.deltas.slice(0, 3).map(function(a) { return a.axis + ' ' + pts(a.d); }).join(' · ');
-            var perK = c.cost > 0 ? (x.impact * 100 / (c.cost / 1000)) : null;
+            // A buyback of a few dollars (put worth ~0) would give a meaningless huge number
+            var perK = c.cost >= PER_K_MIN ? (x.impact * 100 / (c.cost / 1000)) : null;
             var zoneTxt = x.zone !== r.base.zone ? ' · status ' + ZI[r.base.zone] + '→' + ZI[x.zone] : '';
             var col = x.impact >= 0.03 ? '#3aad72' : x.impact > 0.005 ? '#e8a03a' : 'var(--muted)';
             var wc = (closes || []).filter(function(c) { return c.pos === p; })[0];
@@ -1763,12 +1768,16 @@ input[type="range"]::-moz-range-thumb {
         // Active problems, most severe first: the first one is the headline, the rest follow as "Also"
         var needStop = stopExcess - excess, needTgt = targetExcess - excess;
         var issues = [];
+        // Red advice gives both amounts: out of red (to yellow) and all the way to green
         if (excess < stopExcess) issues.push({ h: '🔴 Reduce positions', n: 'below hard stop',
-            s: 'Excess is ' + fmt(needStop) + ' EUR below the hard stop — close ~' + fmt(needStop / MARGIN) + ' EUR of put notional or add cash' });
+            s: 'Excess is ' + fmt(needStop) + ' EUR below the hard stop — close ~' + fmt(needStop / MARGIN) + ' EUR of put notional or add cash' +
+               ' (~' + fmt(needTgt / MARGIN) + ' EUR to reach the target)' });
         if (expZone === 'danger') issues.push({ h: '🔴 Overexposed', n: 'overexposed',
-            s: 'Reduce exposure by ' + fmt(totalExp - warnTotal) + ' EUR (puts or stocks) to reach the caution zone' });
+            s: 'Reduce exposure by ' + fmt(totalExp - warnTotal) + ' EUR (puts or stocks) to reach the caution zone, ' +
+               fmt(totalExp - maxTotal) + ' EUR to get within ' + loanPct + '% loan' });
         if (mrgZone === 'danger') issues.push({ h: '🔴 Margin call risk', n: 'margin call risk (' + pctDrop + ' drop)',
-            s: 'A ' + pctDrop + ' drop wipes out your excess — reduce exposure by ~' + fmt(cutForCushion(CUSHION_WARN)) + ' EUR' });
+            s: 'A ' + pctDrop + ' drop wipes out your excess — reduce exposure by ~' + fmt(cutForCushion(CUSHION_WARN)) + ' EUR' +
+               ' (~' + fmt(cutForCushion(CUSHION_GREEN)) + ' EUR to survive a ' + Math.round(CUSHION_GREEN * 100) + '% drop)' });
         if (effectiveLiq === 'warn') issues.push({ h: '⚠️ Hold — liquidity low', n: 'liquidity low',
             s: 'Excess is ' + fmt(needTgt) + ' EUR below target — close ~' + fmt(needTgt / MARGIN) + ' EUR of put notional or add cash to enter green' });
         if (expZone === 'warn') issues.push({ h: '⚠️ Caution — above loan target', n: 'above loan target',
@@ -1776,11 +1785,17 @@ input[type="range"]::-moz-range-thumb {
         if (mrgZone === 'warn') issues.push({ h: '⚠️ Caution — thin margin cushion', n: 'thin margin cushion (' + pctDrop + ' drop)',
             s: 'Survives a ' + pctDrop + ' drop (target ≥ ' + Math.round(CUSHION_GREEN * 100) + '%) — reduce exposure by ~' + fmt(cutForCushion(CUSHION_GREEN)) + ' EUR' });
 
+        // Red Put Quality / concentration axes do not change the zone, but are named in the status
+        var notes = [];
+        if (scores[1] < 0.40) notes.push('put book quality low (' + Math.round(scores[1] * 100) + '%)');
+        if (scores[4] < 0.40 && conc.topTicker) notes.push('ticker concentration ' + Math.round(conc.tickerConc * 100) + '% ' + conc.topTicker);
+        if (scores[5] < 0.40 && conc.topDate) notes.push('expiry concentration ' + Math.round(conc.dateConc * 100) + '% ' + conc.topDate);
+
         var subText;
+        var also = issues.slice(1).map(function(i) { return i.n; }).concat(notes);
         if (issues.length) {
             headline.textContent = issues[0].h;
             subText = issues[0].s;
-            if (issues.length > 1) subText += ' · Also: ' + issues.slice(1).map(function(i) { return i.n; }).join(', ');
         } else if (d.room.room > 100) {
             headline.textContent = '✅ Free to sell';
             subText = 'Can add ~' + fmt(d.room.room) + ' EUR more put notional (binding: ' + bindingLabel(d.room, d) + ')';
@@ -1788,15 +1803,21 @@ input[type="range"]::-moz-range-thumb {
             headline.textContent = '✅ Green — at the limit';
             subText = 'Little room to add more at current levels';
         }
+        if (also.length) subText += ' · Also: ' + also.join(', ');
 
-        // Imminent assignment: ITM puts expiring within 7 days (from today) are a loan that is coming
+        // Imminent assignment: puts worth more than their premium (near strike, likely / deep ITM) expiring
+        // within 7 days (from today) are a loan that is coming. Near expiry there is almost no time value left,
+        // so a loss L is close to the real depth ITM. Contracts closed in the what-if are left out.
         var t0 = new Date(); t0.setHours(0, 0, 0, 0);
         var soonN = 0, soonUSD = 0;
         gPositions.forEach(function(p) {
             var days = Math.round((p.expiry - t0) / 86400000);
-            if ((p.status === 'itm' || p.status === 'ditm') && days >= 0 && days <= 7) { soonN++; soonUSD += p.notional; }
+            if (!(p.status === 'near' || p.status === 'itm' || p.status === 'ditm') || days < 0 || days > 7) return;
+            var c = closes.filter(function(x) { return x.pos === p; })[0];
+            var n = c ? p.notional * (1 - c.qty / p.qty) : p.notional;
+            if (n > 0) { soonN++; soonUSD += n; }
         });
-        if (soonN) subText += ' · ⏰ ' + soonN + ' ITM put' + (soonN > 1 ? 's' : '') + ' expire within 7 days (~$' + fmt(soonUSD) + ' assignment)';
+        if (soonN) subText += ' · ⏰ ' + soonN + ' put' + (soonN > 1 ? 's' : '') + ' at / in the money expire within 7 days (~$' + fmt(soonUSD) + ' assignment)';
         sub.textContent = subText;
     }
 
@@ -2597,11 +2618,20 @@ input[type="range"]::-moz-range-thumb {
         // Open Positions is a snapshot at each statement's period end, so only the NEWEST
         // statement describes what is open now (same as NLV / cash above). Summing the
         // snapshots of several statements would count still-listed or long-closed puts twice.
-        var notionalUSD = newest.notionalUSD;
-        var tickerMap   = Object.assign({}, newest.tickerMap);
-        var dateMap     = Object.assign({}, newest.dateMap);
+        // Puts that expired after the statement date (expiry before today) are no longer open:
+        // they expired worthless or were assigned. They are left out of the book (notional,
+        // concentration, Put Quality) and named in the banner.
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        var expired = newest.positions.filter(function(p) { return p.expiry < today; });
+        var live    = newest.positions.filter(function(p) { return !(p.expiry < today); });
+        var notionalUSD = 0, tickerMap = {}, dateMap = {};
+        live.forEach(function(p) {
+            notionalUSD += p.notional;
+            tickerMap[p.ticker] = (tickerMap[p.ticker] || 0) + p.notional;
+            dateMap[p.expStr]   = (dateMap[p.expStr]   || 0) + p.notional;
+        });
 
-        gPositions = newest.positions.slice();
+        gPositions = live;
         gStmtDate = newest.periodEnd || 0;
         rebuildCloseOptions();   // indices into gPositions change with every import
         var wSum = 0;
@@ -2646,12 +2676,21 @@ input[type="range"]::-moz-range-thumb {
             var flagged = gPositions.filter(isFlagged).length;
             messages.push('Risk-weighted: ' + Math.round((0.6 + 0.4 * gRiskAvg) * 100) + '% of raw' +
                 (flagged ? ' \u00b7 ' + flagged + ' flagged' : ''));
+        } else if (expired.length) {
+            el('not-slider').value = 0;   // every listed put has expired: nothing open
+            setCur('not', 'USD', true);
         }
 
         // Excess is from today (TWS) but the positions are from the statement date
         if (messages.length && gStmtDate) {
             var ageDays = Math.floor((Date.now() - gStmtDate) / 86400000);
-            if (ageDays > 3) messages.push('⚠️ Statement is ' + ageDays + ' days old – puts sold since then are in your excess but not in the notional: add them to "Put notional sold"');
+            if (ageDays > 3) messages.push('⚠️ Statement is ' + ageDays + ' days old – NLV and stocks are from that day: copy NLV from TWS too. ' +
+                'Puts sold since then are in your excess but not in the notional: add them to "Put notional sold"');
+        }
+        if (expired.length) {
+            var expUSD = expired.reduce(function(a, p) { return a + p.notional; }, 0);
+            messages.push('⚠️ ' + expired.length + ' put' + (expired.length > 1 ? 's' : '') + ' expired since the statement (~$' + fmt(expUSD) +
+                ' notional) – left out. If assigned, the shares are not in Stocks yet: update NLV and Stocks from TWS');
         }
 
         if (messages.length === 0) {
@@ -2659,7 +2698,7 @@ input[type="range"]::-moz-range-thumb {
             return;
         }
 
-        if (notionalUSD <= 0) {
+        if (notionalUSD <= 0 && !expired.length) {
             var sawOpen = newest.openPosSeen;
             messages.push('\u26a0\ufe0f No short puts recognised' +
                 (sawOpen ? ' (option rows found, but none are short puts)' : ' (no option rows found in Open Positions)') +
