@@ -1,4 +1,4 @@
-# Put Coach — dokumentacija (v1.20)
+# Put Coach — dokumentacija (v1.21)
 
 Put Coach je alat za upravljanje rizikom kod prodaje short putova na IBKR računu s marginom.
 Odgovara na tri pitanja:
@@ -311,6 +311,16 @@ poredak  = 1. ukupna zona poslije (🟢 pa 🟡 pa 🔴): putovi koji mijenjaju 
            2. impact, od najvećeg
            3. kod jednakih: veći nominal prvo
 ```
+
+**Prvi red (Σ): Close all N losing puts together.** Svi putovi u gubitku (r > 1: Near strike, Likely ITM,
+Deep ITM) zatvoreni **zajedno**, na knjizi bez what-ifa, istim `radarModel`om: Put Quality prije → poslije,
+promjena statusa, ukupni nominal, buyback, P&L i impact. Redovi pojedinih putova se ne zbrajaju (Put Quality je
+ponderirani prosjek, a knjiga se zatvaranjem smanjuje), pa tek ovaj red pokazuje stvarni zajednički učinak.
+**Try all in what-if →** stavlja sve putove u gubitku u What-if (*✓ All in what-if* kad su svi već cijeli u
+njemu). Bez putova u gubitku umjesto reda stoji napomena.
+
+Uputa u kartici podsjeća: zdrava knjiga je na 80–90 % (svježe prodan put vrijedi 0.80, §9.2), a 100 % je tek
+kad svi putovi skoro ništa ne vrijede ili kad su svi zatvoreni.
 
 Bez prvog kriterija na vrh bi mogao doći mali put s gubitkom (Put Quality i koncentracija teže u prosjeku
 jednako kao likvidnost), a ne put koji stvarno skida crvenu ili žutu zonu.
@@ -641,6 +651,10 @@ Sklopiva kartica (klik na naslov).
 | Zone score | 0.70 / 0.40 | zeleno / crveno |
 
 ## Changelog
+
+- 2026-11-22 (v1.21): Close first · Puts ima prvi red **Close all N losing puts together** (zajednički učinak
+  zatvaranja svih putova u gubitku, s gumbom *Try all in what-if →*) i uputu da se redovi ne zbrajaju i da je
+  zdrava knjiga na 80–90 % Put Qualityja.
 
 - 2026-11-22 (v1.20): Close first · Puts u svakom redu pokazuje Put Quality prije → poslije zatvaranja i
   promjenu u bodovima (i kad pada). Put Quality više nije u listi "tri osi koje najviše rastu".

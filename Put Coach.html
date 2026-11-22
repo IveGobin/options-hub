@@ -336,7 +336,7 @@ input[type="range"]::-moz-range-thumb {
     <div class="hdr">
         <div class="hdr-left">
             <span class="eyebrow">Risk manager</span>
-            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.20</span></span>
+            <span class="title">Put Coach <span class="ver" style="opacity:0.45;font-size:0.6em;font-weight:400;margin-left:6px">v1.21</span></span>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
             <label class="btn-sm" for="ibkr-file" style="cursor:pointer;" title="Import IBKR Activity Statement CSV (možeš odabrati više fajlova)">📂 Import</label>
@@ -1447,8 +1447,18 @@ input[type="range"]::-moz-range-thumb {
         });
         // A close that lifts the overall status (🔴→🟡, 🟡→🟢) comes first, then by impact
         list.sort(function(x, y) { return ZONE_RANK[x.zone] - ZONE_RANK[y.zone] || y.impact - x.impact || y.pos.notional - x.pos.notional; });
-        return { base: base, list: list };
+        // All losing puts closed TOGETHER: the real combined effect (single rows do not add up)
+        var lc = gPositions.filter(isLoser).map(fullClose);
+        var all = null;
+        if (lc.length) {
+            var ma = radarModel(nlv, excessIn, notionalBase, stocks, [], lc);
+            all = { n: lc.length, closes: lc, m: ma, impact: mean(ma.scores) - b,
+                    notional: sum(lc, 'usd'), cost: sum(lc, 'cost'), pnl: sum(lc, 'pnl') };
+        }
+        return { base: base, list: list, all: all };
     }
+    // Losing put: worth more than the premium it was sold for (r > 1: Near strike, Likely ITM, Deep ITM)
+    function isLoser(p) { return p.status === 'near' || p.status === 'itm' || p.status === 'ditm'; }
     // closes (see readCloses): puts already closed in the what-if get a green "✓ Closed in what-if" button
     function renderCloseRank(nlv, excessIn, notionalBase, stocks, closes) {
         el('cr-badge').textContent = gPositions.length ? gPositions.length + ' puts' : '';
@@ -1490,10 +1500,37 @@ input[type="range"]::-moz-range-thumb {
                 btn +
             '</div>';
         }).join('');
+        // Summary: every losing put closed together
+        var allHTML;
+        var a = r.all;
+        if (a) {
+            var pqB0 = r.base.scores[1], pqA = a.m.scores[1], pqDa = pqA - pqB0;
+            var allIn = a.closes.every(function(lcx) {
+                return (closes || []).some(function(c) { return c.pos === lcx.pos && c.qty >= lcx.pos.qty; });
+            });
+            var aZone = a.m.zone !== r.base.zone ? ' · status ' + ZI[r.base.zone] + '→' + ZI[a.m.zone] : '';
+            allHTML = '<div class="cr-row" style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;">' +
+                '<div class="cr-n">Σ</div>' +
+                '<div style="min-width:0;">' +
+                    '<div class="cr-name">Close all ' + a.n + ' losing put' + (a.n > 1 ? 's' : '') + ' together</div>' +
+                    '<div class="cr-meta"><span style="white-space:nowrap;">Put Quality ' + Math.round(pqB0 * 100) + '% → ' + Math.round(pqA * 100) + '% ' +
+                        '<b style="color:' + (pqDa > 0.0005 ? '#3aad72' : pqDa < -0.0005 ? '#e86060' : 'var(--muted)') + '">' + pts(pqDa) + '</b></span>' + aZone + '<br>' +
+                        'notional $' + fmt(a.notional) + ' · buyback $' + fmt(a.cost) + ' · <span style="white-space:nowrap;">P&amp;L <span style="color:' + (a.pnl >= 0 ? '#3aad72' : '#e86060') + '">' + signUSD(a.pnl) + '</span></span></div>' +
+                '</div>' +
+                '<div class="cr-imp" style="color:' + (a.impact >= 0.03 ? '#3aad72' : a.impact > 0.005 ? '#e8a03a' : 'var(--muted)') + '">' + pts(a.impact) + '<small>pts</small></div>' +
+                (allIn ? '<button class="cr-try done" onclick="tryCloseAllLosersInWhatIf(this)">✓ All in what-if</button>'
+                       : '<button class="cr-try" onclick="tryCloseAllLosersInWhatIf(this)">Try all in what-if →</button>') +
+            '</div>';
+        } else {
+            allHTML = '<div class="wi-hint" style="margin-bottom:8px;">No losing puts: every put is worth less than the premium it was sold for.</div>';
+        }
         body.innerHTML =
             '<div class="wi-hint" style="margin-bottom:6px;">Each put closed in full, one at a time, on the book <b>without</b> the what-if. ' +
             'Impact = change of the average radar score (points of 100); the axes that move most are listed. ' +
-            'Buyback and P&amp;L at the statement price, for information.</div>' + rows;
+            'Buyback and P&amp;L at the statement price, for information. ' +
+            'Put Quality is an average, so single rows do not add up: the first row closes all losing puts (Near strike, Likely / Deep ITM) together. ' +
+            'A healthy book sits at 80–90%: a freshly sold put counts 0.80, and 100% only when every put is nearly worthless.</div>' +
+            allHTML + rows;
     }
     // Run fn (which re-renders the page) and keep the clicked ranking button where it was on screen:
     // cards above it (the what-if) grow, so the page is scrolled by the same amount. No jump to the what-if.
@@ -1505,19 +1542,26 @@ input[type="range"]::-moz-range-thumb {
         var nb = document.querySelector('.cr-try[onclick="' + key + '"]');   // the re-rendered button
         if (nb) window.scrollBy(0, nb.getBoundingClientRect().top - top);
     }
-    // Put one ranked put into the what-if close list (opens the what-if, reuses an empty close row)
+    // Put one imported put into the what-if close list (opens the what-if, reuses an empty close row)
+    function addCloseToWhatIf(i) {
+        if (!wiOpen) toggleWhatIf();
+        var sels = document.querySelectorAll('#wi-closes .wi-cl-pos');
+        var sel = null;
+        for (var k = 0; k < sels.length; k++) {
+            if (sels[k].value === String(i)) return;   // already there
+            if (!sel && sels[k].value === '') sel = sels[k];
+        }
+        if (!sel) { addCloseRow(false); sel = document.querySelectorAll('#wi-closes .wi-cl-pos'); sel = sel[sel.length - 1]; }
+        sel.value = String(i);
+        onClosePick(sel);
+    }
     function tryCloseInWhatIf(i, btn) {
+        keepButtonInPlace(btn, function() { addCloseToWhatIf(i); });
+    }
+    // Every losing put (see isLoser) into the what-if close list
+    function tryCloseAllLosersInWhatIf(btn) {
         keepButtonInPlace(btn, function() {
-            if (!wiOpen) toggleWhatIf();
-            var sels = document.querySelectorAll('#wi-closes .wi-cl-pos');
-            var sel = null;
-            for (var k = 0; k < sels.length; k++) {
-                if (sels[k].value === String(i)) return;   // already there
-                if (!sel && sels[k].value === '') sel = sels[k];
-            }
-            if (!sel) { addCloseRow(false); sel = document.querySelectorAll('#wi-closes .wi-cl-pos'); sel = sel[sel.length - 1]; }
-            sel.value = String(i);
-            onClosePick(sel);
+            gPositions.forEach(function(p, i) { if (isLoser(p)) addCloseToWhatIf(i); });
         });
     }
 
